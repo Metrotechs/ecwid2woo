@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin Name: Ecwid to WooCommerce Sync
+Plugin Name: Ecwid2Woo Product Sync
 Description: Sync Ecwid store data (products, categories) to WooCommerce via Ecwid REST API.
 Version: 1.9
 Author: Metrotechs
@@ -18,22 +18,44 @@ class Ecwid_WC_Sync {
     private $settings_slug = 'ecwid-sync-settings';
     private $full_sync_slug = 'ecwid-sync-full';
     private $partial_sync_slug = 'ecwid-sync-partial';
-    private $category_sync_slug = 'ecwid-sync-categories'; // New slug for Category Sync page
+    private $category_sync_slug = 'ecwid-sync-categories'; 
 
     public function __construct() {
         $this->options = get_option('ecwid_wc_sync_options');
+        add_action('init', [$this, 'register_placeholder_cpt']); 
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_init', [$this, 'settings_init']);
         add_action('wp_ajax_ecwid_wc_batch_sync', [$this, 'ajax_batch_sync']);
         add_action('wp_ajax_ecwid_wc_fetch_products_for_selection', [$this, 'ajax_fetch_products_for_selection']);
         add_action('wp_ajax_ecwid_wc_import_selected_products', [$this, 'ajax_import_selected_products']);
+        add_action('wp_ajax_fix_category_hierarchy', [$this, 'fix_category_hierarchy']); 
+    }
+
+    public function register_placeholder_cpt() {
+        // Register a custom post type for placeholders
+        register_post_type('ecwid_placeholder', [
+            'public' => false,
+            'show_ui' => true, // Keep true if you want to see them in admin under a CPT menu (even if not public)
+            'labels' => [
+                'name' => __('Ecwid Placeholders', 'ecwid-wc-sync'),
+                'singular_name' => __('Ecwid Placeholder', 'ecwid-wc-sync')
+            ],
+            'supports' => ['title'],
+            'rewrite' => false,
+            // Make it truly private if not needed in UI directly:
+            // 'publicly_queryable' => false,
+            // 'exclude_from_search' => true,
+            // 'show_in_nav_menus' => false,
+            // 'show_in_admin_bar' => false,
+            // 'show_in_menu' => false, // This would hide it from the admin menu list
+        ]);
     }
 
     public function add_admin_menu() {
         // Top-level menu page (will act as the Settings page)
         add_menu_page(
-            __('Ecwid Sync Settings', 'ecwid-wc-sync'),    // Page title
-            __('Ecwid Sync', 'ecwid-wc-sync'),             // Menu title
+            __('Ecwid2Woo Product Sync Settings', 'ecwid-wc-sync'),    // Page title
+            __('Ecwid2Woo Product Sync', 'ecwid-wc-sync'),             // Menu title
             'manage_options',                              // Capability
             $this->settings_slug,                          // Menu slug (our settings page)
             [$this, 'options_page_router'],                // Function to display page content
@@ -43,8 +65,8 @@ class Ecwid_WC_Sync {
         // Submenu Page: Settings (this will be the first sub-tab)
         add_submenu_page(
             $this->settings_slug,                          // Parent slug
-            __('Ecwid Sync Settings', 'ecwid-wc-sync'),    // Page title
-            __('Sync Settings', 'ecwid-wc-sync'),          // Menu title for the sub-tab
+            __('Ecwid2Woo Product Sync Settings', 'ecwid-wc-sync'),    // Page title
+            __('Settings', 'ecwid-wc-sync'),          // Menu title for the sub-tab
             'manage_options',                              // Capability
             $this->settings_slug,                          // Menu slug (same as parent to control its page)
             [$this, 'options_page_router']                 // Function to display page content
