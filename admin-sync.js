@@ -43,6 +43,27 @@
         let productsToImportSelected = [];
         let currentSelectiveImportIndex = 0;
         let processingIndicatorInterval = null; // For simple animation
+        let batchProcessingIndicatorInterval = null; // For batch process animations
+
+        // Helper functions for batch status animation
+        function startBatchStatusAnimation(statusDiv, baseText) {
+            if (batchProcessingIndicatorInterval) clearInterval(batchProcessingIndicatorInterval);
+            let dots = 0;
+            // Set initial text immediately, animation will append dots
+            statusDiv.text(baseText + " ");
+            batchProcessingIndicatorInterval = setInterval(function() {
+                dots = (dots + 1) % 4;
+                // Ensure baseText itself doesn't get re-evaluated if it's complex
+                statusDiv.text(baseText + " " + '.'.repeat(dots) + ' '.repeat(3 - dots));
+            }, 500);
+        }
+
+        function stopBatchStatusAnimation() {
+            if (batchProcessingIndicatorInterval) {
+                clearInterval(batchProcessingIndicatorInterval);
+                batchProcessingIndicatorInterval = null;
+            }
+        }
 
         // --- Full Sync Logic ---
         fullSyncButton.on('click', function(e) {
@@ -100,6 +121,9 @@
 
         // Modified processFullSyncBatch - now only for the full sync page
         function processFullSyncBatch(syncType, offset) {
+            const baseStatusMessage = i18n.syncing + ' ' + syncType;
+            startBatchStatusAnimation(fullSyncStatusDiv, baseStatusMessage);
+
             $.ajax({
                 url: ajax_url,
                 method: 'POST',
@@ -110,6 +134,7 @@
                     offset: offset
                 },
                 success: function(response) {
+                    stopBatchStatusAnimation(); // Stop animation
                     if (response.success) {
                         if (response.data.batch_logs && Array.isArray(response.data.batch_logs)) {
                             response.data.batch_logs.forEach(logEntry => categorizeAndLog(fullSyncLogDiv, logEntry));
@@ -141,14 +166,18 @@
                             processNextFullSyncStep();
                         }
                     } else {
+                        // stopBatchStatusAnimation(); // Already called at the beginning of success/error
                         logMessage(fullSyncLogDiv, `Error syncing ${syncType}: ${response.data.message || 'Unknown error.'}`, 'error');
                         fullSyncButton.removeClass('disabled').text(i18n.start_sync);
+                        updateStatus(fullSyncStatusDiv, i18n.sync_error + ` (${syncType})`); // Update status on error
                         // categoryPageSyncButton.removeClass('disabled');
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
+                    stopBatchStatusAnimation(); // Stop animation
                     logMessage(fullSyncLogDiv, `AJAX Error syncing ${syncType}: ${textStatus} ${errorThrown || ''}`, 'error');
                     fullSyncButton.removeClass('disabled').text(i18n.start_sync);
+                    updateStatus(fullSyncStatusDiv, i18n.ajax_error + ` (${syncType})`); // Update status on AJAX error
                     // categoryPageSyncButton.removeClass('disabled');
                 }
             });
@@ -156,6 +185,9 @@
 
         // New function for Category Sync Page
         function processCategoryPageSyncBatch(syncType, offset) { // syncType will always be 'categories'
+            const baseStatusMessage = i18n.syncing_just_categories_page_status;
+            startBatchStatusAnimation(categoryPageSyncStatusDiv, baseStatusMessage);
+
             $.ajax({
                 url: ajax_url, // Uses the same backend AJAX handler
                 method: 'POST',
@@ -166,6 +198,7 @@
                     offset: offset
                 },
                 success: function(response) {
+                    stopBatchStatusAnimation(); // Stop animation
                     if (response.success) {
                         if (response.data.batch_logs && Array.isArray(response.data.batch_logs)) {
                             response.data.batch_logs.forEach(logEntry => categorizeAndLog(categoryPageSyncLogDiv, logEntry));
@@ -194,13 +227,17 @@
                             updateProgressBar(categoryPageSyncProgressBar, 100); // Ensure it hits 100%
                         }
                     } else {
+                        // stopBatchStatusAnimation(); // Already called
                         logMessage(categoryPageSyncLogDiv, `Error syncing ${syncType}: ${response.data.message || 'Unknown error.'}`, 'error');
                         categoryPageSyncButton.removeClass('disabled').text(i18n.start_category_sync_page);
+                        updateStatus(categoryPageSyncStatusDiv, i18n.sync_error + ` (${syncType})`); // Update status on error
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
+                    stopBatchStatusAnimation(); // Stop animation
                     logMessage(categoryPageSyncLogDiv, `AJAX Error syncing ${syncType}: ${textStatus} ${errorThrown || ''}`, 'error');
                     categoryPageSyncButton.removeClass('disabled').text(i18n.start_category_sync_page);
+                    updateStatus(categoryPageSyncStatusDiv, i18n.ajax_error + ` (${syncType})`); // Update status on AJAX error
                 }
             });
         }

@@ -159,6 +159,7 @@ class Ecwid_WC_Sync {
                 'sync_starting' => __('Sync starting...', 'ecwid-wc-sync'),
                 'sync_complete' => __('Sync Complete!', 'ecwid-wc-sync'),
                 'sync_error'    => __('Error during sync. Check console or log for details.', 'ecwid-wc-sync'),
+                'ajax_error'    => __('AJAX Error. Check console or log for details.', 'ecwid-wc-sync'), // Added this line
                 'syncing'       => __('Syncing', 'ecwid-wc-sync'),
                 'start_sync'    => __('Start Full Sync', 'ecwid-wc-sync'),
                 'syncing_button'=> __('Syncing...', 'ecwid-wc-sync'),
