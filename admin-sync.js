@@ -154,7 +154,7 @@
         function renderProductSelectionList(products) {
             let html = '<ul style="list-style:none; margin:0; padding:0;">';
             // Use the localized string from ecwid_sync_params.i18n
-            html += '<li><label><input type="checkbox" id="select-all-ecwid-products" /> <strong>' + i18n.select_all_none + '</strong></label></li><hr/>';
+            html += '<li style="padding-bottom: 5px; margin-bottom: 5px; border-bottom: 1px solid #ccc;"><label><input type="checkbox" id="select-all-ecwid-products" /> <strong>' + i18n.select_all_none + '</strong></label></li>';
             products.forEach(function(product) {
                 html += `<li style="padding: 5px 0; border-bottom: 1px solid #eee;">
                             <label>
@@ -258,11 +258,12 @@
         function categorizeAndLog(logDiv, logEntry) {
             let logType = 'info'; // Default
             if (typeof logEntry === 'string') {
-                if (logEntry.includes('[CRITICAL]') || logEntry.includes('[ERROR]') || logEntry.toUpperCase().includes('FAILED TO PROCESS') || logEntry.toUpperCase().includes('FAILED TO SAVE')) {
+                const upperLogEntry = logEntry.toUpperCase(); // Convert once for efficiency
+                if (upperLogEntry.includes('[CRITICAL]') || upperLogEntry.includes('[ERROR]') || upperLogEntry.includes('FAILED TO PROCESS') || upperLogEntry.includes('FAILED TO SAVE')) {
                     logType = 'error';
-                } else if (logEntry.includes('Imported successfully') || logEntry.includes('Skipped.') || logEntry.toUpperCase().includes('SUCCESSFULLY PROCESSED')) {
+                } else if (upperLogEntry.includes('IMPORTED SUCCESSFULLY') || upperLogEntry.includes('SKIPPED.') || upperLogEntry.includes('SUCCESSFULLY PROCESSED')) {
                     logType = 'success';
-                } else if (logEntry.includes('[WARNING]')) {
+                } else if (upperLogEntry.includes('[WARNING]')) {
                     logType = 'warning';
                 }
             }
