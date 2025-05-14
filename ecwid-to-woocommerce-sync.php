@@ -453,46 +453,47 @@ class Ecwid_WC_Sync {
             $category_logs[] = "Starting import for Category: \"$ecwid_cat_name\" (Ecwid ID: $ecwid_cat_id)";
 
             // Check if category already exists by Ecwid ID meta
-            $existing_terms_by_ecwid_id = get_terms([
-                'taxonomy' => 'product_cat', 
-                'meta_key' => '_ecwid_category_id', 
-                'meta_value' => $ecwid_cat_id, 
-                'hide_empty' => false, 
-                'fields' => 'ids', 
-                'number' => 1
-            ]);
+            $existing_wc_term_id_by_ecwid_meta = $this->get_term_id_by_ecwid_id($ecwid_cat_id, 'product_cat', true); // Pass true to bypass cache for this check
 
-            if (!empty($existing_terms_by_ecwid_id) && !is_wp_error($existing_terms_by_ecwid_id)) {
-                $wc_term_id = $existing_terms_by_ecwid_id[0];
-                $category_logs[] = "Skipped. Already exists in WC with this Ecwid ID (WC Term ID: $wc_term_id).";
+            if ($existing_wc_term_id_by_ecwid_meta) {
+                $category_logs[] = "Skipped. Already linked in WC (Term ID: $existing_wc_term_id_by_ecwid_meta) to this Ecwid ID ($ecwid_cat_id). (Checked with cache bypass)";
+                // Optionally, update name/description if changed in Ecwid for already linked terms
+                // (Add your existing update logic here if desired)
                 return ['status' => 'skipped', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
             }
             
-            // Check if category exists by name (and link it if so)
+            // Check if category exists by name (and link it if so, IF NOT ALREADY LINKED TO A DIFFERENT ECWID ID)
             $term_by_name_result = term_exists($ecwid_cat_name, 'product_cat');
-            if ($term_by_name_result !== 0 && $term_by_name_result !== null) {
-                $wc_term_id = is_array($term_by_name_result) ? $term_by_name_result['term_id'] : $term_by_name_result;
-                update_term_meta($wc_term_id, '_ecwid_category_id', $ecwid_cat_id);
-                $category_logs[] = "Skipped. Existing WC term (ID: $wc_term_id) found by name and linked with Ecwid ID $ecwid_cat_id.";
-                return ['status' => 'skipped', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
+            if ($term_by_name_result) {
+                $wc_term_id_found_by_name = is_array($term_by_name_result) ? $term_by_name_result['term_id'] : $term_by_name_result;
+                $meta_ecwid_id_on_named_term = get_term_meta($wc_term_id_found_by_name, '_ecwid_category_id', true);
+
+                if ($meta_ecwid_id_on_named_term && $meta_ecwid_id_on_named_term != $ecwid_cat_id) {
+                    $category_logs[] = "[WARNING] Conflict: WC Term ID $wc_term_id_found_by_name (Name: '$ecwid_cat_name') is already linked to Ecwid ID '$meta_ecwid_id_on_named_term'. Cannot link to current Ecwid ID '$ecwid_cat_id'. Please resolve naming conflict or manually link.";
+                    return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
+                } elseif (!$meta_ecwid_id_on_named_term) {
+                    $meta_update_result = update_term_meta($wc_term_id_found_by_name, '_ecwid_category_id', $ecwid_cat_id);
+                    if ($meta_update_result) {
+                        clean_term_cache($wc_term_id_found_by_name, 'product_cat');
+                        $category_logs[] = "Linked. Existing WC term (ID: $wc_term_id_found_by_name, Name: '$ecwid_cat_name') found by name and now linked to Ecwid ID $ecwid_cat_id. Meta update successful. Cache cleaned.";
+                    } else {
+                        $category_logs[] = "[ERROR] Linked. Existing WC term (ID: $wc_term_id_found_by_name, Name: '$ecwid_cat_name') found by name. FAILED to link to Ecwid ID $ecwid_cat_id (update_term_meta failed).";
+                        return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
+                    }
+                    return ['status' => 'skipped', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
+                }
+                 $category_logs[] = "Skipped. WC Term ID $wc_term_id_found_by_name (Name: '$ecwid_cat_name') appears already correctly linked to Ecwid ID $ecwid_cat_id (found by name).";
+                 return ['status' => 'skipped', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
             }
             
             $args = [];
             if (isset($item['description'])) $args['description'] = wp_kses_post($item['description']);
             
-            // Handle parent category
             if (isset($item['parentId']) && intval($item['parentId']) > 0) {
                 $parent_ecwid_id = intval($item['parentId']);
-                $parent_wc_terms = get_terms([
-                    'taxonomy' => 'product_cat', 
-                    'meta_key' => '_ecwid_category_id', 
-                    'meta_value' => $parent_ecwid_id, 
-                    'hide_empty' => false, 
-                    'fields' => 'ids', 
-                    'number' => 1
-                ]);
-                if (!empty($parent_wc_terms) && !is_wp_error($parent_wc_terms)) {
-                    $args['parent'] = $parent_wc_terms[0];
+                $parent_wc_term_id = $this->get_term_id_by_ecwid_id($parent_ecwid_id, 'product_cat'); // Default cache behavior for parent lookup
+                if ($parent_wc_term_id) {
+                    $args['parent'] = $parent_wc_term_id;
                     $category_logs[] = "Parent category (Ecwid ID: $parent_ecwid_id) mapped to WC Term ID: {$args['parent']}.";
                 } else {
                     $category_logs[] = "[WARNING] Parent category (Ecwid ID: $parent_ecwid_id) not yet imported or found in WC. This category will be top-level for now.";
@@ -508,8 +509,15 @@ class Ecwid_WC_Sync {
             }
 
             if (isset($new_term_result['term_id'])) {
-                update_term_meta($new_term_result['term_id'], '_ecwid_category_id', $ecwid_cat_id);
-                $category_logs[] = "Imported successfully (New WC Term ID: {$new_term_result['term_id']}).";
+                $meta_update_result = update_term_meta($new_term_result['term_id'], '_ecwid_category_id', $ecwid_cat_id);
+                if ($meta_update_result) {
+                    clean_term_cache($new_term_result['term_id'], 'product_cat');
+                    $category_logs[] = "Imported successfully (New WC Term ID: {$new_term_result['term_id']}). Meta update successful. Cache cleaned.";
+                } else {
+                     $category_logs[] = "[ERROR] Imported successfully (New WC Term ID: {$new_term_result['term_id']}). BUT FAILED to set _ecwid_category_id meta (update_term_meta failed).";
+                     // Decide if this should be a 'failed' status overall
+                     return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
+                }
                 return ['status' => 'imported', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
             }
             
@@ -655,12 +663,13 @@ class Ecwid_WC_Sync {
                 $wc_term_ids = [];
                 foreach ($item['categoryIds'] as $ecwid_cat_id) {
                     if (empty($ecwid_cat_id) || intval($ecwid_cat_id) == 0) continue;
-                    $wc_term_id = $this->get_term_id_by_ecwid_id(intval($ecwid_cat_id), 'product_cat');
+                    // MODIFICATION: Pass true to bypass cache when looking up term IDs for product assignment
+                    $wc_term_id = $this->get_term_id_by_ecwid_id(intval($ecwid_cat_id), 'product_cat', true); 
                     if ($wc_term_id) {
                         $wc_term_ids[] = $wc_term_id;
-                        $product_logs[] = "Mapped Ecwid Cat ID $ecwid_cat_id to WC Term ID $wc_term_id.";
+                        $product_logs[] = "Mapped Ecwid Cat ID $ecwid_cat_id to WC Term ID $wc_term_id (cache bypassed for lookup).";
                     } else {
-                        $product_logs[] = "[WARNING] Could not find WC Term ID for Ecwid Cat ID $ecwid_cat_id. Ensure category sync ran first.";
+                        $product_logs[] = "[WARNING] Could not find WC Term ID for Ecwid Cat ID $ecwid_cat_id (cache bypassed for lookup). Ensure category sync ran first and meta was set.";
                     }
                 }
                 if (!empty($wc_term_ids)) {
@@ -1065,6 +1074,27 @@ class Ecwid_WC_Sync {
         }
     }
 
+    private function get_term_id_by_ecwid_id($ecwid_id, $taxonomy, $bypass_cache = false) {
+        $args = [
+            'taxonomy' => $taxonomy, 
+            'meta_key' => '_ecwid_category_id', 
+            'meta_value' => $ecwid_id, // Ensure this is the correct type comparison if issues persist
+            'hide_empty' => false, 
+            'number' => 1, 
+            'fields' => 'ids'
+        ];
+        if ($bypass_cache) {
+            $args['cache_results'] = false;
+            // $args['update_term_meta_cache'] = false; // Also consider this for term meta cache
+        }
+        $terms = get_terms($args);
+
+        if (!empty($terms) && !is_wp_error($terms)) {
+            return $terms[0];
+        }
+        return null;
+    }
+
     private function attach_image_to_product_from_url($image_url, $post_id = 0, $desc = null) {
         if (empty($image_url)) {
             return new WP_Error('missing_url', 'Image URL is empty.');
@@ -1106,20 +1136,6 @@ class Ecwid_WC_Sync {
         return $attachment_id; // Return attachment ID on success
     }
 
-    private function get_term_id_by_ecwid_id($ecwid_id, $taxonomy) {
-        $terms = get_terms([
-            'taxonomy' => $taxonomy, 
-            'meta_key' => '_ecwid_category_id', 
-            'meta_value' => $ecwid_id, 
-            'hide_empty' => false, 
-            'number' => 1, 
-            'fields' => 'ids'
-        ]);
-        if (!empty($terms) && !is_wp_error($terms)) {
-            return $terms[0];
-        }
-        return null;
-    }
 }
 
 // Instantiate the plugin class
