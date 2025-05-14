@@ -40,6 +40,16 @@ class Ecwid_WC_Sync {
             'dashicons-update'                             // Icon
         );
 
+        // Submenu Page: Settings (this will be the first sub-tab)
+        add_submenu_page(
+            $this->settings_slug,                          // Parent slug
+            __('Ecwid Sync Settings', 'ecwid-wc-sync'),    // Page title
+            __('Sync Settings', 'ecwid-wc-sync'),          // Menu title for the sub-tab
+            'manage_options',                              // Capability
+            $this->settings_slug,                          // Menu slug (same as parent to control its page)
+            [$this, 'options_page_router']                 // Function to display page content
+        );
+
         // Submenu Page: Full Sync
         add_submenu_page(
             $this->settings_slug,                          // Parent slug
