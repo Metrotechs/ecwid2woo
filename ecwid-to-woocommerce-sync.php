@@ -1,9 +1,14 @@
 <?php
 /*
 Plugin Name: Ecwid2Woo Product Sync
-Description: Sync Ecwid store data (products, categories, images, skus, etc.) to WooCommerce via Ecwid REST API.
+Description: Easily Sync Ecwid Product Data (products, categories, images, skus, etc.) to WooCommerce.
+Plugin URI: https://www.metrotechs.com/plugins/ecwid2woo-product-sync/
+Author URI: https://www.metrotechs.com
 Version: 1.0
-Author: Metrotechs
+Author: <a href="https://metrotechs.io">Metrotechs</a>
+License: GPLv2 or later
+Text Domain: ecwid-to-woocommerce-product-sync
+
 */
 
 if (!defined('ABSPATH')) {
