@@ -1,107 +1,79 @@
-# Ecwid to WooCommerce Sync
+# Ecwid2Woo Product Sync
 
-This WordPress plugin facilitates the migration and synchronization of your product data from an Ecwid store to a WooCommerce store. It is designed to transfer a comprehensive set of product information, including SKUs, product names, descriptions, prices, stock levels, categories, product images (featured and gallery), and product variations (based on Ecwid options and combinations).
+Synchronize your Ecwid store’s categories and products into WooCommerce, complete with SKUs, descriptions, prices, stock levels, images, and variations.
 
 ## Key Features
 
-*   **Comprehensive Data Transfer**: Migrates essential product details:
-    *   Product Name, SKU, Long and Short Descriptions
-    *   Regular Price and Sale Price (from Ecwid's "Compare to" price)
-    *   Stock Quantity and Management Status
-    *   Product Weight and Dimensions
-    *   Product Status (Published/Draft based on Ecwid's enabled status)
-*   **Category Sync**:
-    *   Imports Ecwid categories into WooCommerce product categories.
-    *   Maintains parent-child category relationships.
-    *   Avoids duplicate category creation.
-*   **Product Image Handling**:
-    *   Imports Ecwid product featured images.
-    *   Imports Ecwid product gallery images.
-    *   Attempts to prevent re-downloading unchanged images on subsequent syncs.
-*   **Variable Product Support**:
-    *   Converts Ecwid product options and combinations into WooCommerce product attributes and variations.
-    *   Creates global WooCommerce attributes and terms as needed.
-    *   Sets variation-specific details like SKU, price, stock, and weight.
-*   **Two Sync Modes**:
-    *   **Full Sync**: Imports all categories and then all enabled products from Ecwid. Ideal for initial migration or complete data refresh.
-    *   **Selective Import**: Allows you to load a list of enabled Ecwid products and choose specific items to import or update.
-*   **Batch Processing**: Sync operations are performed in batches to prevent server timeouts and handle large catalogs efficiently.
-*   **AJAX Powered UI**: Provides a user-friendly interface within the WordPress admin area with real-time progress updates and detailed logging for sync operations.
-*   **Idempotent Operations**: The plugin attempts to update existing WooCommerce products and categories based on their corresponding Ecwid IDs (stored in meta fields) or SKUs, rather than creating duplicates.
-*   **Detailed Logging**: Offers insights into the synchronization process, making it easier to troubleshoot any issues.
+- **Two-Phase Full Sync**  
+  1. Import all Ecwid categories (with parent/child relationships).  
+  2. Import all enabled Ecwid products (simple & variable).
+
+- **Category-Only Sync**  
+  A dedicated “Category Sync” tab to import or update categories without touching products—including a “Fix Category Hierarchy” helper.
+
+- **Selective Product Sync**  
+  The “Product Sync” tab lets you load your Ecwid catalog, pick individual items, and import/update just those products.
+
+- **Full Product Data**  
+  - Names, SKUs, long & short descriptions  
+  - Regular & sale prices (uses Ecwid’s “Compare-To” price)  
+  - Stock quantity & management status  
+  - Weight, dimensions, publish status  
+  - Featured and gallery images (avoids re-downloading unchanged files)
+
+- **Variable Products & Attributes**  
+  Translates Ecwid options/combinations into WooCommerce global attributes, terms, and variations with per-variation SKU, price, stock, and weight.
+
+- **Batch Processing & AJAX UI**  
+  All sync operations run in batches via AJAX to prevent timeouts, with progress bars & live logs for clear feedback.
+
+- **Idempotent Updates**  
+  Matches existing WooCommerce terms/products by Ecwid ID (stored in meta) or SKU—no duplicates on re-sync.
 
 ## Requirements
 
-*   WordPress (tested with version X.X and later - *you might want to specify this*)
-*   WooCommerce plugin installed and activated.
-*   PHP version X.X or higher (with `curl` extension for API calls - *you might want to specify this*).
-*   Valid Ecwid Store ID and API Access Token (Secret Token).
+- WordPress 5.0+  
+- WooCommerce 3.0+  
+- PHP 7.2+ with cURL extension  
+- Valid Ecwid Store ID & Secret Token
 
 ## Installation
 
-1.  **Download**: Download the plugin ZIP file.
-2.  **Upload to WordPress**:
-    *   Log in to your WordPress admin area.
-    *   Navigate to `Plugins` > `Add New`.
-    *   Click on the `Upload Plugin` button at the top.
-    *   Choose the downloaded ZIP file and click `Install Now`.
-3.  **Activate**: After installation, click the `Activate Plugin` button.
-
-Alternatively, you can manually install the plugin:
-1.  Unzip the downloaded file.
-2.  Upload the `ecwid-to-woocommere` (or the correct plugin folder name) directory to the `/wp-content/plugins/` directory of your WordPress installation.
-3.  Log in to your WordPress admin area, navigate to `Plugins`, find "Ecwid to WooCommerce Sync" in the list, and click `Activate`.
+1. Download the ZIP from GitHub.  
+2. In WP Admin → **Plugins → Add New** → **Upload Plugin**, choose the ZIP → **Install Now** → **Activate**.  
+   _Or manually unzip into `/wp-content/plugins/ecwid-to-woocommere/` and activate._
 
 ## Usage
 
-After activating the plugin, you will find a new menu item in your WordPress admin sidebar: **"Ecwid Sync"**.
+After activation you’ll see a top-level menu in WooCommerce admin:
 
-### 1. Configuration
+**Ecwid2Woo Product Sync**
 
-*   Navigate to `Ecwid Sync` > `Ecwid Sync` (the main page).
-*   Enter your **Ecwid Store ID** and **Ecwid API Secret Token** in the "API Credentials" section.
-*   Click `Save Changes`.
+### 1. Sync Settings
 
-### 2. Full Data Sync
+1. Go to **Ecwid2Woo Product Sync → Settings**.  
+2. Enter your Ecwid **Store ID** and **API Secret Token**.  
+3. Save Changes.
 
-This option will sync all categories first, followed by all *enabled* products from your Ecwid store.
+### 2. Full Sync
 
-*   Navigate to `Ecwid Sync` > `Ecwid Sync`.
-*   Under the "Full Data Sync" section, click the **"Start Full Sync"** button.
-*   The plugin will first sync categories and then products.
-*   Progress, status, and detailed logs will be displayed on the page. Do not navigate away from the page until the process completes or indicates it's safe to do so.
+1. Navigate to **Ecwid2Woo Product Sync → Full Sync**.  
+2. Click **Start Full Sync**.  
+3. Watch the progress bar and log for category import, then product import.
 
-### 3. Selective Product Import
+### 3. Category Sync
 
-This option allows you to choose specific *enabled* products from Ecwid to import or update in WooCommerce.
+1. Open **Ecwid2Woo Product Sync → Category Sync**.  
+2. Click **Start Category Sync** to import/update only categories.  
+3. If any parents were missing in the initial pass, use **Fix Category Hierarchy** to re-assign or create placeholders.
 
-*   Navigate to `Ecwid Sync` > `Selective Import`.
-*   Click the **"Load Ecwid Products for Selection"** button. This will fetch a list of your enabled products from Ecwid.
-*   Once the list is loaded, checkboxes will appear next to each product. Select the products you wish to import/update.
-*   After making your selections, click the **"Import Selected Products"** button.
-*   Progress, status, and logs for the selected products will be displayed.
+### 4. Product Sync
 
-## Important Notes
-
-*   **Backup Recommended**: Before running a full sync for the first time, it is highly recommended to back up your WordPress database and `wp-content` directory.
-*   **Execution Time**: Syncing a large number of products and images can take a significant amount of time. The plugin uses batch processing to mitigate server timeouts, but ensure your server's PHP `max_execution_time` and memory limits are reasonably configured if you encounter issues. The plugin attempts to set `set_time_limit(300)` for its AJAX operations.
-*   **API Limits**: While the plugin is designed to be respectful of API limits, extremely frequent or large syncs could potentially hit Ecwid API rate limits.
-*   **Product Updates**:
-    *   The sync process updates existing WooCommerce products if a matching Ecwid Product ID (stored in `_ecwid_product_id` meta) or SKU is found.
-    *   If a product in Ecwid is disabled, its corresponding product in WooCommerce will be set to "draft" status.
-    *   If an Ecwid product is deleted, it is **not** automatically deleted from WooCommerce by this plugin. You would need to manage deletions manually in WooCommerce.
-*   **Image Sync**:
-    *   The plugin attempts to avoid re-downloading images if the source URL from Ecwid hasn't changed.
-    *   If an image is removed from an Ecwid product's gallery, the plugin will attempt to remove it from the WooCommerce product's gallery during the next sync of that product.
-*   **Product Type Changes**: If a product changes type in Ecwid (e.g., from simple to variable), the plugin will attempt to update the WooCommerce product accordingly. This might involve deleting existing variations if a product changes from variable to simple.
-
-## Troubleshooting
-
-*   **Check Logs**: The on-page logs during sync operations provide detailed information. Additionally, critical errors might be logged in your server's PHP error log or WordPress debug log (if enabled).
-*   **API Credentials**: Ensure your Ecwid Store ID and API Token are correct and have the necessary permissions.
-*   **Plugin Conflicts**: Temporarily deactivate other plugins to check for conflicts if you experience unexpected behavior.
-*   **Server Resources**: For very large stores, ensure your hosting environment has sufficient resources (CPU, memory, execution time).
+1. Select **Ecwid2Woo Product Sync → Product Sync**.  
+2. Click **Load Ecwid Products for Selection**.  
+3. Choose one or more products from the list.  
+4. Click **Import Selected Products**—only those items will be fetched and synced.
 
 ---
 
-*This README is based on the observed functionality of the plugin code. Please test thoroughly in a staging environment before using on a live site.*
+_For detailed troubleshooting, enable WP_DEBUG_LOG to capture server-side errors in `wp-content/debug.log`. Logs appear live in each sync tab’s log panel._
