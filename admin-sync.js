@@ -1,9 +1,10 @@
 (function($) {
     $(document).ready(function() {
         if (typeof ecwid_sync_params === 'undefined') {
-            console.error('Ecwid Sync Error: ecwid_sync_params is not defined. Ensure wp_localize_script is working correctly.');
-            $('#full-sync-status').text('Error: Plugin script parameters not loaded.').css('color', 'red');
-            $('#selective-sync-status').text('Error: Plugin script parameters not loaded.').css('color', 'red');
+            console.error('Ecwid Sync Params not defined. Ensure wp_localize_script is working.');
+            // Disable UI elements or show an error message on the page
+            $('#full-sync-button, #load-ecwid-products-button, #category-page-sync-button').addClass('disabled').prop('disabled', true);
+            $('#full-sync-status, #selective-sync-status, #category-page-sync-status').text('Error: Plugin scripts not loaded correctly. Please check browser console.');
             return;
         }
 
@@ -15,10 +16,17 @@
 
         // Full Sync UI Elements
         const fullSyncButton = $('#full-sync-button');
+        // const categorySyncButton = $('#category-sync-button'); // Removed: This button was on the full sync page
         const fullSyncProgressBar = $('#full-sync-bar');
         const fullSyncStatusDiv = $('#full-sync-status');
         const fullSyncLogDiv = $('#full-sync-log');
 
+        // Category Sync Page UI Elements (New)
+        const categoryPageSyncButton = $('#category-page-sync-button');
+        const categoryPageSyncProgressBar = $('#category-page-sync-bar');
+        const categoryPageSyncStatusDiv = $('#category-page-sync-status');
+        const categoryPageSyncLogDiv = $('#category-page-sync-log');
+        
         // Selective Sync UI Elements
         const loadProductsButton = $('#load-ecwid-products-button');
         const productListContainer = $('#selective-product-list-container');
@@ -42,6 +50,9 @@
             if (fullSyncButton.hasClass('disabled')) return;
 
             fullSyncButton.addClass('disabled').text(i18n.syncing_button);
+            // Consider disabling other sync buttons if necessary
+            // categoryPageSyncButton.addClass('disabled');
+
             fullSyncStatusDiv.text(i18n.sync_starting);
             updateProgressBar(fullSyncProgressBar, 0);
             fullSyncLogDiv.html('');
@@ -53,19 +64,41 @@
             processNextFullSyncStep();
         });
 
-        function processNextFullSyncStep() {
+        // --- Category Sync Page Logic (New) ---
+        if (categoryPageSyncButton.length) { // Ensure the button exists on the current page
+            categoryPageSyncButton.on('click', function(e) {
+                e.preventDefault();
+                if (categoryPageSyncButton.hasClass('disabled')) return;
+
+                categoryPageSyncButton.addClass('disabled').text(i18n.syncing_categories_page_button);
+                // fullSyncButton.addClass('disabled'); // Optionally disable other buttons
+
+                categoryPageSyncStatusDiv.text(i18n.syncing_just_categories_page_status);
+                updateProgressBar(categoryPageSyncProgressBar, 0);
+                categoryPageSyncLogDiv.html('');
+
+                logMessage(categoryPageSyncLogDiv, i18n.syncing_just_categories_page_status, 'info');
+                processCategoryPageSyncBatch('categories', 0); 
+            });
+        }
+
+        function processNextFullSyncStep() { // For the FULL sync sequence
             if (currentFullSyncStepIndex < totalFullSyncSteps) {
                 const syncType = fullSyncSteps[currentFullSyncStepIndex];
                 updateStatus(fullSyncStatusDiv, i18n.syncing + ' ' + syncType + '...');
-                processFullSyncBatch(syncType, 0);
+                // Note: The 'isCategoryOnlyRun' flag is removed as this function is now only for full sync
+                processFullSyncBatch(syncType, 0); 
             } else {
+                // Full sync completion
                 updateStatus(fullSyncStatusDiv, i18n.sync_complete);
                 logMessage(fullSyncLogDiv, i18n.sync_complete, 'success');
                 fullSyncButton.removeClass('disabled').text(i18n.start_sync);
+                // categoryPageSyncButton.removeClass('disabled'); // Re-enable if it was disabled
                 updateProgressBar(fullSyncProgressBar, 100);
             }
         }
 
+        // Modified processFullSyncBatch - now only for the full sync page
         function processFullSyncBatch(syncType, offset) {
             $.ajax({
                 url: ajax_url,
@@ -78,37 +111,96 @@
                 },
                 success: function(response) {
                     if (response.success) {
-                        logMessage(fullSyncLogDiv, response.data.message, 'info');
                         if (response.data.batch_logs && Array.isArray(response.data.batch_logs)) {
                             response.data.batch_logs.forEach(logEntry => categorizeAndLog(fullSyncLogDiv, logEntry));
+                        } else {
+                            logMessage(fullSyncLogDiv, `Batch for ${syncType} (offset ${offset}) processed. No detailed logs provided.`, 'info');
                         }
 
-                        let currentStepProgressPercentage = 0;
+                        let currentStepProgress = 0;
                         if (response.data.total_items > 0) {
-                            let effectiveNextOffset = Math.min(response.data.next_offset, response.data.total_items);
-                            currentStepProgressPercentage = (effectiveNextOffset / response.data.total_items) * 100;
-                        } else if (offset === 0 && !response.data.has_more) {
-                            currentStepProgressPercentage = 100;
+                            currentStepProgress = (response.data.next_offset / response.data.total_items) * 100;
+                        } else if (response.data.has_more === false) {
+                            currentStepProgress = 100; 
                         }
-
-                        let overallProgress = overallFullSyncProgressOffset + (currentStepProgressPercentage / totalFullSyncSteps);
-                        overallProgress = Math.min(overallProgress, 100);
+                        currentStepProgress = Math.min(100, Math.round(currentStepProgress));
+                        
+                        // Full sync progress calculation
+                        let progressPerStep = 100 / totalFullSyncSteps;
+                        let overallProgress = overallFullSyncProgressOffset + (currentStepProgress / 100 * progressPerStep);
                         updateProgressBar(fullSyncProgressBar, Math.round(overallProgress));
-                        updateStatus(fullSyncStatusDiv, i18n.syncing + ' ' + syncType + ' (' + Math.round(currentStepProgressPercentage) + '%)');
+                        updateStatus(fullSyncStatusDiv, i18n.syncing + ' ' + syncType + `... ${Math.round(currentStepProgress)}%`);
+
 
                         if (response.data.has_more) {
                             processFullSyncBatch(syncType, response.data.next_offset);
                         } else {
+                            // Current syncType (e.g., 'categories' or 'products') is complete for full sync
                             overallFullSyncProgressOffset += (100 / totalFullSyncSteps);
                             currentFullSyncStepIndex++;
                             processNextFullSyncStep();
                         }
                     } else {
-                        handleAjaxError(fullSyncStatusDiv, fullSyncLogDiv, fullSyncButton, i18n.start_sync, syncType, response.data);
+                        logMessage(fullSyncLogDiv, `Error syncing ${syncType}: ${response.data.message || 'Unknown error.'}`, 'error');
+                        fullSyncButton.removeClass('disabled').text(i18n.start_sync);
+                        // categoryPageSyncButton.removeClass('disabled');
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
-                    handleAjaxError(fullSyncStatusDiv, fullSyncLogDiv, fullSyncButton, i18n.start_sync, syncType, { message: textStatus + (errorThrown ? ' - ' + errorThrown : '') }, true);
+                    logMessage(fullSyncLogDiv, `AJAX Error syncing ${syncType}: ${textStatus} ${errorThrown || ''}`, 'error');
+                    fullSyncButton.removeClass('disabled').text(i18n.start_sync);
+                    // categoryPageSyncButton.removeClass('disabled');
+                }
+            });
+        }
+
+        // New function for Category Sync Page
+        function processCategoryPageSyncBatch(syncType, offset) { // syncType will always be 'categories'
+            $.ajax({
+                url: ajax_url, // Uses the same backend AJAX handler
+                method: 'POST',
+                data: {
+                    action: 'ecwid_wc_batch_sync',
+                    nonce: nonce,
+                    sync_type: syncType, // 'categories'
+                    offset: offset
+                },
+                success: function(response) {
+                    if (response.success) {
+                        if (response.data.batch_logs && Array.isArray(response.data.batch_logs)) {
+                            response.data.batch_logs.forEach(logEntry => categorizeAndLog(categoryPageSyncLogDiv, logEntry));
+                        } else {
+                            logMessage(categoryPageSyncLogDiv, `Batch for ${syncType} (offset ${offset}) processed. No detailed logs provided.`, 'info');
+                        }
+
+                        let currentProgress = 0;
+                        if (response.data.total_items > 0) {
+                            currentProgress = (response.data.next_offset / response.data.total_items) * 100;
+                        } else if (response.data.has_more === false) { // No items or all done
+                            currentProgress = 100;
+                        }
+                        currentProgress = Math.min(100, Math.round(currentProgress));
+
+                        updateProgressBar(categoryPageSyncProgressBar, currentProgress);
+                        categoryPageSyncStatusDiv.text(i18n.syncing_just_categories_page_status + ` ${currentProgress}%`);
+
+                        if (response.data.has_more) {
+                            processCategoryPageSyncBatch(syncType, response.data.next_offset);
+                        } else {
+                            // Category sync complete for this page
+                            categoryPageSyncStatusDiv.text(i18n.category_sync_page_complete);
+                            logMessage(categoryPageSyncLogDiv, i18n.category_sync_page_complete, 'success');
+                            categoryPageSyncButton.removeClass('disabled').text(i18n.start_category_sync_page);
+                            updateProgressBar(categoryPageSyncProgressBar, 100); // Ensure it hits 100%
+                        }
+                    } else {
+                        logMessage(categoryPageSyncLogDiv, `Error syncing ${syncType}: ${response.data.message || 'Unknown error.'}`, 'error');
+                        categoryPageSyncButton.removeClass('disabled').text(i18n.start_category_sync_page);
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    logMessage(categoryPageSyncLogDiv, `AJAX Error syncing ${syncType}: ${textStatus} ${errorThrown || ''}`, 'error');
+                    categoryPageSyncButton.removeClass('disabled').text(i18n.start_category_sync_page);
                 }
             });
         }
@@ -306,6 +398,37 @@
                 buttonElem.removeClass('disabled').text(buttonText);
             }
         }
+
+        // --- Fix Category Hierarchy Logic (New) ---
+        $('#fix-category-hierarchy-button').on('click', function(e) {
+            e.preventDefault();
+            if ($(this).hasClass('disabled')) return;
+            
+            $(this).addClass('disabled').text('Fixing Hierarchies...');
+            categoryPageSyncStatusDiv.text('Fixing Category Hierarchies...');
+            
+            $.ajax({
+                url: ajax_url,
+                method: 'POST',
+                data: {
+                    action: 'fix_category_hierarchy',
+                    nonce: nonce
+                },
+                success: function(response) {
+                    if (response.success) {
+                        categoryPageSyncStatusDiv.text('Category hierarchies fixed! ' + response.data.fixed_count + ' categories updated.');
+                        response.data.logs.forEach(log => logMessage(categoryPageSyncLogDiv, log, 'info'));
+                    } else {
+                        logMessage(categoryPageSyncLogDiv, 'Error fixing hierarchies: ' + (response.data.message || 'Unknown error'), 'error');
+                    }
+                    $('#fix-category-hierarchy-button').removeClass('disabled').text('Fix Category Hierarchy');
+                },
+                error: function() {
+                    logMessage(categoryPageSyncLogDiv, 'AJAX error while fixing hierarchies', 'error');
+                    $('#fix-category-hierarchy-button').removeClass('disabled').text('Fix Category Hierarchy');
+                }
+            });
+        });
 
     });
 })(jQuery);
