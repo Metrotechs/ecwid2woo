@@ -2,7 +2,7 @@
 /*
 Plugin Name: Ecwid2Woo Product Sync
 Description: Sync Ecwid store data (products, categories, images, skus, etc.) to WooCommerce via Ecwid REST API.
-Version: 1.9
+Version: 1.0
 Author: Metrotechs
 */
 
