@@ -2,7 +2,7 @@
 /*
 Plugin Name: Ecwid to WooCommerce Sync
 Description: Sync Ecwid store data (products, categories) to WooCommerce via Ecwid REST API.
-Version: 1.8
+Version: 1.9
 Author: Metrotechs
 */
 
@@ -13,8 +13,11 @@ if (!defined('ABSPATH')) {
 class Ecwid_WC_Sync {
     private $options;
     private $sync_steps = ['categories', 'products']; // Define order of sync for full sync
-    private $main_slug = 'ecwid-sync';
-    private $selective_slug = 'ecwid-sync-selective';
+    
+    // Define slugs for the admin pages
+    private $settings_slug = 'ecwid-sync-settings';
+    private $full_sync_slug = 'ecwid-sync-full';
+    private $partial_sync_slug = 'ecwid-sync-partial'; // Renamed from selective_slug
 
     public function __construct() {
         $this->options = get_option('ecwid_wc_sync_options');
@@ -26,53 +29,80 @@ class Ecwid_WC_Sync {
     }
 
     public function add_admin_menu() {
-        // Main Page: Settings & Full Sync
+        // Top-level menu page (will act as the Settings page)
         add_menu_page(
-            __('Ecwid Sync Settings & Full Sync', 'ecwid-wc-sync'),
-            __('Ecwid Sync', 'ecwid-wc-sync'), // Main Menu Title
-            'manage_options',
-            $this->main_slug,
-            [$this, 'options_page_router'], // Router function
-            'dashicons-update'
+            __('Ecwid Sync Settings', 'ecwid-wc-sync'),    // Page title
+            __('Ecwid Sync', 'ecwid-wc-sync'),             // Menu title
+            'manage_options',                              // Capability
+            $this->settings_slug,                          // Menu slug (our settings page)
+            [$this, 'options_page_router'],                // Function to display page content
+            'dashicons-update'                             // Icon
         );
 
-        // Submenu Page: Selective Import
+        // Submenu Page: Full Sync
         add_submenu_page(
-            $this->main_slug, // Parent slug
-            __('Selective Product Import', 'ecwid-wc-sync'),
-            __('Selective Import', 'ecwid-wc-sync'), // Submenu Title
-            'manage_options',
-            $this->selective_slug,
-            [$this, 'options_page_router'] // Router function
+            $this->settings_slug,                          // Parent slug
+            __('Full Data Sync', 'ecwid-wc-sync'),         // Page title
+            __('Full Sync', 'ecwid-wc-sync'),              // Menu title
+            'manage_options',                              // Capability
+            $this->full_sync_slug,                         // Menu slug
+            [$this, 'options_page_router']                 // Function to display page content
+        );
+
+        // Submenu Page: Partial Sync (was Selective Import)
+        add_submenu_page(
+            $this->settings_slug,                          // Parent slug
+            __('Partial Product Sync', 'ecwid-wc-sync'),   // Page title
+            __('Partial Sync', 'ecwid-wc-sync'),           // Menu title
+            'manage_options',                              // Capability
+            $this->partial_sync_slug,                      // Menu slug
+            [$this, 'options_page_router']                 // Function to display page content
         );
     }
 
     public function settings_init() {
-        register_setting('ecwidSync', 'ecwid_wc_sync_options');
-        // Settings section will be displayed on the main page
+        register_setting('ecwidSyncSettingsGroup', 'ecwid_wc_sync_options'); // Changed group name for clarity
+
+        // Settings section for API Credentials
         add_settings_section(
-            'ecwidSync_section',
-            __('API Credentials', 'ecwid-wc-sync'),
-            '__return_false', // Callback for section description (none needed here)
-            $this->main_slug // Page slug where this section should be shown
+            'ecwidSync_api_credentials_section',           // ID
+            __('Ecwid API Credentials', 'ecwid-wc-sync'),  // Title
+            '__return_false',                              // Callback for section description
+            $this->settings_slug                           // Page slug where this section should be shown
         );
-        add_settings_field('store_id', __('Ecwid Store ID', 'ecwid-wc-sync'), [$this, 'field_text'], $this->main_slug, 'ecwidSync_section', ['id' => 'store_id']);
-        add_settings_field('token', __('Ecwid API Token (Secret Token)', 'ecwid-wc-sync'), [$this, 'field_text'], $this->main_slug, 'ecwidSync_section', ['id' => 'token', 'type' => 'password']);
+
+        add_settings_field(
+            'store_id',                                    // ID
+            __('Ecwid Store ID', 'ecwid-wc-sync'),         // Title
+            [$this, 'field_text'],                         // Callback to render the field
+            $this->settings_slug,                          // Page slug
+            'ecwidSync_api_credentials_section',           // Section ID
+            ['id' => 'store_id', 'label_for' => 'store_id'] // Arguments for the callback
+        );
+
+        add_settings_field(
+            'token',                                       // ID
+            __('Ecwid API Token (Secret Token)', 'ecwid-wc-sync'), // Title
+            [$this, 'field_text'],                         // Callback to render the field
+            $this->settings_slug,                          // Page slug
+            'ecwidSync_api_credentials_section',           // Section ID
+            ['id' => 'token', 'type' => 'password', 'label_for' => 'token'] // Arguments for the callback
+        );
     }
 
     public function field_text($args) {
         $id = $args['id'];
         $type = $args['type'] ?? 'text';
         $value = isset($this->options[$id]) ? esc_attr($this->options[$id]) : '';
-        echo "<input type='{$type}' id='$id' name='ecwid_wc_sync_options[$id]' value='$value' style='width: 300px;' />";
+        echo "<input type='{$type}' id='$id' name='ecwid_wc_sync_options[$id]' value='$value' class='regular-text' />";
         if ($id === 'token') {
             echo '<p class="description">' . __('Your Ecwid API Secret Token. This is sensitive information.', 'ecwid-wc-sync') . '</p>';
         }
     }
 
     public function options_page_router() {
-        // Common script enqueueing for both pages
-        wp_enqueue_script('ecwid-wc-sync-admin', plugin_dir_url(__FILE__) . 'admin-sync.js', ['jquery', 'wp-i18n'], '1.8', true);
+        // Common script enqueueing for all plugin pages
+        wp_enqueue_script('ecwid-wc-sync-admin', plugin_dir_url(__FILE__) . 'admin-sync.js', ['jquery', 'wp-i18n'], '1.9', true); // Incremented version
         wp_localize_script('ecwid-wc-sync-admin', 'ecwid_sync_params', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce'    => wp_create_nonce('ecwid_wc_sync_nonce'),
@@ -95,35 +125,49 @@ class Ecwid_WC_Sync {
         ]);
 
         // Determine which page to render
-        $current_page = $_GET['page'] ?? $this->main_slug;
+        $current_page_slug = $_GET['page'] ?? $this->settings_slug; // Default to settings page
 
         echo '<div class="wrap">';
-        if ($current_page === $this->main_slug) {
-            $this->render_main_page();
-        } elseif ($current_page === $this->selective_slug) {
-            $this->render_selective_import_page();
+        // Display page title using WordPress standard h1
+        // echo '<h1>' . esc_html(get_admin_page_title()) . '</h1>'; // get_admin_page_title() is good here
+
+        switch ($current_page_slug) {
+            case $this->settings_slug:
+                $this->render_settings_page();
+                break;
+            case $this->full_sync_slug:
+                $this->render_full_sync_page();
+                break;
+            case $this->partial_sync_slug:
+                $this->render_partial_sync_page();
+                break;
+            default:
+                // Optionally, handle unknown page or redirect to settings
+                $this->render_settings_page();
+                break;
         }
         echo '</div>'; // close .wrap
     }
 
-    private function render_main_page() {
+    private function render_settings_page() {
         ?>
-        <h1><?php _e('Ecwid to WooCommerce Sync - Settings & Full Sync', 'ecwid-wc-sync'); ?></h1>
-        
-        <h2><?php _e('API Credentials', 'ecwid-wc-sync'); ?></h2>
+        <h1><?php _e('Ecwid Sync Settings', 'ecwid-wc-sync'); ?></h1>
         <form action='options.php' method='post'>
             <?php
-            settings_fields('ecwidSync'); // Group name for settings
-            do_settings_sections($this->main_slug); // Page slug for settings sections
-            submit_button();
+            settings_fields('ecwidSyncSettingsGroup'); // Use the group name defined in register_setting
+            do_settings_sections($this->settings_slug);    // Page slug for settings sections
+            submit_button(__('Save Settings', 'ecwid-wc-sync'));
             ?>
         </form>
+        <?php
+    }
 
-        <hr>
-        <h2><?php _e('Full Data Sync', 'ecwid-wc-sync'); ?></h2>
+    private function render_full_sync_page() { // Renamed from render_main_page, content adjusted
+        ?>
+        <h1><?php _e('Full Data Sync', 'ecwid-wc-sync'); ?></h1>
         <p><?php _e('This will sync all categories and then all enabled products from Ecwid to WooCommerce. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'ecwid-wc-sync'); ?></p>
         <div id="full-sync-status" style="margin-bottom: 10px; font-weight: bold;"></div>
-        <div id="full-sync-progress" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box;">
+        <div id="full-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box;">
             <div id="full-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
         </div>
         <button id="full-sync-button" class="button button-primary"><?php _e('Start Full Sync', 'ecwid-wc-sync'); ?></button>
@@ -131,9 +175,9 @@ class Ecwid_WC_Sync {
         <?php
     }
 
-    private function render_selective_import_page() {
+    private function render_partial_sync_page() { // Renamed from render_selective_import_page
         ?>
-        <h1><?php _e('Selective Product Import', 'ecwid-wc-sync'); ?></h1>
+        <h1><?php _e('Partial Product Sync', 'ecwid-wc-sync'); ?></h1>
         <p><?php _e('Load enabled products from Ecwid and select which ones to import or update.', 'ecwid-wc-sync'); ?></p>
         <button id="load-ecwid-products-button" class="button"><?php _e('Load Ecwid Products for Selection', 'ecwid-wc-sync'); ?></button>
         <div id="selective-product-list-container" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff;">
@@ -142,7 +186,7 @@ class Ecwid_WC_Sync {
         <button id="import-selected-products-button" class="button button-primary" style="margin-top: 10px; display: none;"><?php _e('Import Selected Products', 'ecwid-wc-sync'); ?></button>
         
         <div id="selective-sync-status" style="margin-top:15px; margin-bottom: 10px; font-weight: bold;"></div>
-        <div id="selective-sync-progress" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box; display:none;">
+        <div id="selective-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box; display:none;">
             <div id="selective-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
         </div>
         <div id="selective-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
@@ -457,6 +501,7 @@ class Ecwid_WC_Sync {
 
             if ($existing_wc_term_id_by_ecwid_meta) {
                 $category_logs[] = "Skipped. Already linked in WC (Term ID: $existing_wc_term_id_by_ecwid_meta) to this Ecwid ID ($ecwid_cat_id). (Checked with cache bypass)";
+
                 // Optionally, update name/description if changed in Ecwid for already linked terms
                 // (Add your existing update logic here if desired)
                 return ['status' => 'skipped', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
@@ -495,6 +540,13 @@ class Ecwid_WC_Sync {
                 if ($parent_wc_term_id) {
                     $args['parent'] = $parent_wc_term_id;
                     $category_logs[] = "Parent category (Ecwid ID: $parent_ecwid_id) mapped to WC Term ID: {$args['parent']}.";
+
+                    // Optionally, check if parent category exists and is enabled before allowing this child to be created
+                    $parent_term = get_term($parent_wc_term_id, 'product_cat');
+                    if (!$parent_term || is_wp_error($parent_term) || !$parent_term->term_id) {
+                        $category_logs[] = "[ERROR] Parent category (ID: $parent_wc_term_id) not found or invalid. Cannot assign as parent.";
+                        return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
+                    }
                 } else {
                     $category_logs[] = "[WARNING] Parent category (Ecwid ID: $parent_ecwid_id) not yet imported or found in WC. This category will be top-level for now.";
                 }

@@ -24,7 +24,7 @@
         const productListContainer = $('#selective-product-list-container');
         const importSelectedButton = $('#import-selected-products-button');
         const selectiveSyncStatusDiv = $('#selective-sync-status');
-        const selectiveSyncProgressBarContainer = $('#selective-sync-progress');
+        const selectiveSyncProgressBarContainer = $('#selective-sync-progress-container');
         const selectiveSyncProgressBar = $('#selective-sync-bar');
         const selectiveSyncLogDiv = $('#selective-sync-log');
 
@@ -34,6 +34,7 @@
         let ecwidProductsForSelection = [];
         let productsToImportSelected = [];
         let currentSelectiveImportIndex = 0;
+        let processingIndicatorInterval = null; // For simple animation
 
         // --- Full Sync Logic ---
         fullSyncButton.on('click', function(e) {
@@ -196,12 +197,21 @@
         });
 
         function processNextSelectedProduct() {
+            if (processingIndicatorInterval) clearInterval(processingIndicatorInterval); // Clear previous interval
+
             if (currentSelectiveImportIndex < productsToImportSelected.length) {
                 const ecwidProductId = productsToImportSelected[currentSelectiveImportIndex];
                 const productData = ecwidProductsForSelection.find(p => p.id.toString() === ecwidProductId.toString());
                 const productName = productData ? productData.name : `ID ${ecwidProductId}`;
 
-                updateStatus(selectiveSyncStatusDiv, i18n.importing_selected + ` (${currentSelectiveImportIndex + 1}/${productsToImportSelected.length}): ${productName}`);
+                let dots = 0;
+                const baseStatusText = i18n.importing_selected + ` (${currentSelectiveImportIndex + 1}/${productsToImportSelected.length}): ${productName}`;
+                updateStatus(selectiveSyncStatusDiv, baseStatusText + " ");
+                
+                processingIndicatorInterval = setInterval(function() {
+                    dots = (dots + 1) % 4;
+                    selectiveSyncStatusDiv.text(baseStatusText + " " + '.'.repeat(dots) + ' '.repeat(3 - dots));
+                }, 500);
 
                 $.ajax({
                     url: ajax_url,
@@ -212,6 +222,8 @@
                         ecwid_product_id: ecwidProductId
                     },
                     success: function(response) {
+                        clearInterval(processingIndicatorInterval);
+                        processingIndicatorInterval = null;
                         if (response.success) {
                             logMessage(selectiveSyncLogDiv, `Importing ${response.data.item_name || productName} (Ecwid ID: ${response.data.ecwid_id}, SKU: ${response.data.sku || 'N/A'}): Status - ${response.data.status}`, response.data.status === 'imported' || response.data.status === 'skipped' ? 'success' : 'info');
                             if (response.data.logs && Array.isArray(response.data.logs)) {
@@ -226,6 +238,8 @@
                         processNextSelectedProduct();
                     },
                     error: function(jqXHR, textStatus, errorThrown) {
+                        clearInterval(processingIndicatorInterval);
+                        processingIndicatorInterval = null;
                         logMessage(selectiveSyncLogDiv, `AJAX Error importing product ID ${ecwidProductId}: ${textStatus} ${errorThrown || ''}`, 'error');
                         currentSelectiveImportIndex++;
                         let progress = (currentSelectiveImportIndex / productsToImportSelected.length) * 100;
@@ -234,6 +248,7 @@
                     }
                 });
             } else {
+                if (processingIndicatorInterval) clearInterval(processingIndicatorInterval);
                 updateStatus(selectiveSyncStatusDiv, i18n.sync_complete);
                 logMessage(selectiveSyncLogDiv, i18n.sync_complete, 'success');
                 importSelectedButton.removeClass('disabled').text(i18n.import_selected);
