@@ -20,10 +20,13 @@ if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly
 }
 
+<<<<<<< HEAD
 if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
     define('ECWID2WOO_VARIATION_BATCH_SIZE', 20); // Number of variations to process per batch
 }
 
+=======
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
 define('ECWID2WOO_VERSION', '1.9.2'); // Define version constant
 
 class Ecwid_WC_Sync {
@@ -46,7 +49,10 @@ class Ecwid_WC_Sync {
         add_action('wp_ajax_ecwid_wc_fetch_products_for_selection', [$this, 'ajax_fetch_products_for_selection']);
         add_action('wp_ajax_ecwid_wc_import_selected_products', [$this, 'ajax_import_selected_products']);
         add_action('wp_ajax_fix_category_hierarchy', [$this, 'fix_category_hierarchy']);
+<<<<<<< HEAD
         add_action('wp_ajax_ecwid_wc_process_variation_batch', [$this, 'ajax_process_variation_batch']);
+=======
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
     }
 
     public function load_textdomain() {
@@ -63,12 +69,19 @@ class Ecwid_WC_Sync {
             'show_ui' => true,
             'labels' => [
                 'name' => __('Ecwid Placeholders', 'ecwid2woo-product-sync'),
+<<<<<<< HEAD
                 'singular_name' => __('Ecwid Placeholder', 'ecwid2woo-product-sync'),
                 'menu_name' => __('Placeholders', 'ecwid2woo-product-sync'), // Shorter menu name
             ],
             'supports' => ['title'],
             'rewrite' => false,
             'show_in_menu' => false, // Prevent automatic menu item creation
+=======
+                'singular_name' => __('Ecwid Placeholder', 'ecwid2woo-product-sync')
+            ],
+            'supports' => ['title'],
+            'rewrite' => false,
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
         ]);
     }
 
@@ -87,7 +100,11 @@ class Ecwid_WC_Sync {
             __('Ecwid2Woo Product Sync Settings', 'ecwid2woo-product-sync'),
             __('Settings', 'ecwid2woo-product-sync'),
             'manage_options',
+<<<<<<< HEAD
             $this->settings_slug, // This makes "Settings" link to the main page
+=======
+            $this->settings_slug,
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
             [$this, 'options_page_router']
         );
 
@@ -111,11 +128,16 @@ class Ecwid_WC_Sync {
 
         add_submenu_page(
             $this->settings_slug,
+<<<<<<< HEAD
             __('Selective Product Sync', 'ecwid2woo-product-sync'),
+=======
+            __('Selective Product Sync', 'ecwid2woo-product-sync'), // More descriptive title
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
             __('Product Sync', 'ecwid2woo-product-sync'),
             'manage_options',
             $this->partial_sync_slug,
             [$this, 'options_page_router']
+<<<<<<< HEAD
         );
 
         // Add the Placeholders CPT as the last submenu item
@@ -126,6 +148,8 @@ class Ecwid_WC_Sync {
             'manage_options',                             // Capability
             'edit.php?post_type=ecwid_placeholder',       // Menu slug (links to CPT admin table)
             null                                          // Callback function (null for default CPT screen)
+=======
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
         );
     }
 
@@ -198,11 +222,14 @@ class Ecwid_WC_Sync {
                 'fix_hierarchy_button' => __('Fix Category Hierarchy', 'ecwid2woo-product-sync'),
                 'fixing_hierarchy' => __('Fixing hierarchy...', 'ecwid2woo-product-sync'),
                 'hierarchy_fixed' => __('Category hierarchy fix attempt complete.', 'ecwid2woo-product-sync'),
+<<<<<<< HEAD
                 'importing_variations_status' => __('Importing variations for {productName} ({currentBatch} of {totalBatches})', 'ecwid2woo-product-sync'),
                 'processing_variation_batch' => __('Processing variation batch...', 'ecwid2woo-product-sync'),
                 'variations_imported_successfully' => __('All variations imported successfully for {productName}.', 'ecwid2woo-product-sync'),
                 'error_importing_variations' => __('Error importing variations for {productName}. See log.', 'ecwid2woo-product-sync'),
                 'parent_product_imported_pending_variations' => __('Parent product {productName} imported. Starting variation import...', 'ecwid2woo-product-sync'),
+=======
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
             ]
         ]);
 
@@ -248,7 +275,10 @@ class Ecwid_WC_Sync {
         ?>
         <h1><?php esc_html_e('Full Data Sync', 'ecwid2woo-product-sync'); ?></h1>
         <p><?php esc_html_e('This will sync all categories and then all enabled products from Ecwid to WooCommerce. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'ecwid2woo-product-sync'); ?></p>
+<<<<<<< HEAD
         
+=======
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
         <div id="full-sync-status" style="margin-bottom: 10px; font-weight: bold;"></div>
         
         <div style="margin-bottom: 5px;">
@@ -257,6 +287,7 @@ class Ecwid_WC_Sync {
                 <div id="full-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
             </div>
         </div>
+<<<<<<< HEAD
 
         <div style="margin-top: 10px; margin-bottom: 10px;">
             <label for="full-sync-step-bar" style="display: block; margin-bottom: 2px; font-size: 0.9em;"><?php esc_html_e('Current Step Progress:', 'ecwid2woo-product-sync'); ?></label>
@@ -265,6 +296,8 @@ class Ecwid_WC_Sync {
             </div>
         </div>
         
+=======
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
         <button id="full-sync-button" class="button button-primary"><?php esc_html_e('Start Full Sync', 'ecwid2woo-product-sync'); ?></button>
         <div id="full-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
         <?php
@@ -335,8 +368,12 @@ class Ecwid_WC_Sync {
                 'limit' => $limit,
                 'offset' => $offset,
                 'enabled' => 'true',
+<<<<<<< HEAD
                 // MODIFIED: Fetch options and combination IDs
                 'responseFields' => 'items(id,sku,name,enabled,options,combinations(id))' 
+=======
+                'responseFields' => 'items(id,sku,name,enabled)'
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
             ];
             $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/products');
 
@@ -360,15 +397,23 @@ class Ecwid_WC_Sync {
 
             if (isset($body['items']) && is_array($body['items'])) {
                 foreach ($body['items'] as $item) {
+<<<<<<< HEAD
                     // Ensure 'enabled' check is still relevant if API guarantees it
                     // if (isset($item['enabled']) && $item['enabled']) { 
+=======
+                    if (isset($item['enabled']) && $item['enabled']) {
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
                         $all_products[] = [
                             'id' => $item['id'] ?? null,
                             'name' => $item['name'] ?? 'N/A',
                             'sku' => $item['sku'] ?? 'N/A',
+<<<<<<< HEAD
                             'enabled' => $item['enabled'] ?? false, // Ensure default
                             'options' => $item['options'] ?? [], // Add options
                             'combinations' => $item['combinations'] ?? [] // Add combinations (array of {id:val})
+=======
+                            'enabled' => $item['enabled']
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
                         ];
                     // }
                 }
@@ -389,7 +434,11 @@ class Ecwid_WC_Sync {
             wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]);
             return;
         }
+<<<<<<< HEAD
         set_time_limit(0); // Try to disable time limit for this initial product fetch and parent import
+=======
+        set_time_limit(300);
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
 
         $api_essentials = $this->_get_api_essentials();
         if (is_wp_error($api_essentials)) {
@@ -477,9 +526,13 @@ class Ecwid_WC_Sync {
             wp_send_json_error(['message' => $api_essentials->get_error_message()]); return;
         }
 
+<<<<<<< HEAD
         // MODIFICATION: Change the default batch size from 10 to a smaller number, e.g., 5.
         // This will fetch and process fewer items per AJAX call, leading to more frequent updates.
         $limit_per_api_call = apply_filters('ecwid_wc_sync_batch_api_limit', 5); // Changed from 10 to 5
+=======
+        $limit_per_api_call = apply_filters('ecwid_wc_sync_batch_api_limit', 10);
+>>>>>>> ef91812b2ab37787ba298e3863f6d7e4ada37987
         $sync_type = isset($_POST['sync_type']) ? sanitize_text_field($_POST['sync_type']) : '';
         $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
 
