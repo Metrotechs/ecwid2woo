@@ -4,187 +4,212 @@ Plugin Name: Ecwid2Woo Product Sync
 Description: Easily Sync Ecwid Product Data (products, categories, images, skus, etc.) to WooCommerce.
 Plugin URI: https://metrotechs.io/plugins/ecwid2woo-product-sync/
 Author URI: https://metrotechs.io
-Version: 1.0
-Author: <a href="https://metrotechs.io">Metrotechs</a>
+Version: 1.9.2
+Author: Metrotechs
 License: GPLv2 or later
-Text Domain: ecwid-to-woocommerce-product-sync
-
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+Text Domain: ecwid2woo-product-sync
+Domain Path: /languages
+Requires at least: 5.0
+Requires PHP: 7.2
+WC requires at least: 3.0
+WC tested up to: 8.8 
 */
 
 if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly
 }
 
+if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
+    define('ECWID2WOO_VARIATION_BATCH_SIZE', 20); // Number of variations to process per batch
+}
+
+define('ECWID2WOO_VERSION', '1.9.2'); // Define version constant
+
 class Ecwid_WC_Sync {
     private $options;
     private $sync_steps = ['categories', 'products']; // Define order of sync for full sync
-    
+
     // Define slugs for the admin pages
     private $settings_slug = 'ecwid-sync-settings';
     private $full_sync_slug = 'ecwid-sync-full';
     private $partial_sync_slug = 'ecwid-sync-partial';
-    private $category_sync_slug = 'ecwid-sync-categories'; 
+    private $category_sync_slug = 'ecwid-sync-categories';
 
     public function __construct() {
+        $this->load_textdomain(); // Load text domain
         $this->options = get_option('ecwid_wc_sync_options');
-        add_action('init', [$this, 'register_placeholder_cpt']); 
+        add_action('init', [$this, 'register_placeholder_cpt']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_init', [$this, 'settings_init']);
         add_action('wp_ajax_ecwid_wc_batch_sync', [$this, 'ajax_batch_sync']);
         add_action('wp_ajax_ecwid_wc_fetch_products_for_selection', [$this, 'ajax_fetch_products_for_selection']);
         add_action('wp_ajax_ecwid_wc_import_selected_products', [$this, 'ajax_import_selected_products']);
-        add_action('wp_ajax_fix_category_hierarchy', [$this, 'fix_category_hierarchy']); 
+        add_action('wp_ajax_fix_category_hierarchy', [$this, 'fix_category_hierarchy']);
+        add_action('wp_ajax_ecwid_wc_process_variation_batch', [$this, 'ajax_process_variation_batch']);
+    }
+
+    public function load_textdomain() {
+        load_plugin_textdomain(
+            'ecwid2woo-product-sync',
+            false,
+            dirname(plugin_basename(__FILE__)) . '/languages/'
+        );
     }
 
     public function register_placeholder_cpt() {
-        // Register a custom post type for placeholders
         register_post_type('ecwid_placeholder', [
             'public' => false,
-            'show_ui' => true, // Keep true if you want to see them in admin under a CPT menu (even if not public)
+            'show_ui' => true,
             'labels' => [
-                'name' => __('Ecwid Placeholders', 'ecwid-wc-sync'),
-                'singular_name' => __('Ecwid Placeholder', 'ecwid-wc-sync')
+                'name' => __('Ecwid Placeholders', 'ecwid2woo-product-sync'),
+                'singular_name' => __('Ecwid Placeholder', 'ecwid2woo-product-sync'),
+                'menu_name' => __('Placeholders', 'ecwid2woo-product-sync'), // Shorter menu name
             ],
             'supports' => ['title'],
             'rewrite' => false,
-            // Make it truly private if not needed in UI directly:
-            // 'publicly_queryable' => false,
-            // 'exclude_from_search' => true,
-            // 'show_in_nav_menus' => false,
-            // 'show_in_admin_bar' => false,
-            // 'show_in_menu' => false, // This would hide it from the admin menu list
+            'show_in_menu' => false, // Prevent automatic menu item creation
         ]);
     }
 
     public function add_admin_menu() {
-        // Top-level menu page (will act as the Settings page)
         add_menu_page(
-            __('Ecwid2Woo Product Sync Settings', 'ecwid-wc-sync'),    // Page title
-            __('Ecwid2Woo Product Sync', 'ecwid-wc-sync'),             // Menu title
-            'manage_options',                              // Capability
-            $this->settings_slug,                          // Menu slug (our settings page)
-            [$this, 'options_page_router'],                // Function to display page content
-            'dashicons-update'                             // Icon
+            __('Ecwid2Woo Product Sync Settings', 'ecwid2woo-product-sync'),
+            __('Ecwid2Woo Sync', 'ecwid2woo-product-sync'), // Shorter menu title
+            'manage_options',
+            $this->settings_slug,
+            [$this, 'options_page_router'],
+            'dashicons-update-alt' // Changed icon slightly
         );
 
-        // Submenu Page: Settings (this will be the first sub-tab)
         add_submenu_page(
-            $this->settings_slug,                          // Parent slug
-            __('Ecwid2Woo Product Sync Settings', 'ecwid-wc-sync'),    // Page title
-            __('Settings', 'ecwid-wc-sync'),          // Menu title for the sub-tab
-            'manage_options',                              // Capability
-            $this->settings_slug,                          // Menu slug (same as parent to control its page)
-            [$this, 'options_page_router']                 // Function to display page content
+            $this->settings_slug,
+            __('Ecwid2Woo Product Sync Settings', 'ecwid2woo-product-sync'),
+            __('Settings', 'ecwid2woo-product-sync'),
+            'manage_options',
+            $this->settings_slug, // This makes "Settings" link to the main page
+            [$this, 'options_page_router']
         );
 
-        // Submenu Page: Full Sync
         add_submenu_page(
-            $this->settings_slug,                          // Parent slug
-            __('Full Data Sync', 'ecwid-wc-sync'),         // Page title
-            __('Full Sync', 'ecwid-wc-sync'),              // Menu title
-            'manage_options',                              // Capability
-            $this->full_sync_slug,                         // Menu slug
-            [$this, 'options_page_router']                 // Function to display page content
+            $this->settings_slug,
+            __('Full Data Sync', 'ecwid2woo-product-sync'),
+            __('Full Sync', 'ecwid2woo-product-sync'),
+            'manage_options',
+            $this->full_sync_slug,
+            [$this, 'options_page_router']
         );
 
-        // Submenu Page: Category Sync (New)
         add_submenu_page(
-            $this->settings_slug,                          // Parent slug
-            __('Category Sync', 'ecwid-wc-sync'),          // Page title
-            __('Category Sync', 'ecwid-wc-sync'),          // Menu title
-            'manage_options',                              // Capability
-            $this->category_sync_slug,                     // Menu slug
-            [$this, 'options_page_router']                 // Function to display page content
+            $this->settings_slug,
+            __('Category Sync', 'ecwid2woo-product-sync'),
+            __('Category Sync', 'ecwid2woo-product-sync'),
+            'manage_options',
+            $this->category_sync_slug,
+            [$this, 'options_page_router']
         );
 
-        // Submenu Page: Product Sync (was Import Products/Partial Sync)
         add_submenu_page(
-            $this->settings_slug,                          // Parent slug
-            __('Product Sync', 'ecwid-wc-sync'),   // Page title
-            __('Product Sync', 'ecwid-wc-sync'),           // Menu title
-            'manage_options',                              // Capability
-            $this->partial_sync_slug,                      // Menu slug
-            [$this, 'options_page_router']                 // Function to display page content
+            $this->settings_slug,
+            __('Selective Product Sync', 'ecwid2woo-product-sync'),
+            __('Product Sync', 'ecwid2woo-product-sync'),
+            'manage_options',
+            $this->partial_sync_slug,
+            [$this, 'options_page_router']
+        );
+
+        // Add the Placeholders CPT as the last submenu item
+        add_submenu_page(
+            $this->settings_slug,                         // Parent slug
+            __('Ecwid Placeholders', 'ecwid2woo-product-sync'), // Page title
+            __('Placeholders', 'ecwid2woo-product-sync'),  // Menu title (from CPT labels)
+            'manage_options',                             // Capability
+            'edit.php?post_type=ecwid_placeholder',       // Menu slug (links to CPT admin table)
+            null                                          // Callback function (null for default CPT screen)
         );
     }
 
     public function settings_init() {
-        register_setting('ecwidSyncSettingsGroup', 'ecwid_wc_sync_options'); // Changed group name for clarity
+        register_setting('ecwidSyncSettingsGroup', 'ecwid_wc_sync_options');
 
-        // Settings section for API Credentials
         add_settings_section(
-            'ecwidSync_api_credentials_section',           // ID
-            __('Ecwid API Credentials', 'ecwid-wc-sync'),  // Title
-            '__return_false',                              // Callback for section description
-            $this->settings_slug                           // Page slug where this section should be shown
+            'ecwidSync_api_credentials_section',
+            __('Ecwid API Credentials', 'ecwid2woo-product-sync'),
+            '__return_false',
+            $this->settings_slug
         );
 
         add_settings_field(
-            'store_id',                                    // ID
-            __('Ecwid Store ID', 'ecwid-wc-sync'),         // Title
-            [$this, 'field_text'],                         // Callback to render the field
-            $this->settings_slug,                          // Page slug
-            'ecwidSync_api_credentials_section',           // Section ID
-            ['id' => 'store_id', 'label_for' => 'store_id'] // Arguments for the callback
+            'store_id',
+            __('Ecwid Store ID', 'ecwid2woo-product-sync'),
+            [$this, 'field_text'],
+            $this->settings_slug,
+            'ecwidSync_api_credentials_section',
+            ['id' => 'store_id', 'label_for' => 'store_id', 'description' => __('Enter your Ecwid Store ID.', 'ecwid2woo-product-sync')]
         );
 
         add_settings_field(
-            'token',                                       // ID
-            __('Ecwid API Token (Secret Token)', 'ecwid-wc-sync'), // Title
-            [$this, 'field_text'],                         // Callback to render the field
-            $this->settings_slug,                          // Page slug
-            'ecwidSync_api_credentials_section',           // Section ID
-            ['id' => 'token', 'type' => 'password', 'label_for' => 'token'] // Arguments for the callback
+            'token',
+            __('Ecwid API Token (Secret Token)', 'ecwid2woo-product-sync'),
+            [$this, 'field_text'],
+            $this->settings_slug,
+            'ecwidSync_api_credentials_section',
+            ['id' => 'token', 'type' => 'password', 'label_for' => 'token', 'description' => __('Your Ecwid API Secret Token. This is sensitive information.', 'ecwid2woo-product-sync')]
         );
     }
 
     public function field_text($args) {
         $id = $args['id'];
         $type = $args['type'] ?? 'text';
+        $description = $args['description'] ?? '';
         $value = isset($this->options[$id]) ? esc_attr($this->options[$id]) : '';
         echo "<input type='{$type}' id='$id' name='ecwid_wc_sync_options[$id]' value='$value' class='regular-text' />";
-        if ($id === 'token') {
-            echo '<p class="description">' . __('Your Ecwid API Secret Token. This is sensitive information.', 'ecwid-wc-sync') . '</p>';
+        if (!empty($description)) {
+            echo '<p class="description">' . esc_html($description) . '</p>';
         }
     }
 
     public function options_page_router() {
-        // Common script enqueueing for all plugin pages
-        wp_enqueue_script('ecwid-wc-sync-admin', plugin_dir_url(__FILE__) . 'admin-sync.js', ['jquery', 'wp-i18n'], '1.9.2', true); // Incremented version
+        wp_enqueue_script('ecwid-wc-sync-admin', plugin_dir_url(__FILE__) . 'admin-sync.js', ['jquery', 'wp-i18n'], ECWID2WOO_VERSION, true);
         wp_localize_script('ecwid-wc-sync-admin', 'ecwid_sync_params', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce'    => wp_create_nonce('ecwid_wc_sync_nonce'),
             'sync_steps' => $this->sync_steps,
+            'variation_batch_size' => defined('ECWID2WOO_VARIATION_BATCH_SIZE') ? ECWID2WOO_VARIATION_BATCH_SIZE : 10, // Pass batch size
             'i18n' => [
-                'sync_starting' => __('Sync starting...', 'ecwid-wc-sync'),
-                'sync_complete' => __('Sync Complete!', 'ecwid-wc-sync'),
-                'sync_error'    => __('Error during sync. Check console or log for details.', 'ecwid-wc-sync'),
-                'ajax_error'    => __('AJAX Error. Check console or log for details.', 'ecwid-wc-sync'), // Added this line
-                'syncing'       => __('Syncing', 'ecwid-wc-sync'),
-                'start_sync'    => __('Start Full Sync', 'ecwid-wc-sync'),
-                'syncing_button'=> __('Syncing...', 'ecwid-wc-sync'),
-                'load_products' => __('Load Ecwid Products for Selection', 'ecwid-wc-sync'),
-                'loading_products' => __('Loading Products...', 'ecwid-wc-sync'),
-                'import_selected' => __('Import Selected Products', 'ecwid-wc-sync'),
-                'importing_selected' => __('Importing Selected...', 'ecwid-wc-sync'),
-                'no_products_selected' => __('No products selected for import.', 'ecwid-wc-sync'),
-                'select_all_none' => __('Select All/None', 'ecwid-wc-sync'),
-                'no_products_found' => __('No enabled products found in Ecwid store or failed to fetch.', 'ecwid-wc-sync'),
-                // Removed old category-only sync strings for full sync page
-                // New i18n strings for the dedicated Category Sync page
-                'start_category_sync_page' => __('Start Category Sync', 'ecwid-wc-sync'),
-                'syncing_categories_page_button' => __('Syncing Categories...', 'ecwid-wc-sync'),
-                'category_sync_page_complete' => __('Category Sync Complete!', 'ecwid-wc-sync'),
-                'syncing_just_categories_page_status' => __('Syncing categories...', 'ecwid-wc-sync'),
+                'sync_starting' => __('Sync starting...', 'ecwid2woo-product-sync'),
+                'sync_complete' => __('Sync Complete!', 'ecwid2woo-product-sync'),
+                'sync_error'    => __('Error during sync. Check console or log for details.', 'ecwid2woo-product-sync'),
+                'ajax_error'    => __('AJAX Error. Check console or log for details.', 'ecwid2woo-product-sync'),
+                'syncing'       => __('Syncing', 'ecwid2woo-product-sync'),
+                'start_sync'    => __('Start Full Sync', 'ecwid2woo-product-sync'),
+                'syncing_button'=> __('Syncing...', 'ecwid2woo-product-sync'),
+                'load_products' => __('Load Ecwid Products for Selection', 'ecwid2woo-product-sync'),
+                'loading_products' => __('Loading Products...', 'ecwid2woo-product-sync'),
+                'import_selected' => __('Import Selected Products', 'ecwid2woo-product-sync'),
+                'importing_selected' => __('Importing Selected...', 'ecwid2woo-product-sync'),
+                'no_products_selected' => __('No products selected for import.', 'ecwid2woo-product-sync'),
+                'select_all_none' => __('Select All/None', 'ecwid2woo-product-sync'),
+                'no_products_found' => __('No enabled products found in Ecwid store or failed to fetch.', 'ecwid2woo-product-sync'),
+                'start_category_sync_page' => __('Start Category Sync', 'ecwid2woo-product-sync'),
+                'syncing_categories_page_button' => __('Syncing Categories...', 'ecwid2woo-product-sync'),
+                'category_sync_page_complete' => __('Category Sync Complete!', 'ecwid2woo-product-sync'),
+                'syncing_just_categories_page_status' => __('Syncing categories...', 'ecwid2woo-product-sync'),
+                'fix_hierarchy_button' => __('Fix Category Hierarchy', 'ecwid2woo-product-sync'),
+                'fixing_hierarchy' => __('Fixing hierarchy...', 'ecwid2woo-product-sync'),
+                'hierarchy_fixed' => __('Category hierarchy fix attempt complete.', 'ecwid2woo-product-sync'),
+                'importing_variations_status' => __('Importing variations for {productName} ({currentBatch} of {totalBatches})', 'ecwid2woo-product-sync'),
+                'processing_variation_batch' => __('Processing variation batch...', 'ecwid2woo-product-sync'),
+                'variations_imported_successfully' => __('All variations imported successfully for {productName}.', 'ecwid2woo-product-sync'),
+                'error_importing_variations' => __('Error importing variations for {productName}. See log.', 'ecwid2woo-product-sync'),
+                'parent_product_imported_pending_variations' => __('Parent product {productName} imported. Starting variation import...', 'ecwid2woo-product-sync'),
             ]
         ]);
 
-        // Determine which page to render
-        $current_page_slug = $_GET['page'] ?? $this->settings_slug; // Default to settings page
+        $current_page_slug = isset($_GET['page']) ? sanitize_key($_GET['page']) : $this->settings_slug;
 
         echo '<div class="wrap">';
-        // Display page title using WordPress standard h1
-        // echo '<h1>' . esc_html(get_admin_page_title()) . '</h1>'; // get_admin_page_title() is good here
+        // Page title is handled by WordPress or within render methods
 
         switch ($current_page_slug) {
             case $this->settings_slug:
@@ -193,28 +218,27 @@ class Ecwid_WC_Sync {
             case $this->full_sync_slug:
                 $this->render_full_sync_page();
                 break;
-            case $this->category_sync_slug: // New case
+            case $this->category_sync_slug:
                 $this->render_category_sync_page();
                 break;
             case $this->partial_sync_slug:
                 $this->render_partial_sync_page();
                 break;
             default:
-                // Optionally, handle unknown page or redirect to settings
                 $this->render_settings_page();
                 break;
         }
-        echo '</div>'; // close .wrap
+        echo '</div>';
     }
 
     private function render_settings_page() {
         ?>
-        <h1><?php _e('Ecwid Sync Settings', 'ecwid-wc-sync'); ?></h1>
+        <h1><?php esc_html_e('Ecwid Sync Settings', 'ecwid2woo-product-sync'); ?></h1>
         <form action='options.php' method='post'>
             <?php
-            settings_fields('ecwidSyncSettingsGroup'); // Use the group name defined in register_setting
-            do_settings_sections($this->settings_slug);    // Page slug for settings sections
-            submit_button(__('Save Settings', 'ecwid-wc-sync'));
+            settings_fields('ecwidSyncSettingsGroup');
+            do_settings_sections($this->settings_slug);
+            submit_button(__('Save Settings', 'ecwid2woo-product-sync'));
             ?>
         </form>
         <?php
@@ -222,42 +246,54 @@ class Ecwid_WC_Sync {
 
     private function render_full_sync_page() {
         ?>
-        <h1><?php _e('Full Data Sync', 'ecwid-wc-sync'); ?></h1>
-        <p><?php _e('This will sync all categories and then all enabled products from Ecwid to WooCommerce. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'ecwid-wc-sync'); ?></p>
+        <h1><?php esc_html_e('Full Data Sync', 'ecwid2woo-product-sync'); ?></h1>
+        <p><?php esc_html_e('This will sync all categories and then all enabled products from Ecwid to WooCommerce. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'ecwid2woo-product-sync'); ?></p>
+        
         <div id="full-sync-status" style="margin-bottom: 10px; font-weight: bold;"></div>
-        <div id="full-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box;">
-            <div id="full-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+        
+        <div style="margin-bottom: 5px;">
+            <label for="full-sync-bar" style="display: block; margin-bottom: 2px; font-size: 0.9em;"><?php esc_html_e('Overall Progress:', 'ecwid2woo-product-sync'); ?></label>
+            <div id="full-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; border: 1px solid #ccc; box-sizing: border-box;">
+                <div id="full-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+            </div>
         </div>
-        <button id="full-sync-button" class="button button-primary"><?php _e('Start Full Sync', 'ecwid-wc-sync'); ?></button>
-        <?php // Removed the old "Sync Only Categories" button from here ?>
+
+        <div style="margin-top: 10px; margin-bottom: 10px;">
+            <label for="full-sync-step-bar" style="display: block; margin-bottom: 2px; font-size: 0.9em;"><?php esc_html_e('Current Step Progress:', 'ecwid2woo-product-sync'); ?></label>
+            <div id="full-sync-step-progress-container" style="background: #e0e0e0; width: 100%; height: 20px; border: 1px solid #bbb; box-sizing: border-box;">
+                <div id="full-sync-step-bar" style="background: #4CAF50; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 18px; font-size: 11px; transition: width 0.2s ease-in-out;">0%</div>
+            </div>
+        </div>
+        
+        <button id="full-sync-button" class="button button-primary"><?php esc_html_e('Start Full Sync', 'ecwid2woo-product-sync'); ?></button>
         <div id="full-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
         <?php
     }
 
     private function render_category_sync_page() {
         ?>
-        <h1><?php _e('Ecwid Category Sync', 'ecwid-wc-sync'); ?></h1>
-        <p><?php _e('This will sync all categories from Ecwid to WooCommerce. Products will not be affected by this operation. This is useful for ensuring categories are up-to-date before syncing products.', 'ecwid-wc-sync'); ?></p>
+        <h1><?php esc_html_e('Ecwid Category Sync', 'ecwid2woo-product-sync'); ?></h1>
+        <p><?php esc_html_e('This will sync all categories from Ecwid to WooCommerce. Products will not be affected by this operation. This is useful for ensuring categories are up-to-date before syncing products.', 'ecwid2woo-product-sync'); ?></p>
         <div id="category-page-sync-status" style="margin-bottom: 10px; font-weight: bold;"></div>
         <div id="category-page-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box;">
             <div id="category-page-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
         </div>
-        <button id="category-page-sync-button" class="button button-primary"><?php _e('Start Category Sync', 'ecwid-wc-sync'); ?></button>
-        <button id="fix-category-hierarchy-button" class="button" style="margin-left: 10px;"><?php _e('Fix Category Hierarchy', 'ecwid-wc-sync'); ?></button>
+        <button id="category-page-sync-button" class="button button-primary"><?php esc_html_e('Start Category Sync', 'ecwid2woo-product-sync'); ?></button>
+        <button id="fix-category-hierarchy-button" class="button" style="margin-left: 10px;"><?php esc_html_e('Fix Category Hierarchy', 'ecwid2woo-product-sync'); ?></button>
         <div id="category-page-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
         <?php
     }
 
-    private function render_partial_sync_page() { // Renamed from render_selective_import_page
+    private function render_partial_sync_page() {
         ?>
-        <h1><?php _e('Product Sync', 'ecwid-wc-sync'); ?></h1>
-        <p><?php _e('Load enabled products from Ecwid and select which ones to import or update.', 'ecwid-wc-sync'); ?></p>
-        <button id="load-ecwid-products-button" class="button"><?php _e('Load Ecwid Products for Selection', 'ecwid-wc-sync'); ?></button>
+        <h1><?php esc_html_e('Selective Product Sync', 'ecwid2woo-product-sync'); ?></h1>
+        <p><?php esc_html_e('Load enabled products from Ecwid and select which ones to import or update.', 'ecwid2woo-product-sync'); ?></p>
+        <button id="load-ecwid-products-button" class="button"><?php esc_html_e('Load Ecwid Products for Selection', 'ecwid2woo-product-sync'); ?></button>
         <div id="selective-product-list-container" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff;">
-            <?php _e('Product list will appear here...', 'ecwid-wc-sync'); ?>
+            <?php esc_html_e('Product list will appear here...', 'ecwid2woo-product-sync'); ?>
         </div>
-        <button id="import-selected-products-button" class="button button-primary" style="margin-top: 10px; display: none;"><?php _e('Import Selected Products', 'ecwid-wc-sync'); ?></button>
-        
+        <button id="import-selected-products-button" class="button button-primary" style="margin-top: 10px; display: none;"><?php esc_html_e('Import Selected Products', 'ecwid2woo-product-sync'); ?></button>
+
         <div id="selective-sync-status" style="margin-top:15px; margin-bottom: 10px; font-weight: bold;"></div>
         <div id="selective-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box; display:none;">
             <div id="selective-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
@@ -271,7 +307,7 @@ class Ecwid_WC_Sync {
         $token    = isset($this->options['token']) ? sanitize_text_field($this->options['token']) : '';
 
         if (empty($store_id) || empty($token)) {
-            return new WP_Error('missing_credentials', __('Ecwid Store ID and API Token must be configured in plugin settings.', 'ecwid-wc-sync'));
+            return new WP_Error('missing_credentials', __('Ecwid Store ID and API Token must be configured in plugin settings.', 'ecwid2woo-product-sync'));
         }
         return ['store_id' => $store_id, 'token' => $token, 'base_url' => "https://app.ecwid.com/api/v3/{$store_id}"];
     }
@@ -279,10 +315,10 @@ class Ecwid_WC_Sync {
     public function ajax_fetch_products_for_selection() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid-wc-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]);
             return;
         }
-        set_time_limit(300); // 5 minutes
+        set_time_limit(300);
 
         $api_essentials = $this->_get_api_essentials();
         if (is_wp_error($api_essentials)) {
@@ -292,24 +328,25 @@ class Ecwid_WC_Sync {
 
         $all_products = [];
         $offset = 0;
-        $limit = 100; // Ecwid's max limit per request
+        $limit = 100;
 
         do {
             $query_params = [
                 'limit' => $limit,
                 'offset' => $offset,
-                'enabled' => 'true', // Only fetch enabled products
-                'responseFields' => 'items(id,sku,name,enabled)' // Keep fields minimal
+                'enabled' => 'true',
+                // MODIFIED: Fetch options and combination IDs
+                'responseFields' => 'items(id,sku,name,enabled,options,combinations(id))' 
             ];
             $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/products');
 
             $response = wp_remote_get($api_url, [
-                'timeout' => 60, // 60 seconds timeout for the API request
+                'timeout' => 60,
                 'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
             ]);
 
             if (is_wp_error($response)) {
-                wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'ecwid-wc-sync'), $response->get_error_message())]);
+                wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'ecwid2woo-product-sync'), $response->get_error_message())]);
                 return;
             }
 
@@ -317,25 +354,28 @@ class Ecwid_WC_Sync {
             $http_code = wp_remote_retrieve_response_code($response);
 
             if ($http_code !== 200 || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
-                wp_send_json_error(['message' => sprintf(__('Ecwid API Error (HTTP %s): %s', 'ecwid-wc-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error'))]);
+                wp_send_json_error(['message' => sprintf(__('Ecwid API Error (HTTP %s): %s', 'ecwid2woo-product-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error'))]);
                 return;
             }
 
             if (isset($body['items']) && is_array($body['items'])) {
                 foreach ($body['items'] as $item) {
-                    if (isset($item['enabled']) && $item['enabled']) { // Double-check, though API filter should handle this
+                    // Ensure 'enabled' check is still relevant if API guarantees it
+                    // if (isset($item['enabled']) && $item['enabled']) { 
                         $all_products[] = [
                             'id' => $item['id'] ?? null,
                             'name' => $item['name'] ?? 'N/A',
                             'sku' => $item['sku'] ?? 'N/A',
-                            'enabled' => $item['enabled'] // Should be true
+                            'enabled' => $item['enabled'] ?? false, // Ensure default
+                            'options' => $item['options'] ?? [], // Add options
+                            'combinations' => $item['combinations'] ?? [] // Add combinations (array of {id:val})
                         ];
-                    }
+                    // }
                 }
             }
 
             $count_in_response = $body['count'] ?? 0;
-            $total_from_api = $body['total'] ?? 0; // This total will be for enabled products
+            $total_from_api = $body['total'] ?? 0;
             $offset += $count_in_response;
 
         } while ($count_in_response > 0 && $offset < $total_from_api);
@@ -346,10 +386,10 @@ class Ecwid_WC_Sync {
     public function ajax_import_selected_products() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid-wc-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]);
             return;
         }
-        set_time_limit(300); // 5 minutes, extend as needed for complex products
+        set_time_limit(0); // Try to disable time limit for this initial product fetch and parent import
 
         $api_essentials = $this->_get_api_essentials();
         if (is_wp_error($api_essentials)) {
@@ -360,22 +400,20 @@ class Ecwid_WC_Sync {
         $ecwid_product_id = isset($_POST['ecwid_product_id']) ? intval($_POST['ecwid_product_id']) : 0;
 
         if (empty($ecwid_product_id)) {
-            wp_send_json_error(['message' => __('No Ecwid Product ID provided for import.', 'ecwid-wc-sync')]);
+            wp_send_json_error(['message' => __('No Ecwid Product ID provided for import.', 'ecwid2woo-product-sync')]);
             return;
         }
 
-        // Fetch full product data for this single product ID
-        // Ensure all potentially needed fields are requested
         $query_params = ['responseFields' => 'id,sku,name,price,description,shortDescription,enabled,weight,quantity,unlimited,categoryIds,hdThumbnailUrl,imageUrl,galleryImages,options,combinations,productClassId,attributes,compareToPrice,dimensions,shipping'];
         $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/products/' . $ecwid_product_id);
 
         $response = wp_remote_get($api_url, [
-            'timeout' => 120, // Increased timeout for fetching single complex product
+            'timeout' => 120,
             'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
         ]);
 
         if (is_wp_error($response)) {
-            wp_send_json_error(['message' => sprintf(__('API Request Error for product %s: %s', 'ecwid-wc-sync'), $ecwid_product_id, $response->get_error_message())]);
+            wp_send_json_error(['message' => sprintf(__('API Request Error for product %s: %s', 'ecwid2woo-product-sync'), $ecwid_product_id, $response->get_error_message())]);
             return;
         }
 
@@ -383,50 +421,75 @@ class Ecwid_WC_Sync {
         $http_code = wp_remote_retrieve_response_code($response);
 
         if ($http_code !== 200 || (isset($item_data['errorMessage']) && !empty($item_data['errorMessage']))) {
-            wp_send_json_error(['message' => sprintf(__('Ecwid API Error for product %s (HTTP %s): %s', 'ecwid-wc-sync'), $ecwid_product_id, $http_code, ($item_data['errorMessage'] ?? 'Unknown error'))]);
+            wp_send_json_error(['message' => sprintf(__('Ecwid API Error for product %s (HTTP %s): %s', 'ecwid2woo-product-sync'), $ecwid_product_id, $http_code, ($item_data['errorMessage'] ?? 'Unknown error'))]);
             return;
         }
-        
+
         if (empty($item_data) || !isset($item_data['id'])) {
-             wp_send_json_error(['message' => sprintf(__('Failed to fetch valid data for Ecwid product ID %s.', 'ecwid-wc-sync'), $ecwid_product_id)]);
+             wp_send_json_error(['message' => sprintf(__('Failed to fetch valid data for Ecwid product ID %s.', 'ecwid2woo-product-sync'), $ecwid_product_id)]);
             return;
         }
 
         $result_array = $this->import_product($item_data);
 
-        wp_send_json_success([
-            'status' => $result_array['status'] ?? 'failed',
-            'item_name' => $result_array['item_name'] ?? ($item_data['name'] ?? 'N/A'),
-            'ecwid_id' => $result_array['ecwid_id'] ?? $ecwid_product_id,
-            'sku' => $result_array['sku'] ?? ($item_data['sku'] ?? 'N/A'),
-            'logs' => $result_array['logs'] ?? ['[ERROR] No logs returned from import_product.'],
-        ]);
+        if (isset($result_array['status']) && $result_array['status'] === 'imported_parent_pending_variations') {
+            wp_send_json_success([
+                'status'           => 'variations_pending', // New status for JS
+                'message'          => __('Parent product imported. Variations will be processed in batches.', 'ecwid2woo-product-sync'),
+                'wc_product_id'    => $result_array['wc_product_id'],
+                'ecwid_product_id' => $result_array['ecwid_id'],
+                'item_name'        => $result_array['item_name'],
+                'sku'              => $result_array['sku'],
+                'all_combinations' => $item_data['combinations'] ?? [], // Send all combinations to JS
+                'total_combinations' => $result_array['total_combinations'] ?? 0,
+                'logs'             => $result_array['logs'] ?? ['[INFO] Parent product processed.'],
+            ]);
+        } elseif (isset($result_array['status']) && ($result_array['status'] === 'imported' || $result_array['status'] === 'skipped' || $result_array['status'] === 'failed')) {
+            wp_send_json_success([ // For simple products or if variable product had no variations after all
+                'status'     => $result_array['status'],
+                'item_name'  => $result_array['item_name'] ?? ($item_data['name'] ?? 'N/A'),
+                'ecwid_id'   => $result_array['ecwid_id'] ?? $ecwid_product_id,
+                'sku'        => $result_array['sku'] ?? ($item_data['sku'] ?? 'N/A'),
+                'logs'       => $result_array['logs'] ?? ['[ERROR] No logs returned from import_product.'],
+            ]);
+        } else {
+            // General error or unexpected status from import_product
+            wp_send_json_error([
+                'message'    => __('An unexpected error occurred during product import.', 'ecwid2woo-product-sync'),
+                'item_name'  => ($item_data['name'] ?? 'N/A'),
+                'ecwid_id'   => $ecwid_product_id,
+                'sku'        => ($item_data['sku'] ?? 'N/A'),
+                'logs'       => $result_array['logs'] ?? ['[CRITICAL] Unexpected result from import_product function.'],
+                'raw_result' => $result_array 
+            ]);
+        }
     }
 
     public function ajax_batch_sync() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid-wc-sync')]); return;
+            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]); return;
         }
-        set_time_limit(300); // 5 minutes, individual product imports can extend this further if needed
+        set_time_limit(300);
 
         $api_essentials = $this->_get_api_essentials();
         if (is_wp_error($api_essentials)) {
             wp_send_json_error(['message' => $api_essentials->get_error_message()]); return;
         }
 
-        // For full sync, process one item at a time to provide detailed logs and avoid timeouts.
-        // The 'limit' here is for how many items to fetch from Ecwid in one API call for the batch.
-        // Each of those fetched items will then be processed individually by import_product/import_category.
-        $limit_per_api_call = apply_filters('ecwid_wc_sync_batch_api_limit', 10); // Fetch 10 items from Ecwid per batch API call
+        // MODIFICATION: Change the default batch size from 10 to a smaller number, e.g., 5.
+        // This will fetch and process fewer items per AJAX call, leading to more frequent updates.
+        $limit_per_api_call = apply_filters('ecwid_wc_sync_batch_api_limit', 5); // Changed from 10 to 5
         $sync_type = isset($_POST['sync_type']) ? sanitize_text_field($_POST['sync_type']) : '';
         $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
 
-        error_log("Ecwid Sync: FULL BATCH - Type: $sync_type, Offset: $offset, API Limit: $limit_per_api_call");
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("Ecwid Sync: FULL BATCH - Type: $sync_type, Offset: $offset, API Limit: $limit_per_api_call");
+        }
 
         $endpoints = ['products' => '/products', 'categories' => '/categories'];
         if (!isset($endpoints[$sync_type])) {
-            wp_send_json_error(['message' => __('Invalid sync type for full sync.', 'ecwid-wc-sync')]); return;
+            wp_send_json_error(['message' => __('Invalid sync type for full sync.', 'ecwid2woo-product-sync')]); return;
         }
 
         $endpoint = $endpoints[$sync_type];
@@ -434,7 +497,7 @@ class Ecwid_WC_Sync {
         $query_params_for_url = ['limit' => $limit_per_api_call, 'offset' => $offset];
 
         if ($sync_type === 'products') {
-            $query_params_for_url['enabled'] = 'true'; // Only enabled products for full sync
+            $query_params_for_url['enabled'] = 'true';
             $query_params_for_url['responseFields'] = 'items(id,sku,name,price,description,shortDescription,enabled,weight,quantity,unlimited,categoryIds,hdThumbnailUrl,imageUrl,galleryImages,options,combinations,productClassId,attributes,compareToPrice,dimensions,shipping)';
         } elseif ($sync_type === 'categories') {
             $query_params_for_url['responseFields'] = 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl)';
@@ -447,20 +510,24 @@ class Ecwid_WC_Sync {
         ]);
 
         if (is_wp_error($response)) {
-            error_log("Ecwid Sync: API Request WP_Error for $sync_type: " . $response->get_error_message());
-            wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'ecwid-wc-sync'), $response->get_error_message())]); return;
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: API Request WP_Error for $sync_type: " . $response->get_error_message());
+            }
+            wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'ecwid2woo-product-sync'), $response->get_error_message())]); return;
         }
-        
+
         $raw_response_body = wp_remote_retrieve_body($response);
         $body = json_decode($raw_response_body, true);
         $http_code = wp_remote_retrieve_response_code($response);
 
         if ($http_code !== 200 || !is_array($body) || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
-            $error_message = sprintf(__('Ecwid API Error (HTTP %s): %s', 'ecwid-wc-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error or invalid response format'));
-            error_log("Ecwid Sync: API Error for $sync_type. HTTP Code: $http_code. Raw Body: " . $raw_response_body);
+            $error_message = sprintf(__('Ecwid API Error (HTTP %s): %s', 'ecwid2woo-product-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error or invalid response format'));
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: API Error for $sync_type. HTTP Code: $http_code. Raw Body: " . $raw_response_body);
+            }
             wp_send_json_error(['message' => $error_message, 'details' => is_array($body) ? $body : ['raw_response' => $raw_response_body]]); return;
         }
-        
+
         $items_from_api = [];
         if (isset($body['items']) && is_array($body['items'])) {
             $items_from_api = $body['items'];
@@ -468,7 +535,9 @@ class Ecwid_WC_Sync {
             if(is_array($body) && (empty($body) || isset($body[0]['id']))) {
                 $items_from_api = $body;
             } else {
-                error_log("Ecwid Sync: Categories API response for $sync_type was not in expected 'items' wrapper and not a direct array of categories. Raw Body: " . $raw_response_body);
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log("Ecwid Sync: Categories API response for $sync_type was not in expected 'items' wrapper and not a direct array of categories. Raw Body: " . $raw_response_body);
+                }
             }
         }
 
@@ -488,7 +557,7 @@ class Ecwid_WC_Sync {
 
                 $result_array = null;
                 $item_identifier_for_log = ($sync_type === 'products' ? "Product" : "Category") . " (Ecwid ID: " . ($item_data['id'] ?? 'N/A') . ")";
-                
+
                 try {
                     switch ($sync_type) {
                         case 'products':
@@ -501,9 +570,9 @@ class Ecwid_WC_Sync {
 
                     if ($result_array && isset($result_array['status'])) {
                         if ($result_array['status'] === 'imported') $imported_count++;
-                        elseif ($result_array['status'] === 'skipped') $skipped_count++;
+                        elseif ($result_array['status'] === 'skipped' ) $skipped_count++;
                         else $failed_count++;
-                        
+
                         $log_item_name = esc_html($result_array['item_name'] ?? $item_identifier_for_log);
                         $log_ecwid_id = esc_html($result_array['ecwid_id'] ?? 'N/A');
                         $log_sku_info = isset($result_array['sku']) && $result_array['sku'] !== 'N/A' ? ", SKU: " . esc_html($result_array['sku']) : "";
@@ -520,9 +589,11 @@ class Ecwid_WC_Sync {
                 } catch (Exception $e) {
                     $failed_count++;
                     $batch_detailed_logs[] = "--- [PHP EXCEPTION] During processing of " . esc_html($item_identifier_for_log) . ": " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine() . " ---";
-                    error_log("Ecwid Sync: PHP Exception during $sync_type import: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
+                    if (defined('WP_DEBUG') && WP_DEBUG) {
+                        error_log("Ecwid Sync: PHP Exception during $sync_type import: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
+                    }
                 }
-                $batch_detailed_logs[] = " "; // Spacer in logs
+                $batch_detailed_logs[] = " ";
             }
         } elseif ($offset === 0 && $limit_per_api_call > 0) {
              $batch_detailed_logs[] = "No items received from Ecwid API for $sync_type with offset $offset and limit $limit_per_api_call. This might be normal if there are no items of this type or all have been processed.";
@@ -534,31 +605,28 @@ class Ecwid_WC_Sync {
             if (isset($body['total']) && isset($body['offset']) && isset($body['count'])) {
                  $has_more = ($body['total'] > ($body['offset'] + $body['count']));
             } elseif ($count_in_current_api_response === $limit_per_api_call) {
-                // If we received a full batch as per our API limit, assume there might be more.
                 $has_more = true;
             }
         }
-        // If total_items_reported_by_api is definitively known and new_offset has reached or exceeded it, then no more.
         if (isset($body['total']) && $new_offset >= $body['total']) {
             $has_more = false;
         }
 
         wp_send_json_success([
-            'message' => sprintf(__('%1$s: Processed %2$d items fetched in this API call (Imported: %3$d, Skipped: %4$d, Failed: %5$d). Total items for this type (Ecwid reported): %6$d.', 'ecwid-wc-sync'), ucfirst($sync_type), count($items_from_api), $imported_count, $skipped_count, $failed_count, $total_items_reported_by_api),
-            'next_offset' => $new_offset, 
-            'total_items' => $total_items_reported_by_api, 
-            'has_more' => $has_more,    
-            'processed_type' => $sync_type, 
+            'message' => sprintf(__('%1$s: Processed %2$d items fetched in this API call (Imported: %3$d, Skipped: %4$d, Failed: %5$d). Total items for this type (Ecwid reported): %6$d.', 'ecwid2woo-product-sync'), ucfirst($sync_type), count($items_from_api), $imported_count, $skipped_count, $failed_count, $total_items_reported_by_api),
+            'next_offset' => $new_offset,
+            'total_items' => $total_items_reported_by_api,
+            'has_more' => $has_more,
+            'processed_type' => $sync_type,
             'batch_logs' => $batch_detailed_logs
         ]);
     }
-    
+
     private function import_category($item) {
         $category_logs = [];
         $ecwid_cat_id = $item['id'] ?? null;
-        $ecwid_cat_name = isset($item['name']) ? sanitize_text_field($item['name']) : null; // Sanitize early
-        
-        // Prepare details for return, regardless of outcome
+        $ecwid_cat_name = isset($item['name']) ? sanitize_text_field($item['name']) : null;
+
         $item_name_for_return = $ecwid_cat_name ?? '[No Name]';
         $ecwid_id_for_return = $ecwid_cat_id ?? 'N/A';
 
@@ -569,57 +637,47 @@ class Ecwid_WC_Sync {
             }
             $category_logs[] = "Starting import for Category: \"$ecwid_cat_name\" (Ecwid ID: $ecwid_cat_id)";
 
-            $args = []; // Arguments for wp_insert_term or wp_update_term
+            $args = [];
             if (isset($item['description'])) $args['description'] = wp_kses_post($item['description']);
-            
-            $parent_wc_term_id = 0; // Default to top-level for new terms or if parent not found
+
+            $parent_wc_term_id = 0;
             if (isset($item['parentId']) && intval($item['parentId']) > 0) {
                 $parent_ecwid_id = intval($item['parentId']);
-                
-                // Check for orphaned categories (parent doesn't exist in Ecwid response)
                 $parent_wc_term_id_found = $this->get_term_id_by_ecwid_id($parent_ecwid_id, 'product_cat', true);
-                
+
                 if ($parent_wc_term_id_found) {
                     $args['parent'] = $parent_wc_term_id_found;
                     $parent_wc_term_id = $parent_wc_term_id_found;
                     $category_logs[] = "Parent category (Ecwid ID: $parent_ecwid_id) mapped to WC Term ID: {$args['parent']}.";
                 } else {
-                    // Check if this is a recurring missing parent that we should create a placeholder for
                     $missing_parent_placeholder = $this->get_or_create_missing_parent_placeholder($parent_ecwid_id);
-                    
                     if ($missing_parent_placeholder) {
                         $args['parent'] = $missing_parent_placeholder['term_id'];
                         $parent_wc_term_id = $missing_parent_placeholder['term_id'];
-                        $category_logs[] = $missing_parent_placeholder['is_new'] 
+                        $category_logs[] = $missing_parent_placeholder['is_new']
                             ? "Created placeholder parent category '{$missing_parent_placeholder['name']}' (WC Term ID: {$missing_parent_placeholder['term_id']}) for missing Ecwid parent ID: $parent_ecwid_id."
                             : "Using existing placeholder parent category '{$missing_parent_placeholder['name']}' (WC Term ID: {$missing_parent_placeholder['term_id']}) for Ecwid parent ID: $parent_ecwid_id.";
                     } else {
                         $category_logs[] = "[WARNING] Parent category (Ecwid ID: $parent_ecwid_id) not yet imported or found in WC. This category will be top-level for now.";
-                        // Store this missing parent for second-pass processing
                         $this->register_missing_parent($parent_ecwid_id, $ecwid_cat_id);
                     }
                 }
             }
 
-            // Check if category already exists by Ecwid ID meta (most reliable check)
-            $existing_wc_term_id_by_ecwid_meta = $this->get_term_id_by_ecwid_id($ecwid_cat_id, 'product_cat', true); 
+            $existing_wc_term_id_by_ecwid_meta = $this->get_term_id_by_ecwid_id($ecwid_cat_id, 'product_cat', true);
 
             if ($existing_wc_term_id_by_ecwid_meta) {
                 $category_logs[] = "Existing WC Term ID $existing_wc_term_id_by_ecwid_meta found linked to Ecwid ID $ecwid_cat_id. Updating...";
-                
-                $update_args = ['name' => wp_slash($ecwid_cat_name)]; // wp_slash for name
+                $update_args = ['name' => wp_slash($ecwid_cat_name)];
                 if (isset($args['description'])) $update_args['description'] = $args['description'];
-                
-                // Check current parent and update if different from what Ecwid expects
-                // $parent_wc_term_id was determined above based on Ecwid data (0 if no parent or parent not found)
+
                 $current_term_data = get_term($existing_wc_term_id_by_ecwid_meta, 'product_cat');
-                if ($current_term_data && $current_term_data->parent != $parent_wc_term_id) { 
-                    $update_args['parent'] = $parent_wc_term_id; // This will be 0 if parent from Ecwid is not found or not set
+                if ($current_term_data && $current_term_data->parent != $parent_wc_term_id) {
+                    $update_args['parent'] = $parent_wc_term_id;
                     $category_logs[] = "Updating parent for WC Term ID $existing_wc_term_id_by_ecwid_meta. Old parent: {$current_term_data->parent}, New parent target: $parent_wc_term_id.";
-                } else if ($current_term_data) {
+                } elseif ($current_term_data) {
                     $category_logs[] = "Parent for WC Term ID $existing_wc_term_id_by_ecwid_meta is already {$current_term_data->parent}, matches target $parent_wc_term_id. No parent update needed.";
                 }
-
 
                 $update_result = wp_update_term($existing_wc_term_id_by_ecwid_meta, 'product_cat', $update_args);
 
@@ -631,10 +689,8 @@ class Ecwid_WC_Sync {
                 $category_logs[] = "Updated successfully (WC Term ID: $existing_wc_term_id_by_ecwid_meta). Cache cleaned.";
                 return ['status' => 'imported', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
             }
-            
-            // If not found by Ecwid ID meta, check by name (and link it if so, IF NOT ALREADY LINKED TO A DIFFERENT ECWID ID)
-            // $args['parent'] (parent_wc_term_id) is used here to check for term_exists within the correct intended parent scope
-            $term_by_name_result = term_exists($ecwid_cat_name, 'product_cat', $args['parent'] ?? 0); 
+
+            $term_by_name_result = term_exists($ecwid_cat_name, 'product_cat', $args['parent'] ?? 0);
             if ($term_by_name_result) {
                 $wc_term_id_found_by_name = is_array($term_by_name_result) ? $term_by_name_result['term_id'] : $term_by_name_result;
                 $meta_ecwid_id_on_named_term = get_term_meta($wc_term_id_found_by_name, '_ecwid_category_id', true);
@@ -643,19 +699,15 @@ class Ecwid_WC_Sync {
                     $category_logs[] = "[WARNING] Conflict: WC Term ID $wc_term_id_found_by_name (Name: '$ecwid_cat_name') is already linked to a different Ecwid ID '$meta_ecwid_id_on_named_term'. Cannot link to current Ecwid ID '$ecwid_cat_id'. Please resolve naming conflict or manually link.";
                     return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
                 } elseif (!$meta_ecwid_id_on_named_term) {
-                    // Found by name, not linked to any Ecwid ID yet. Link it and update its details.
                     $category_logs[] = "Existing WC term (ID: $wc_term_id_found_by_name, Name: '$ecwid_cat_name') found by name. Linking to Ecwid ID $ecwid_cat_id and updating details.";
-                    
                     $update_args_for_named = ['name' => wp_slash($ecwid_cat_name)];
                     if (isset($args['description'])) $update_args_for_named['description'] = $args['description'];
-                    // $args['parent'] already contains the target parent_wc_term_id
-                    if (isset($args['parent'])) $update_args_for_named['parent'] = $args['parent']; 
-                    
+                    if (isset($args['parent'])) $update_args_for_named['parent'] = $args['parent'];
+
                     $update_named_result = wp_update_term($wc_term_id_found_by_name, 'product_cat', $update_args_for_named);
 
                     if (is_wp_error($update_named_result)) {
                          $category_logs[] = "[ERROR] Failed to update details for WC term (ID: $wc_term_id_found_by_name) found by name: " . $update_named_result->get_error_message();
-                         // Attempt to link meta anyway if update failed but term exists
                     }
 
                     $meta_update_result = update_term_meta($wc_term_id_found_by_name, '_ecwid_category_id', $ecwid_cat_id);
@@ -668,14 +720,10 @@ class Ecwid_WC_Sync {
                     }
                     return ['status' => 'imported', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
                 }
-                 // If here, it means term_exists found it, and it's already linked to the correct Ecwid ID.
-                 // This case should ideally be caught by the $existing_wc_term_id_by_ecwid_meta check earlier.
                  $category_logs[] = "Skipped. WC Term ID $wc_term_id_found_by_name (Name: '$ecwid_cat_name') appears already correctly linked to Ecwid ID $ecwid_cat_id (found by name).";
                  return ['status' => 'skipped', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
             }
-            
-            // Insert the new term if not found by Ecwid ID meta or by name
-            // $args['parent'] is already set from parent processing logic above (defaults to 0 if no parent or parent not found)
+
             $new_term_result = wp_insert_term(wp_slash($ecwid_cat_name), 'product_cat', $args);
 
             if (is_wp_error($new_term_result)) {
@@ -694,13 +742,15 @@ class Ecwid_WC_Sync {
                 }
                 return ['status' => 'imported', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
             }
-            
+
             $category_logs[] = "[ERROR] wp_insert_term did not return term_id after attempting to create '$ecwid_cat_name'.";
             return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
-        
+
         } catch (Exception $e) {
             $category_logs[] = "[PHP EXCEPTION] During category import for Ecwid ID $ecwid_id_for_return: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine();
-            error_log("Ecwid Sync: PHP Exception during category import for Ecwid ID $ecwid_id_for_return: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: PHP Exception during category import for Ecwid ID $ecwid_id_for_return: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
+            }
             return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
         }
     }
@@ -713,22 +763,19 @@ class Ecwid_WC_Sync {
 
         // Basic checks for essential data
         if (!class_exists('WC_Product_Factory')) {
-            $product_logs[] = "[CRITICAL] WooCommerce is not active or WC_Product_Factory class not found.";
+            $product_logs[] = __("[CRITICAL] WooCommerce is not active or WC_Product_Factory class not found.", 'ecwid2woo-product-sync');
             return ['status' => 'failed', 'logs' => $product_logs, 'item_name' => $product_name_for_log, 'ecwid_id' => $ecwid_id_for_log, 'sku' => $sku_for_log];
         }
         if ($ecwid_id_for_log === 'N/A' || $sku_for_log === 'N/A') {
-            $product_logs[] = "[CRITICAL] Product missing Ecwid ID or SKU. Ecwid ID: $ecwid_id_for_log, SKU: $sku_for_log. Raw item: " . wp_json_encode($item);
+            $product_logs[] = __("[CRITICAL] Product missing Ecwid ID or SKU. Ecwid ID: $ecwid_id_for_log, SKU: $sku_for_log. Raw item: " . wp_json_encode($item), 'ecwid2woo-product-sync');
             error_log("Ecwid Sync: Product (Ecwid ID: $ecwid_id_for_log) missing SKU or ID. Data: " . print_r($item, true));
             return ['status' => 'failed', 'logs' => $product_logs, 'item_name' => $product_name_for_log, 'ecwid_id' => $ecwid_id_for_log, 'sku' => $sku_for_log];
         }
 
         $log_product_identifier = "PRODUCT (Ecwid ID: {$ecwid_id_for_log}, SKU: {$sku_for_log}, Name: \"" . esc_html($product_name_for_log) . "\")";
-        $product_logs[] = "Starting import for $log_product_identifier";
+        $product_logs[] = sprintf(__("Starting import for %s", 'ecwid2woo-product-sync'), $log_product_identifier);
         
-        // Log price fields from main item for debugging
         $product_logs[] = "Raw Ecwid Item Data (for parent product prices): Price Field = " . ($item['price'] ?? 'NOT_SET') . ", CompareToPrice Field = " . ($item['compareToPrice'] ?? 'NOT_SET');
-        // For very verbose debugging of all incoming data for the product, uncomment the next line:
-        // $product_logs[] = "Full Raw Ecwid Item Data: " . wp_json_encode($item);
 
 
         // --- PRODUCT IDENTIFICATION AND TYPE HANDLING ---
@@ -883,10 +930,6 @@ class Ecwid_WC_Sync {
                 }
             } else {
                 $product_logs[] = "No featured image URL provided in Ecwid data.";
-                if ($product->get_image_id('edit')) { // If WC product has an image but Ecwid doesn't
-                    // $product->set_image_id(''); // Uncomment to remove image if not in Ecwid
-                    // $product_logs[] = "Removed existing featured image as it's not in Ecwid data.";
-                }
             }
 
             // --- ATTRIBUTES (For Variable Products) ---
@@ -983,7 +1026,6 @@ class Ecwid_WC_Sync {
             }
             $product_logs[] = "Product core data, attributes, and featured image saved successfully. WC Product ID: $product_saved_id.";
             
-            // Update meta data
             update_post_meta($product_saved_id, '_ecwid_product_id', $ecwid_id_for_log);
             update_post_meta($product_saved_id, '_ecwid_product_sku_ref', $sku_for_log); // Store SKU as ref
             update_post_meta($product_saved_id, '_ecwid_last_sync_time', current_time('mysql'));
@@ -995,183 +1037,33 @@ class Ecwid_WC_Sync {
                 $product_logs[] = "Re-assigned featured image (ID: $temp_image_id) to newly saved product (ID: $product_saved_id).";
             }
 
-            // --- VARIATIONS (For Variable Products) ---
-            if ($product->is_type('variable') && isset($item['combinations']) && is_array($item['combinations'])) {
-                $product_logs[] = "Processing Ecwid combinations for WC variations. Number of combinations: " . count($item['combinations']);
-                $parent_product_for_variations = wc_get_product($product_saved_id); // Re-fetch parent product to ensure it's current
+            // --- STALE VARIATION CLEANUP (for existing variable products being updated) ---
+            if ($product_id && $product->is_type('variable') && $is_variable_from_ecwid) { // $product_id means it's an update
+                $product_logs[] = "Cleaning up stale variations for updated product ID: $product_saved_id.";
+                $current_ecwid_combo_ids = array_map(function($combo) { return $combo['id'] ?? null; }, $item['combinations']);
+                $current_ecwid_combo_ids = array_filter($current_ecwid_combo_ids);
 
-                if ($parent_product_for_variations && $parent_product_for_variations->is_type('variable')) {
-                    $ecwid_combo_ids_in_payload = array_map(function($combo) { return $combo['id'] ?? null; }, $item['combinations']);
-                    $ecwid_combo_ids_in_payload = array_filter($ecwid_combo_ids_in_payload); // Remove nulls
-
-                    // Delete existing WC variations that are no longer in the Ecwid payload
-                    $existing_wc_variation_ids = $parent_product_for_variations->get_children();
-                    $product_logs[] = "Found " . count($existing_wc_variation_ids) . " existing WC variations for product ID $product_saved_id.";
-                    foreach ($existing_wc_variation_ids as $existing_wc_variation_id) {
-                        $ecwid_combo_id_meta = get_post_meta($existing_wc_variation_id, '_ecwid_variation_id', true);
-                        if ($ecwid_combo_id_meta && !in_array($ecwid_combo_id_meta, $ecwid_combo_ids_in_payload)) {
-                            $variation_to_delete = wc_get_product($existing_wc_variation_id);
-                            if ($variation_to_delete) {
-                                $variation_to_delete->delete(true);
-                                $product_logs[] = "Deleted stale WC Variation ID $existing_wc_variation_id (linked to Ecwid Combo ID: $ecwid_combo_id_meta) as it's not in current Ecwid payload.";
-                            }
+                $existing_wc_variation_ids = $product->get_children();
+                $product_logs[] = "Found " . count($existing_wc_variation_ids) . " existing WC variations. Comparing against " . count($current_ecwid_combo_ids) . " current Ecwid combinations.";
+                
+                foreach ($existing_wc_variation_ids as $existing_wc_variation_id) {
+                    $ecwid_combo_id_meta = get_post_meta($existing_wc_variation_id, '_ecwid_variation_id', true);
+                    if ($ecwid_combo_id_meta && !in_array($ecwid_combo_id_meta, $current_ecwid_combo_ids)) {
+                        $variation_to_delete = wc_get_product($existing_wc_variation_id);
+                        if ($variation_to_delete) {
+                            $variation_to_delete->delete(true);
+                            $product_logs[] = "Deleted stale WC Variation ID $existing_wc_variation_id (linked to Ecwid Combo ID: $ecwid_combo_id_meta) as it's not in current Ecwid payload.";
                         }
                     }
-
-                    // Process each combination from Ecwid
-                    foreach ($item['combinations'] as $combo_idx => $combo) {
-                        if (!isset($combo['id'])) {
-                            $product_logs[] = "[WARNING] Skipping Ecwid combination at index $combo_idx: missing 'id'. Data: " . wp_json_encode($combo);
-                            continue;
-                        }
-                        $ecwid_combination_id = $combo['id'];
-                        $product_logs[] = "Processing Ecwid Combination ID: $ecwid_combination_id.";
-                        // Log raw combo data for price debugging:
-                        $product_logs[] = "Raw Ecwid Combo Data (ID $ecwid_combination_id) for Prices: " . wp_json_encode([
-                            'price_field_check' => $combo['price'] ?? 'NOT_SET (CHECK YOUR_ECWID_COMBO_PRICE_FIELD)', 
-                            'sale_price_field_check' => $combo['compareToPrice'] ?? 'NOT_SET (CHECK YOUR_ECWID_COMBO_SALE_PRICE_FIELD)',
-                            'full_combo_data' => $combo // Log full combo for inspection
-                        ]);
-
-
-                        // Map Ecwid combination options to WooCommerce variation attributes
-                        $variation_attributes_for_wc = []; // e.g., ['pa_color' => 'red_slug', 'pa_size' => 'large_slug']
-                        if (isset($combo['options']) && is_array($combo['options'])) {
-                            foreach ($combo['options'] as $combo_opt_val) {
-                                if (empty($combo_opt_val['name']) || !isset($combo_opt_val['value'])) {
-                                     $product_logs[] = "[WARNING] Skipping invalid option in combination $ecwid_combination_id (missing name or value): " . wp_json_encode($combo_opt_val);
-                                     continue;
-                                }
-                                $parent_attribute_name = sanitize_text_field($combo_opt_val['name']); // e.g., "Color"
-                                $wc_attr_taxonomy_slug = wc_attribute_taxonomy_name($parent_attribute_name); // e.g., "pa_color"
-                                $term_value_from_ecwid = sanitize_text_field($combo_opt_val['value']); // e.g., "Red"
-
-                                // Find the WooCommerce term slug for this attribute value
-                                $term_object = get_term_by('name', $term_value_from_ecwid, $wc_attr_taxonomy_slug);
-                                if ($term_object && !is_wp_error($term_object)) {
-                                    $variation_attributes_for_wc[$wc_attr_taxonomy_slug] = $term_object->slug; // Use term's SLUG
-                                    $product_logs[] = "For combo $ecwid_combination_id, attribute '$wc_attr_taxonomy_slug' mapped to term '{$term_object->name}' (slug: '{$term_object->slug}').";
-                                } else {
-                                    $product_logs[] = "[ERROR] For combo $ecwid_combination_id, WC term for value '$term_value_from_ecwid' of attribute '$wc_attr_taxonomy_slug' NOT FOUND. This variation may not link correctly. Ensure terms were created for parent attributes.";
-                                }
-                            }
-                        } else {
-                             $product_logs[] = "[WARNING] No 'options' array found in Ecwid combination ID $ecwid_combination_id to map to variation attributes.";
-                        }
-                        
-                        // Skip variation if no attributes could be mapped (essential for linking)
-                        if (empty($variation_attributes_for_wc) && !empty($item['options'])) { // Check item['options'] to ensure it's not just a product with no options at all
-                            $product_logs[] = "[ERROR] Could not map any attributes for variation (Ecwid Combo ID: $ecwid_combination_id). Skipping this variation. Check attribute and term creation logs.";
-                            continue; 
-                        }
-
-                        // Find or create WC_Product_Variation
-                        $variation_id = 0;
-                        $existing_vars_query = new WP_Query([
-                            'post_type' => 'product_variation',
-                            'post_status' => 'any',
-                            'post_parent' => $parent_product_for_variations->get_id(),
-                            'meta_query' => [[ 'key' => '_ecwid_variation_id', 'value' => $ecwid_combination_id ]],
-                            'posts_per_page' => 1,
-                            'fields' => 'ids'
-                        ]);
-                        if ($existing_vars_query->have_posts()) {
-                            $variation_id = $existing_vars_query->posts[0];
-                            $product_logs[] = "Found existing WC Variation ID $variation_id for Ecwid Combo ID $ecwid_combination_id.";
-                        } else {
-                            $product_logs[] = "No existing WC Variation for Ecwid Combo ID $ecwid_combination_id. Creating new.";
-                        }
-
-                        $variation = $variation_id ? new WC_Product_Variation($variation_id) : new WC_Product_Variation();
-                        $variation->set_parent_id($parent_product_for_variations->get_id());
-                        $variation->set_attributes($variation_attributes_for_wc);
-
-                        // Set variation-specific data
-                        $variation_sku = $combo['sku'] ?? ($parent_product_for_variations->get_sku() . '-combo-' . $ecwid_combination_id);
-                        $variation->set_sku(sanitize_text_field($variation_sku));
-                        
-                        // --- VARIATION PRICING ---
-                        $product_logs[] = "Debug: Combo data for pricing: defaultDisplayedPrice=" . ($combo['defaultDisplayedPrice'] ?? 'N/A') . ", price=" . ($combo['price'] ?? 'N/A') . ", defaultDisplayedCompareToPrice=" . ($combo['defaultDisplayedCompareToPrice'] ?? 'N/A') . ", compareToPrice=" . ($combo['compareToPrice'] ?? 'N/A');
-                        $product_logs[] = "Debug: Parent product prices: Regular=" . ($parent_product_for_variations->get_regular_price('edit') ?? 'N/A') . ", Sale=" . ($parent_product_for_variations->get_sale_price('edit') ?? 'N/A');
-
-                        $combo_regular_price_to_set = null;
-                        if (isset($combo['defaultDisplayedPrice']) && is_numeric($combo['defaultDisplayedPrice'])) {
-                            $combo_regular_price_to_set = $combo['defaultDisplayedPrice'];
-                            $product_logs[] = "Using 'defaultDisplayedPrice' ({$combo_regular_price_to_set}) from combo for regular price.";
-                        } elseif (isset($combo['price']) && is_numeric($combo['price'])) {
-                            // Fallback if defaultDisplayedPrice isn't there but price is (less common for final price)
-                            $combo_regular_price_to_set = $combo['price'];
-                            $product_logs[] = "Using 'price' ({$combo_regular_price_to_set}) from combo for regular price (fallback).";
-                        }
-
-                        $final_regular_price = $combo_regular_price_to_set ?? $parent_product_for_variations->get_regular_price('edit') ?? '0';
-                        $variation->set_regular_price(strval($final_regular_price));
-                        $product_logs[] = "Final regular price for variation set to: {$final_regular_price}.";
-
-                        $combo_sale_price_to_set = null;
-                        if (isset($combo['defaultDisplayedCompareToPrice']) && is_numeric($combo['defaultDisplayedCompareToPrice'])) {
-                            $combo_sale_price_to_set = $combo['defaultDisplayedCompareToPrice'];
-                            $product_logs[] = "Using 'defaultDisplayedCompareToPrice' ({$combo_sale_price_to_set}) from combo for sale price.";
-                        } elseif (isset($combo['compareToPrice']) && is_numeric($combo['compareToPrice'])) {
-                            // Fallback if defaultDisplayedCompareToPrice isn't there but compareToPrice is
-                            $combo_sale_price_to_set = $combo['compareToPrice'];
-                            $product_logs[] = "Using 'compareToPrice' ({$combo_sale_price_to_set}) from combo for sale price (fallback).";
-                        }
-                        
-                        $parent_sale_price = $parent_product_for_variations->get_sale_price('edit');
-                        $final_sale_price = $combo_sale_price_to_set ?? $parent_sale_price;
-
-                        if ($final_sale_price !== '' && $final_sale_price !== null) {
-                            // Only set sale price if there is one, and it's less than regular price
-                            if (is_numeric($final_regular_price) && is_numeric($final_sale_price) && floatval($final_sale_price) < floatval($final_regular_price)) {
-                                $variation->set_sale_price(strval($final_sale_price));
-                                $product_logs[] = "Final sale price for variation set to: {$final_sale_price}.";
-                            } else {
-
-                               
-                                $variation->set_sale_price('');
-                                $product_logs[] = "Sale price ({$final_sale_price}) not set for variation because it's not less than regular price ({$final_regular_price}) or invalid.";
-                            }
-                        } else {
-                            $variation->set_sale_price(''); // Ensure sale price is cleared if no combo or parent sale price
-                            $product_logs[] = "No sale price for variation (neither combo nor parent had one, or it was explicitly cleared).";
-                        }
-                        
-                        $variation->set_weight(wc_format_decimal($combo['weight'] ?? $parent_product_for_variations->get_weight('edit') ?? ''));
-
-                        $variation->set_status('publish'); // Variations are usually published if parent is
-
-                        $var_saved_id = $variation->save();
-                        if ($var_saved_id && !is_wp_error($var_saved_id)) {
-                            update_post_meta($var_saved_id, '_ecwid_variation_id', $ecwid_combination_id);
-                            $product_logs[] = "Saved WC Variation ID $var_saved_id (Ecwid Combo ID: $ecwid_combination_id). Attributes: " . wp_json_encode($variation_attributes_for_wc);
-                        } else {
-                            $var_error_msg = is_wp_error($var_saved_id) ? $var_saved_id->get_error_message() : "Unknown error saving variation";
-                            $product_logs[] = "[ERROR] Failed to save WC Variation for Ecwid Combo ID $ecwid_combination_id. Error: $var_error_msg. Attributes attempted: " . wp_json_encode($variation_attributes_for_wc);
-                        }
-                    }
-                    // After all variations are processed, sync parent product's price and stock status
-                    $parent_product_for_variations->get_data_store()->sync_variation_prices($parent_product_for_variations->get_id());
-                    $product_logs[] = "Synced variation prices for parent product ID {$parent_product_for_variations->get_id()}.";
-                    
-                    // wc_product_synchronize_stock_status($parent_product_for_variations->get_id()); // WooCommerce 3.0+ handles this via DataStore
-                    // Instead, let WooCommerce manage parent stock status based on variations.
-                    // If you need to force a stock status update on the parent:
-                    // $parent_product_for_variations = wc_get_product($parent_product_for_variations->get_id()); // re-fetch
-                    // $parent_product_for_variations->set_stock_status( $parent_product_for_variations->is_in_stock() ? 'instock' : 'outofstock' );
-                    // $parent_product_for_variations->save();
-                    // $product_logs[] = "Synced stock status for parent product ID {$parent_product_for_variations->get_id()}.";
-
-
-                } else { // Parent product not variable after all, or failed to load
-                    $product_logs[] = "[ERROR] Parent product (ID: $product_saved_id) is not identifiable as a variable product after saving, or failed to load. Cannot process variations.";
                 }
-            } elseif ($product->is_type('variable')) { // Product is variable but no Ecwid combinations
-                 $product_logs[] = "[WARNING] Product is WC variable type but no Ecwid 'combinations' found. Existing variations might need manual review or will be cleared if product type changes.";
             }
 
 
-            // --- GALLERY IMAGES ---
+            // --- VARIATIONS PROCESSING DEFERRED ---
+            // The actual creation/update of variations will be handled by ajax_process_variation_batch
+            // We do NOT loop through $item['combinations'] here anymore.
+
+            // --- GALLERY IMAGES (Still process here as it's part of parent product) ---
             if ($product_saved_id && isset($item['galleryImages']) && is_array($item['galleryImages'])) {
                 $product_logs[] = "Processing gallery images. Ecwid gallery image count: " . count($item['galleryImages']);
                 $product_for_gallery = wc_get_product($product_saved_id); // Ensure we have the latest product state
@@ -1236,8 +1128,30 @@ class Ecwid_WC_Sync {
                  }
             }
 
-            $product_logs[] = "Successfully processed $log_product_identifier";
-            return ['status' => 'imported', 'logs' => $product_logs, 'item_name' => $product_name_for_log, 'ecwid_id' => $ecwid_id_for_log, 'sku' => $sku_for_log];
+            // --- FINAL STATUS DETERMINATION ---
+            if ($is_variable_from_ecwid) {
+                $total_combinations = count($item['combinations'] ?? []);
+                if ($total_combinations > 0) {
+                    $product_logs[] = "Parent product (ID: $product_saved_id) processed. $total_combinations variations pending batch import.";
+                    return [
+                       
+                        'status' => 'imported_parent_pending_variations',
+                        'logs' => $product_logs,
+                        'item_name' => $product_name_for_log,
+                        'ecwid_id' => $ecwid_id_for_log,
+                        'sku' => $sku_for_log,
+                        'wc_product_id' => $product_saved_id,
+                        'is_variable' => true,
+                        'total_combinations' => $total_combinations
+                    ];
+                } else {
+                     $product_logs[] = "Product was marked as variable from Ecwid options, but no actual combinations found. Treated as simple/variable shell.";
+                     // Fall through to 'imported' status as if it were simple, or if it's a variable shell without variations.
+                }
+            }
+            
+            $product_logs[] = "Successfully processed $log_product_identifier (as simple or variable shell without pending variations).";
+            return ['status' => 'imported', 'logs' => $product_logs, 'item_name' => $product_name_for_log, 'ecwid_id' => $ecwid_id_for_log, 'sku' => $sku_for_log, 'wc_product_id' => $product_saved_id];
 
         } catch (WC_Data_Exception $e) { // Catch WooCommerce specific data exceptions
             $product_logs[] = "[CRITICAL WC_Data_Exception] During product import: " . $e->getMessage() . " Error Code: " . $e->getErrorCode();
@@ -1250,8 +1164,223 @@ class Ecwid_WC_Sync {
         }
     }
 
+    public function ajax_process_variation_batch() {
+        check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]);
+            return;
+        }
+        set_time_limit(0); // Attempt to disable time limit for variation batch
+
+        $wc_product_id = isset($_POST['wc_product_id']) ? intval($_POST['wc_product_id']) : 0;
+        $ecwid_product_id_for_log = isset($_POST['ecwid_product_id']) ? intval($_POST['ecwid_product_id']) : 0; // For logging context
+        $item_name_for_log = isset($_POST['item_name']) ? sanitize_text_field($_POST['item_name']) : 'N/A';
+        $sku_for_log = isset($_POST['sku']) ? sanitize_text_field($_POST['sku']) : 'N/A';
+        
+        $combinations_batch_json = isset($_POST['combinations_batch_json']) ? stripslashes($_POST['combinations_batch_json']) : '[]';
+        $combinations_batch = json_decode($combinations_batch_json, true);
+
+        $original_ecwid_options_json = isset($_POST['original_ecwid_options_json']) ? stripslashes($_POST['original_ecwid_options_json']) : '[]';
+        $original_ecwid_options = json_decode($original_ecwid_options_json, true);
+
+
+        $batch_logs = [];
+
+        if (empty($wc_product_id) || !$combinations_batch) {
+            wp_send_json_error([
+                'message' => __('Missing WC Product ID or combinations batch for variation processing.', 'ecwid2woo-product-sync'),
+                'logs' => ['[CRITICAL] WC Product ID or combinations_batch_json was empty.']
+            ]);
+            return;
+        }
+
+        $parent_product = wc_get_product($wc_product_id);
+
+        if (!$parent_product) {
+            wp_send_json_error([
+                'message' => sprintf(__('Could not load parent WC Product ID %s for variation processing.', 'ecwid2woo-product-sync'), $wc_product_id),
+                'logs' => ["[CRITICAL] Parent product WC ID: $wc_product_id not found."]
+            ]);
+            return;
+        }
+        if (!$parent_product->is_type('variable')) {
+             wp_send_json_error([
+                'message' => sprintf(__('Parent WC Product ID %s is not a variable product type.', 'ecwid2woo-product-sync'), $wc_product_id),
+                'logs' => ["[CRITICAL] Parent product WC ID: $wc_product_id is not variable type."]
+            ]);
+            return;
+        }
+
+        $result = $this->_process_product_variations_batch($parent_product, $combinations_batch, $original_ecwid_options, $batch_logs, $ecwid_product_id_for_log);
+        
+        // Sync parent product price/stock status after each batch
+        // This might be intensive if done every small batch, consider doing it only on the last batch in JS.
+        // For now, let's do it to ensure data consistency.
+        $parent_product->get_data_store()->sync_variation_prices($parent_product->get_id());
+        // WC_Product_Variable_Data_Store_CPT::sync_stock_status requires product object, not ID.
+        // $data_store = $parent_product->get_data_store();
+        // if (method_exists($data_store, 'sync_stock_status')) { // Check if method exists
+        //    $data_store->sync_stock_status($parent_product->get_id()); // This might be handled by WC automatically on variation save.
+        // }
+        // $parent_product->save(); // Re-save parent to update price ranges and potentially stock status.
+        // $batch_logs[] = "[INFO] Parent product (ID: {$parent_product->get_id()}) prices/stock status synced after batch.";
+
+
+        wp_send_json_success([
+            'status' => 'success',
+            'message' => sprintf(__('Processed %d variations in this batch for %s (SKU: %s).', 'ecwid2woo-product-sync'), count($combinations_batch), $item_name_for_log, $sku_for_log),
+            'batch_logs' => $batch_logs,
+            'processed_in_batch' => count($combinations_batch),
+            'failed_in_batch' => $result['failed_count'] ?? 0,
+        ]);
+    }
+
+    private function _process_product_variations_batch(WC_Product_Variable $parent_product, array $combinations_slice, array $original_ecwid_options, array &$batch_logs, $ecwid_product_id_for_log) {
+        $processed_count = 0;
+        $failed_count = 0;
+        $parent_product_id = $parent_product->get_id();
+        $parent_sku = $parent_product->get_sku();
+
+        $batch_logs[] = "[INFO] Starting variation batch processing for Parent WC Product ID: $parent_product_id (Ecwid ID: $ecwid_product_id_for_log). Batch size: " . count($combinations_slice);
+
+        foreach ($combinations_slice as $combo_idx => $combo) {
+            if (!isset($combo['id'])) {
+                $batch_logs[] = "[WARNING] Skipping Ecwid combination at index $combo_idx in batch: missing 'id'. Data: " . wp_json_encode($combo);
+                $failed_count++;
+                continue;
+            }
+            $ecwid_combination_id = $combo['id'];
+            $batch_logs[] = "--- Processing Ecwid Combination ID: $ecwid_combination_id (Parent SKU: $parent_sku) ---";
+            
+            $batch_logs[] = "Raw Ecwid Combo Data (ID $ecwid_combination_id) for Prices: " . wp_json_encode([
+                'price_field_check' => $combo['price'] ?? 'NOT_SET', 
+                'sale_price_field_check' => $combo['compareToPrice'] ?? 'NOT_SET',
+                'defaultDisplayedPrice' => $combo['defaultDisplayedPrice'] ?? 'NOT_SET',
+                'defaultDisplayedCompareToPrice' => $combo['defaultDisplayedCompareToPrice'] ?? 'NOT_SET',
+            ]);
+
+            $variation_attributes_for_wc = [];
+            if (isset($combo['options']) && is_array($combo['options'])) {
+                foreach ($combo['options'] as $combo_opt_val) {
+                    if (empty($combo_opt_val['name']) || !isset($combo_opt_val['value'])) {
+                         $batch_logs[] = "[WARNING] Skipping invalid option in combination $ecwid_combination_id (missing name or value): " . wp_json_encode($combo_opt_val);
+                         continue;
+                    }
+                    $parent_attribute_name = sanitize_text_field($combo_opt_val['name']);
+                    $wc_attr_taxonomy_slug = wc_attribute_taxonomy_name($parent_attribute_name);
+                    $term_value_from_ecwid = sanitize_text_field($combo_opt_val['value']);
+
+                    $term_object = get_term_by('name', $term_value_from_ecwid, $wc_attr_taxonomy_slug);
+                    if ($term_object && !is_wp_error($term_object)) {
+                        $variation_attributes_for_wc[$wc_attr_taxonomy_slug] = $term_object->slug;
+                        $batch_logs[] = "For combo $ecwid_combination_id, attribute '$wc_attr_taxonomy_slug' mapped to term '{$term_object->name}' (slug: '{$term_object->slug}').";
+                    } else {
+                        $batch_logs[] = "[ERROR] For combo $ecwid_combination_id, WC term for value '$term_value_from_ecwid' of attribute '$wc_attr_taxonomy_slug' NOT FOUND. This variation may not link correctly.";
+                    }
+                }
+            } else {
+                 $batch_logs[] = "[WARNING] No 'options' array found in Ecwid combination ID $ecwid_combination_id to map to variation attributes.";
+            }
+            
+            if (empty($variation_attributes_for_wc) && !empty($original_ecwid_options)) {
+                $batch_logs[] = "[ERROR] Could not map any attributes for variation (Ecwid Combo ID: $ecwid_combination_id). Skipping this variation.";
+                $failed_count++;
+                continue; 
+            }
+
+            $variation_id = 0;
+            $existing_vars_query = new WP_Query([
+                'post_type' => 'product_variation', 'post_status' => 'any',
+                'post_parent' => $parent_product_id,
+                'meta_query' => [[ 'key' => '_ecwid_variation_id', 'value' => $ecwid_combination_id ]],
+                'posts_per_page' => 1, 'fields' => 'ids'
+            ]);
+            if ($existing_vars_query->have_posts()) {
+                $variation_id = $existing_vars_query->posts[0];
+                $batch_logs[] = "Found existing WC Variation ID $variation_id for Ecwid Combo ID $ecwid_combination_id.";
+            } else {
+                $batch_logs[] = "No existing WC Variation for Ecwid Combo ID $ecwid_combination_id. Creating new.";
+            }
+
+            $variation = $variation_id ? new WC_Product_Variation($variation_id) : new WC_Product_Variation();
+            $variation->set_parent_id($parent_product_id);
+            $variation->set_attributes($variation_attributes_for_wc);
+
+            $variation_sku = $combo['sku'] ?? ($parent_sku . '-combo-' . $ecwid_combination_id);
+            $variation->set_sku(sanitize_text_field($variation_sku));
+            
+            $combo_regular_price_to_set = null;
+            if (isset($combo['defaultDisplayedPrice']) && is_numeric($combo['defaultDisplayedPrice'])) {
+                $combo_regular_price_to_set = $combo['defaultDisplayedPrice'];
+            } elseif (isset($combo['price']) && is_numeric($combo['price'])) {
+                $combo_regular_price_to_set = $combo['price'];
+            }
+            $final_regular_price = $combo_regular_price_to_set ?? $parent_product->get_regular_price('edit') ?? '0';
+            $variation->set_regular_price(strval($final_regular_price));
+            $batch_logs[] = "Variation regular price set to: {$final_regular_price}.";
+
+            $combo_sale_price_to_set = null;
+            if (isset($combo['defaultDisplayedCompareToPrice']) && is_numeric($combo['defaultDisplayedCompareToPrice'])) {
+                $combo_sale_price_to_set = $combo['defaultDisplayedCompareToPrice'];
+            } elseif (isset($combo['compareToPrice']) && is_numeric($combo['compareToPrice'])) {
+                $combo_sale_price_to_set = $combo['compareToPrice'];
+            }
+            $parent_sale_price = $parent_product->get_sale_price('edit');
+            $final_sale_price = $combo_sale_price_to_set ?? $parent_sale_price;
+
+            if ($final_sale_price !== '' && $final_sale_price !== null) {
+                if (is_numeric($final_regular_price) && is_numeric($final_sale_price) && floatval($final_sale_price) < floatval($final_regular_price)) {
+                    $variation->set_sale_price(strval($final_sale_price));
+                    $batch_logs[] = "Variation sale price set to: {$final_sale_price}.";
+                } else {
+                    $variation->set_sale_price('');
+                    $batch_logs[] = "Sale price ({$final_sale_price}) not set for variation (not less than regular or invalid).";
+                }
+            } else {
+                $variation->set_sale_price('');
+                $batch_logs[] = "No sale price for variation.";
+            }
+            
+            $variation->set_weight(wc_format_decimal($combo['weight'] ?? $parent_product->get_weight('edit') ?? ''));
+            // Stock for variations (Example, adjust as per your Ecwid data for combinations)
+            if (isset($combo['quantity'])) {
+                $variation->set_manage_stock(true);
+                $variation->set_stock_quantity(intval($combo['quantity']));
+                $variation->set_stock_status(intval($combo['quantity']) > 0 ? 'instock' : 'outofstock');
+            } elseif (isset($combo['unlimited']) && $combo['unlimited']) {
+                $variation->set_manage_stock(false);
+                $variation->set_stock_quantity(null);
+                $variation->set_stock_status('instock');
+            } else { // Default if no specific stock info for combo
+                $variation->set_manage_stock(false); // Or true and outofstock if that's preferred
+                $variation->set_stock_quantity(null);
+                $variation->set_stock_status('outofstock'); // Default to out of stock if not specified
+            }
+
+            $variation->set_status('publish'); 
+
+            try {
+                $var_saved_id = $variation->save();
+                if ($var_saved_id && !is_wp_error($var_saved_id)) {
+                    update_post_meta($var_saved_id, '_ecwid_variation_id', $ecwid_combination_id);
+                    $batch_logs[] = "Saved WC Variation ID $var_saved_id (Ecwid Combo ID: $ecwid_combination_id). Attributes: " . wp_json_encode($variation_attributes_for_wc);
+                    $processed_count++;
+                } else {
+                    $var_error_msg = is_wp_error($var_saved_id) ? $var_saved_id->get_error_message() : "Unknown error saving variation";
+                    $batch_logs[] = "[ERROR] Failed to save WC Variation for Ecwid Combo ID $ecwid_combination_id. Error: $var_error_msg.";
+                    $failed_count++;
+                }
+            } catch (Exception $e) {
+                $batch_logs[] = "[EXCEPTION] Saving WC Variation for Ecwid Combo ID $ecwid_combination_id. Error: " . $e->getMessage();
+                $failed_count++;
+            }
+            $batch_logs[] = "--- Finished Ecwid Combination ID: $ecwid_combination_id ---";
+        }
+        $batch_logs[] = "[INFO] Variation batch complete. Processed: $processed_count, Failed: $failed_count.";
+        return ['processed_count' => $processed_count, 'failed_count' => $failed_count];
+    }
+
     private function register_missing_parent($parent_ecwid_id, $child_ecwid_id) {
-        // Store the parent-child relationship for post-processing
         $missing_parents = get_option('ecwid_wc_sync_missing_parents', []);
         if (!isset($missing_parents[$parent_ecwid_id])) {
             $missing_parents[$parent_ecwid_id] = [];
@@ -1261,94 +1390,85 @@ class Ecwid_WC_Sync {
     }
 
     private function get_or_create_missing_parent_placeholder($parent_ecwid_id) {
-        // First check if the term already exists
-        $existing_term = get_posts([
-            'post_type' => 'any',
+        $existing_term_query = new WP_Query([ // Changed from get_posts to WP_Query for consistency
+            'post_type' => 'ecwid_placeholder', // Query the CPT
             'meta_key' => '_ecwid_placeholder_parent_id',
             'meta_value' => $parent_ecwid_id,
-            'posts_per_page' => 1
+            'posts_per_page' => 1,
+            'fields' => 'ids' // Only get IDs
         ]);
-        
-        if (!empty($existing_term)) {
+
+        if (!empty($existing_term_query->posts)) {
+            $placeholder_post_id = $existing_term_query->posts[0];
             return [
-                'term_id' => get_term_meta($existing_term[0]->ID, '_ecwid_placeholder_term_id', true),
-                'name' => get_the_title($existing_term[0]->ID),
+                'term_id' => get_post_meta($placeholder_post_id, '_ecwid_placeholder_term_id', true),
+                'name' => get_the_title($placeholder_post_id),
                 'is_new' => false
             ];
         }
-        
-        // Create a placeholder category name based on the Ecwid ID
-        $placeholder_name = 'Missing Category ' . $parent_ecwid_id;
-        
-        // Create the placeholder term
+
+        $placeholder_name = sprintf(__('Missing Category %s', 'ecwid2woo-product-sync'), $parent_ecwid_id);
+
         $term_result = wp_insert_term($placeholder_name, 'product_cat', [
-            'description' => 'Automatically created placeholder for missing Ecwid category ID ' . $parent_ecwid_id
+            'description' => sprintf(__('Automatically created placeholder for missing Ecwid category ID %s', 'ecwid2woo-product-sync'), $parent_ecwid_id)
         ]);
-        
+
         if (is_wp_error($term_result)) {
             return null;
         }
-        
-        // Create a tracking post to store metadata
+
         $placeholder_post = wp_insert_post([
             'post_title' => $placeholder_name,
             'post_status' => 'private',
             'post_type' => 'ecwid_placeholder'
         ]);
-        
-        if ($placeholder_post) {
+
+        if ($placeholder_post && !is_wp_error($placeholder_post)) {
             update_post_meta($placeholder_post, '_ecwid_placeholder_parent_id', $parent_ecwid_id);
             update_post_meta($placeholder_post, '_ecwid_placeholder_term_id', $term_result['term_id']);
             update_term_meta($term_result['term_id'], '_ecwid_placeholder_category', '1');
         }
-        
+
         return [
             'term_id' => $term_result['term_id'],
             'name' => $placeholder_name,
             'is_new' => true
         ];
     }
-    
+
     private function get_term_id_by_ecwid_id($ecwid_id, $taxonomy, $bypass_cache = false) {
         global $wpdb;
-        
-        static $cache = []; // In-memory cache for this request
+        static $term_cache = []; // Renamed cache variable to avoid conflict
         $cache_key = $ecwid_id . '_' . $taxonomy;
-        
-        // Check in-memory cache first, unless bypassing
-        if (!$bypass_cache && isset($cache[$cache_key])) {
-            return $cache[$cache_key];
+
+        if (!$bypass_cache && isset($term_cache[$cache_key])) {
+            return $term_cache[$cache_key];
         }
-        
-        // Direct SQL query for better reliability with term meta
+
         $query = $wpdb->prepare(
-            "SELECT t.term_id 
-             FROM {$wpdb->terms} AS t 
-             INNER JOIN {$wpdb->term_taxonomy} AS tt ON t.term_id = tt.term_id 
-             INNER JOIN {$wpdb->termmeta} AS tm ON t.term_id = tm.term_id 
-             WHERE tt.taxonomy = %s 
-             AND tm.meta_key = '_ecwid_category_id' 
-             AND tm.meta_value = %s 
+            "SELECT t.term_id
+             FROM {$wpdb->terms} AS t
+             INNER JOIN {$wpdb->term_taxonomy} AS tt ON t.term_id = tt.term_id
+             INNER JOIN {$wpdb->termmeta} AS tm ON t.term_id = tm.term_id
+             WHERE tt.taxonomy = %s
+             AND tm.meta_key = '_ecwid_category_id'
+             AND tm.meta_value = %s
              LIMIT 1",
             $taxonomy,
-            $ecwid_id
+            strval($ecwid_id) // Ensure it's a string for meta value comparison
         );
-        
         $term_id = $wpdb->get_var($query);
-        
-        // Store in cache for future lookups
+
         if (!$bypass_cache && $term_id) {
-            $cache[$cache_key] = $term_id;
+            $term_cache[$cache_key] = (int)$term_id;
         }
-        
         return $term_id ? (int)$term_id : null;
     }
 
     private function attach_image_to_product_from_url($image_url, $post_id = 0, $desc = null) {
         if (empty($image_url)) {
-            return new WP_Error('missing_url', 'Image URL is empty.');
+            return new WP_Error('missing_url', __('Image URL is empty.', 'ecwid2woo-product-sync'));
         }
-        // Ensure WordPress media functions are available
         if (!function_exists('download_url')) {
             require_once(ABSPATH . 'wp-admin/includes/file.php');
         }
@@ -1357,84 +1477,77 @@ class Ecwid_WC_Sync {
             require_once(ABSPATH . 'wp-admin/includes/image.php');
         }
 
-        // Download image to temporary file
-        $timeout_seconds = apply_filters('ecwid_wc_sync_image_download_timeout', 30); // Increased default timeout
+        $timeout_seconds = apply_filters('ecwid_wc_sync_image_download_timeout', 30);
         $tmp = download_url($image_url, $timeout_seconds);
         if (is_wp_error($tmp)) {
-            @unlink($tmp); // Delete temporary file if it exists, even on error
-            return new WP_Error('download_failed', sprintf(__('Image download failed from %s: %s', 'ecwid-wc-sync'), $image_url, $tmp->get_error_message()));
+            @unlink($tmp);
+            return new WP_Error('download_failed', sprintf(__('Image download failed from %s: %s', 'ecwid2woo-product-sync'), esc_url_raw($image_url), $tmp->get_error_message()));
         }
 
-        // Prepare file array for media_handle_sideload
         $file_array = [
-            'name' => basename(parse_url($image_url, PHP_URL_PATH)), // Generate a filename
+            'name' => basename(parse_url($image_url, PHP_URL_PATH)),
             'tmp_name' => $tmp
         ];
-        
-        // Sideload the image (imports it into the media library and attaches to post)
+
         $attachment_id = media_handle_sideload($file_array, $post_id, $desc);
 
-        // Clean up temporary file
         if (file_exists($tmp)) {
             @unlink($tmp);
         }
 
         if (is_wp_error($attachment_id)) {
-            return new WP_Error('sideload_failed', sprintf(__('Image sideload failed for %s: %s', 'ecwid-wc-sync'), $image_url, $attachment_id->get_error_message()));
+            return new WP_Error('sideload_failed', sprintf(__('Image sideload failed for %s: %s', 'ecwid2woo-product-sync'), esc_url_raw($image_url), $attachment_id->get_error_message()));
         }
-        return $attachment_id; // Return attachment ID on success
+        return $attachment_id;
     }
 
     public function fix_category_hierarchy() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid-wc-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]);
             return;
         }
-        
+
         $missing_parents = get_option('ecwid_wc_sync_missing_parents', []);
         $fixed_count = 0;
         $logs = [];
-        
+
         foreach ($missing_parents as $parent_ecwid_id => $child_ecwid_ids) {
-            // Check if parent exists now
             $parent_wc_term_id = $this->get_term_id_by_ecwid_id($parent_ecwid_id, 'product_cat', true);
-            
+
             if (!$parent_wc_term_id) {
-                $logs[] = "Parent Ecwid ID $parent_ecwid_id still missing, cannot fix its children.";
+                $logs[] = sprintf(__('Parent Ecwid ID %s still missing, cannot fix its children.', 'ecwid2woo-product-sync'), $parent_ecwid_id);
                 continue;
             }
-            
+
             foreach ($child_ecwid_ids as $child_ecwid_id) {
                 $child_wc_term_id = $this->get_term_id_by_ecwid_id($child_ecwid_id, 'product_cat', true);
-                
+
                 if (!$child_wc_term_id) {
-                    $logs[] = "Child term for Ecwid ID $child_ecwid_id not found.";
+                    $logs[] = sprintf(__('Child term for Ecwid ID %s not found.', 'ecwid2woo-product-sync'), $child_ecwid_id);
                     continue;
                 }
-                
-                // Update the child's parent
+
                 $update_result = wp_update_term($child_wc_term_id, 'product_cat', ['parent' => $parent_wc_term_id]);
-                
+
                 if (is_wp_error($update_result)) {
-                    $logs[] = "Failed to update parent for term $child_wc_term_id: " . $update_result->get_error_message();
+                    $logs[] = sprintf(__('Failed to update parent for term %1$s: %2$s', 'ecwid2woo-product-sync'), $child_wc_term_id, $update_result->get_error_message());
                 } else {
                     $fixed_count++;
-                    $logs[] = "Fixed parent for term $child_wc_term_id, now under parent $parent_wc_term_id";
+                    $logs[] = sprintf(__('Fixed parent for term %1$s, now under parent %2$s', 'ecwid2woo-product-sync'), $child_wc_term_id, $parent_wc_term_id);
                 }
             }
         }
-        
-        // Clear missing parents after fixing
+
         update_option('ecwid_wc_sync_missing_parents', []);
-        
+
         wp_send_json_success([
             'fixed_count' => $fixed_count,
-            'logs' => $logs
+            'logs' => $logs,
+            'message' => sprintf(_n('%d hierarchy fixed.', '%d hierarchies fixed.', $fixed_count, 'ecwid2woo-product-sync'), $fixed_count)
         ]);
     }
 }
 
-// Instantiate the plugin class
 new Ecwid_WC_Sync();
 ?>

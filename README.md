@@ -41,7 +41,7 @@ Synchronize your Ecwid store’s categories and products into WooCommerce, compl
 
 1. Download the ZIP from GitHub.  
 2. In WP Admin → **Plugins → Add New** → **Upload Plugin**, choose the ZIP → **Install Now** → **Activate**.  
-   _Or manually unzip into `/wp-content/plugins/ecwid-to-woocommere/` and activate._
+   _Or manually unzip into `/wp-content/plugins/ecwid2woo-product-sync/` and activate._
 
 ## Usage
 
