@@ -27,6 +27,18 @@
         const categoryPageSyncStatusDiv = $('#category-page-sync-status');
         const categoryPageSyncLogDiv = $('#category-page-sync-log');
         
+        // Customer Sync Page UI Elements (New)
+        const customerSyncButton = $('#customer-sync-button');
+        const customerSyncProgressBar = $('#customer-sync-bar');
+        const customerSyncStatusDiv = $('#customer-sync-status');
+        const customerSyncLogDiv = $('#customer-sync-log');
+
+        // Order Sync Page UI Elements (New)
+        const orderSyncButton = $('#order-sync-button');
+        const orderSyncProgressBar = $('#order-sync-bar');
+        const orderSyncStatusDiv = $('#order-sync-status');
+        const orderSyncLogDiv = $('#order-sync-log');
+        
         // Selective Sync UI Elements
         const loadProductsButton = $('#load-ecwid-products-button');
         const productListContainer = $('#selective-product-list-container');
@@ -100,6 +112,36 @@
 
                 logMessage(categoryPageSyncLogDiv, i18n.syncing_just_categories_page_status, 'info');
                 processCategoryPageSyncBatch('categories', 0); 
+            });
+        }
+
+        // --- Customer Sync Page Logic (New) ---
+        if (customerSyncButton.length) {
+            customerSyncButton.on('click', function(e) {
+                e.preventDefault();
+                if (customerSyncButton.hasClass('disabled')) return;
+
+                customerSyncButton.addClass('disabled').text(i18n.syncing_customers);
+                customerSyncStatusDiv.text(i18n.syncing_customers);
+                updateProgressBar(customerSyncProgressBar, 0);
+                customerSyncLogDiv.html('');
+                logMessage(customerSyncLogDiv, i18n.syncing_customers + ' ' + i18n.sync_starting, 'info');
+                processCustomerSyncBatch(0);
+            });
+        }
+
+        // --- Order Sync Page Logic (New) ---
+        if (orderSyncButton.length) {
+            orderSyncButton.on('click', function(e) {
+                e.preventDefault();
+                if (orderSyncButton.hasClass('disabled')) return;
+
+                orderSyncButton.addClass('disabled').text(i18n.syncing_orders);
+                orderSyncStatusDiv.text(i18n.syncing_orders);
+                updateProgressBar(orderSyncProgressBar, 0);
+                orderSyncLogDiv.html('');
+                logMessage(orderSyncLogDiv, i18n.syncing_orders + ' ' + i18n.sync_starting, 'info');
+                processOrderSyncBatch(0);
             });
         }
 
@@ -238,6 +280,140 @@
                     logMessage(categoryPageSyncLogDiv, `AJAX Error syncing ${syncType}: ${textStatus} ${errorThrown || ''}`, 'error');
                     categoryPageSyncButton.removeClass('disabled').text(i18n.start_category_sync_page);
                     updateStatus(categoryPageSyncStatusDiv, i18n.ajax_error + ` (${syncType})`); // Update status on AJAX error
+                }
+            });
+        }
+
+        // --- Customer Sync Page Logic (New) ---
+        if (customerSyncButton.length) {
+            customerSyncButton.on('click', function(e) {
+                e.preventDefault();
+                if (customerSyncButton.hasClass('disabled')) return;
+
+                customerSyncButton.addClass('disabled').text(i18n.syncing_customers);
+                customerSyncStatusDiv.text(i18n.syncing_customers);
+                updateProgressBar(customerSyncProgressBar, 0);
+                customerSyncLogDiv.html('');
+                logMessage(customerSyncLogDiv, i18n.syncing_customers + ' ' + i18n.sync_starting, 'info');
+                processCustomerSyncBatch(0);
+            });
+        }
+
+        function processCustomerSyncBatch(offset) {
+            const baseStatusMessage = i18n.syncing_customers;
+            startBatchStatusAnimation(customerSyncStatusDiv, baseStatusMessage);
+
+            $.ajax({
+                url: ajax_url,
+                method: 'POST',
+                data: {
+                    action: 'ecwid_wc_customer_batch_sync', // New AJAX action
+                    nonce: nonce,
+                    offset: offset
+                },
+                success: function(response) {
+                    stopBatchStatusAnimation();
+                    if (response.success) {
+                        if (response.data.batch_logs && Array.isArray(response.data.batch_logs)) {
+                            response.data.batch_logs.forEach(logEntry => categorizeAndLog(customerSyncLogDiv, logEntry));
+                        } else {
+                            logMessage(customerSyncLogDiv, `Customer batch (offset ${offset}) processed. No detailed logs.`, 'info');
+                        }
+
+                        let currentProgress = 0;
+                        if (response.data.total_items > 0) {
+                            currentProgress = (response.data.next_offset / response.data.total_items) * 100;
+                        } else if (response.data.has_more === false) {
+                            currentProgress = 100;
+                        }
+                        currentProgress = Math.min(100, Math.round(currentProgress));
+
+                        updateProgressBar(customerSyncProgressBar, currentProgress);
+                        customerSyncStatusDiv.text(i18n.syncing_customers + ` ${currentProgress}%`);
+
+                        if (response.data.has_more) {
+                            processCustomerSyncBatch(response.data.next_offset);
+                        } else {
+                            customerSyncStatusDiv.text(i18n.customer_sync_complete);
+                            logMessage(customerSyncLogDiv, i18n.customer_sync_complete, 'success');
+                            customerSyncButton.removeClass('disabled').text(i18n.start_customer_sync);
+                            updateProgressBar(customerSyncProgressBar, 100);
+                        }
+                    } else {
+                        handleAjaxError(customerSyncStatusDiv, customerSyncLogDiv, customerSyncButton, i18n.start_customer_sync, 'Customers', response.data);
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    stopBatchStatusAnimation();
+                    const responseData = { message: `${textStatus} ${errorThrown || ''}` };
+                    handleAjaxError(customerSyncStatusDiv, customerSyncLogDiv, customerSyncButton, i18n.start_customer_sync, 'Customers', responseData, true);
+                }
+            });
+        }
+
+        // --- Order Sync Page Logic (New) ---
+        if (orderSyncButton.length) {
+            orderSyncButton.on('click', function(e) {
+                e.preventDefault();
+                if (orderSyncButton.hasClass('disabled')) return;
+
+                orderSyncButton.addClass('disabled').text(i18n.syncing_orders);
+                orderSyncStatusDiv.text(i18n.syncing_orders);
+                updateProgressBar(orderSyncProgressBar, 0);
+                orderSyncLogDiv.html('');
+                logMessage(orderSyncLogDiv, i18n.syncing_orders + ' ' + i18n.sync_starting, 'info');
+                processOrderSyncBatch(0);
+            });
+        }
+
+        function processOrderSyncBatch(offset) {
+            const baseStatusMessage = i18n.syncing_orders;
+            startBatchStatusAnimation(orderSyncStatusDiv, baseStatusMessage);
+
+            $.ajax({
+                url: ajax_url,
+                method: 'POST',
+                data: {
+                    action: 'ecwid_wc_order_batch_sync', // New AJAX action
+                    nonce: nonce,
+                    offset: offset
+                },
+                success: function(response) {
+                    stopBatchStatusAnimation();
+                    if (response.success) {
+                        if (response.data.batch_logs && Array.isArray(response.data.batch_logs)) {
+                            response.data.batch_logs.forEach(logEntry => categorizeAndLog(orderSyncLogDiv, logEntry));
+                        } else {
+                            logMessage(orderSyncLogDiv, `Order batch (offset ${offset}) processed. No detailed logs.`, 'info');
+                        }
+
+                        let currentProgress = 0;
+                        if (response.data.total_items > 0) {
+                            currentProgress = (response.data.next_offset / response.data.total_items) * 100;
+                        } else if (response.data.has_more === false) {
+                            currentProgress = 100;
+                        }
+                        currentProgress = Math.min(100, Math.round(currentProgress));
+
+                        updateProgressBar(orderSyncProgressBar, currentProgress);
+                        orderSyncStatusDiv.text(i18n.syncing_orders + ` ${currentProgress}%`);
+
+                        if (response.data.has_more) {
+                            processOrderSyncBatch(response.data.next_offset);
+                        } else {
+                            orderSyncStatusDiv.text(i18n.order_sync_complete);
+                            logMessage(orderSyncLogDiv, i18n.order_sync_complete, 'success');
+                            orderSyncButton.removeClass('disabled').text(i18n.start_order_sync);
+                            updateProgressBar(orderSyncProgressBar, 100);
+                        }
+                    } else {
+                        handleAjaxError(orderSyncStatusDiv, orderSyncLogDiv, orderSyncButton, i18n.start_order_sync, 'Orders', response.data);
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    stopBatchStatusAnimation();
+                    const responseData = { message: `${textStatus} ${errorThrown || ''}` };
+                    handleAjaxError(orderSyncStatusDiv, orderSyncLogDiv, orderSyncButton, i18n.start_order_sync, 'Orders', responseData, true);
                 }
             });
         }

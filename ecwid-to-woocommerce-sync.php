@@ -20,6 +20,22 @@ if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly
 }
 
+// --- Speculative Fix Attempt ---
+// The error backtrace indicates a function `ecwid_wc_sync_init` (not defined in this file)
+// is hooked to 'plugins_loaded' and seems to be causing a fatal error by trying to call
+// AdminPage::init(). This is likely old or conflicting code.
+// The following attempts to remove this action. This might not work if the original
+// action was added with a different priority or is a class method.
+// The best solution is to find and remove the source of `add_action('plugins_loaded', 'ecwid_wc_sync_init', ...)`
+// from your WordPress installation (e.g., old plugin files, theme).
+if (function_exists('ecwid_wc_sync_init')) {
+    // Assuming default priority of 10. If it's different, this won't work.
+    $removed = remove_action('plugins_loaded', 'ecwid_wc_sync_init', 10);
+    // You could add some logging here if WP_DEBUG is on to see if removal was attempted/successful,
+    // but fatal errors might prevent further execution anyway.
+}
+// --- End of Speculative Fix Attempt ---
+
 define('ECWID2WOO_VERSION', '1.9.2'); // Define version constant
 
 class Ecwid_WC_Sync {
@@ -31,17 +47,21 @@ class Ecwid_WC_Sync {
     private $full_sync_slug = 'ecwid-sync-full';
     private $partial_sync_slug = 'ecwid-sync-partial';
     private $category_sync_slug = 'ecwid-sync-categories';
+    private $customer_sync_slug = 'ecwid-sync-customers'; // New
+    private $order_sync_slug = 'ecwid-sync-orders';     // New
 
     public function __construct() {
         $this->load_textdomain(); // Load text domain
         $this->options = get_option('ecwid_wc_sync_options');
         add_action('init', [$this, 'register_placeholder_cpt']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
-        add_action('admin_init', [$this, 'settings_init']);
+        add_action('admin_init', [$this, 'settings_init']); // This is line 34 from the error context
         add_action('wp_ajax_ecwid_wc_batch_sync', [$this, 'ajax_batch_sync']);
         add_action('wp_ajax_ecwid_wc_fetch_products_for_selection', [$this, 'ajax_fetch_products_for_selection']);
         add_action('wp_ajax_ecwid_wc_import_selected_products', [$this, 'ajax_import_selected_products']);
         add_action('wp_ajax_fix_category_hierarchy', [$this, 'fix_category_hierarchy']);
+        add_action('wp_ajax_ecwid_wc_customer_batch_sync', [$this, 'ajax_customer_batch_sync']); // New
+        add_action('wp_ajax_ecwid_wc_order_batch_sync', [$this, 'ajax_order_batch_sync']);       // New
     }
 
     public function load_textdomain() {
@@ -110,6 +130,26 @@ class Ecwid_WC_Sync {
             $this->partial_sync_slug,
             [$this, 'options_page_router']
         );
+
+        // New Submenu for Customer Sync
+        add_submenu_page(
+            $this->settings_slug,
+            __('Customer Sync', 'ecwid2woo-product-sync'),
+            __('Customer Sync', 'ecwid2woo-product-sync'),
+            'manage_options',
+            $this->customer_sync_slug,
+            [$this, 'options_page_router']
+        );
+
+        // New Submenu for Order Sync
+        add_submenu_page(
+            $this->settings_slug,
+            __('Order Sync', 'ecwid2woo-product-sync'),
+            __('Order Sync', 'ecwid2woo-product-sync'),
+            'manage_options',
+            $this->order_sync_slug,
+            [$this, 'options_page_router']
+        );
     }
 
     public function settings_init() {
@@ -157,7 +197,7 @@ class Ecwid_WC_Sync {
         wp_localize_script('ecwid-wc-sync-admin', 'ecwid_sync_params', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce'    => wp_create_nonce('ecwid_wc_sync_nonce'),
-            'sync_steps' => $this->sync_steps,
+            'sync_steps' => $this->sync_steps, // Consider if customers/orders should be in full sync
             'i18n' => [
                 'sync_starting' => __('Sync starting...', 'ecwid2woo-product-sync'),
                 'sync_complete' => __('Sync Complete!', 'ecwid2woo-product-sync'),
@@ -180,6 +220,13 @@ class Ecwid_WC_Sync {
                 'fix_hierarchy_button' => __('Fix Category Hierarchy', 'ecwid2woo-product-sync'),
                 'fixing_hierarchy' => __('Fixing hierarchy...', 'ecwid2woo-product-sync'),
                 'hierarchy_fixed' => __('Category hierarchy fix attempt complete.', 'ecwid2woo-product-sync'),
+                // New i18n strings
+                'start_customer_sync' => __('Start Customer Sync', 'ecwid2woo-product-sync'),
+                'syncing_customers' => __('Syncing Customers...', 'ecwid2woo-product-sync'),
+                'customer_sync_complete' => __('Customer Sync Complete!', 'ecwid2woo-product-sync'),
+                'start_order_sync' => __('Start Order Sync', 'ecwid2woo-product-sync'),
+                'syncing_orders' => __('Syncing Orders...', 'ecwid2woo-product-sync'),
+                'order_sync_complete' => __('Order Sync Complete!', 'ecwid2woo-product-sync'),
             ]
         ]);
 
@@ -200,6 +247,12 @@ class Ecwid_WC_Sync {
                 break;
             case $this->partial_sync_slug:
                 $this->render_partial_sync_page();
+                break;
+            case $this->customer_sync_slug: // New
+                $this->render_customer_sync_page();
+                break;
+            case $this->order_sync_slug:    // New
+                $this->render_order_sync_page();
                 break;
             default:
                 $this->render_settings_page();
@@ -263,6 +316,34 @@ class Ecwid_WC_Sync {
             <div id="selective-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
         </div>
         <div id="selective-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
+        <?php
+    }
+
+    // New render method for Customer Sync page
+    private function render_customer_sync_page() {
+        ?>
+        <h1><?php esc_html_e('Ecwid Customer Sync', 'ecwid2woo-product-sync'); ?></h1>
+        <p><?php esc_html_e('This will sync customer data from Ecwid to WooCommerce. Ensure your API token has permissions for customer data.', 'ecwid2woo-product-sync'); ?></p>
+        <div id="customer-sync-status" style="margin-bottom: 10px; font-weight: bold;"></div>
+        <div id="customer-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box;">
+            <div id="customer-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+        </div>
+        <button id="customer-sync-button" class="button button-primary"><?php esc_html_e('Start Customer Sync', 'ecwid2woo-product-sync'); ?></button>
+        <div id="customer-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
+        <?php
+    }
+
+    // New render method for Order Sync page
+    private function render_order_sync_page() {
+        ?>
+        <h1><?php esc_html_e('Ecwid Order Sync', 'ecwid2woo-product-sync'); ?></h1>
+        <p><?php esc_html_e('This will sync order data (including payments, refunds if available) from Ecwid to WooCommerce. This can be a lengthy process for stores with many orders. Ensure API token has order permissions.', 'ecwid2woo-product-sync'); ?></p>
+        <div id="order-sync-status" style="margin-bottom: 10px; font-weight: bold;"></div>
+        <div id="order-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box;">
+            <div id="order-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+        </div>
+        <button id="order-sync-button" class="button button-primary"><?php esc_html_e('Start Order Sync', 'ecwid2woo-product-sync'); ?></button>
+        <div id="order-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
         <?php
     }
 
@@ -556,6 +637,221 @@ class Ecwid_WC_Sync {
         ]);
     }
 
+    // New AJAX handler for Customer Batch Sync
+    public function ajax_customer_batch_sync() {
+        check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]); return;
+        }
+        set_time_limit(300); // Potentially increase for customer data
+
+        $api_essentials = $this->_get_api_essentials();
+        if (is_wp_error($api_essentials)) {
+            wp_send_json_error(['message' => $api_essentials->get_error_message()]); return;
+        }
+
+        $limit_per_api_call = apply_filters('ecwid_wc_sync_customer_api_limit', 50); // Customers might be lighter
+        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        $sync_type = 'customers'; // Fixed for this handler
+
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("Ecwid Sync: CUSTOMER BATCH - Offset: $offset, API Limit: $limit_per_api_call");
+        }
+
+        $api_url_base = $api_essentials['base_url'] . '/customers';
+        // Define desired fields for customers to optimize API calls
+        $responseFields = 'items(id,email,billingPerson,shippingPerson,registered,updatedDate,customerGroupId,taxExempt,taxId)'; // Add more as needed
+        $query_params_for_url = ['limit' => $limit_per_api_call, 'offset' => $offset, 'responseFields' => $responseFields];
+
+        $api_url = add_query_arg($query_params_for_url, $api_url_base);
+        $response = wp_remote_get($api_url, [
+            'timeout' => 60,
+            'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
+        ]);
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'ecwid2woo-product-sync'), $response->get_error_message())]); return;
+        }
+        $raw_response_body = wp_remote_retrieve_body($response);
+        $body = json_decode($raw_response_body, true);
+        $http_code = wp_remote_retrieve_response_code($response);
+
+        if ($http_code !== 200 || !is_array($body) || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
+            wp_send_json_error(['message' => sprintf(__('Ecwid API Error (HTTP %s): %s', 'ecwid2woo-product-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error'))]); return;
+        }
+        
+        $items_from_api = $body['items'] ?? [];
+        $total_items_reported_by_api = $body['total'] ?? 0;
+        $count_in_current_api_response = $body['count'] ?? count($items_from_api);
+
+        $imported_count = 0; $skipped_count = 0; $failed_count = 0;
+        $batch_detailed_logs = [];
+
+        if (!empty($items_from_api)) {
+            foreach ($items_from_api as $item_data) {
+                if (!is_array($item_data) || !isset($item_data['id']) || !isset($item_data['email'])) {
+                    $batch_detailed_logs[] = "--- [CRITICAL ERROR] Encountered invalid customer data in API response. Skipping. Item data: " . print_r($item_data, true) . " ---";
+                    $failed_count++;
+                    continue;
+                }
+                $result_array = $this->import_customer($item_data);
+                // ... (Log handling similar to ajax_batch_sync for products/categories) ...
+                if ($result_array && isset($result_array['status'])) {
+                    if ($result_array['status'] === 'imported') $imported_count++;
+                    elseif ($result_array['status'] === 'skipped') $skipped_count++;
+                    else $failed_count++;
+
+                    $log_item_name = esc_html($result_array['item_name'] ?? ('Customer ' . $item_data['email']));
+                    $log_ecwid_id = esc_html($result_array['ecwid_id'] ?? $item_data['id']);
+
+                    $batch_detailed_logs[] = "--- Processing: {$log_item_name} (Ecwid ID: {$log_ecwid_id}) ---";
+                    if (!empty($result_array['logs']) && is_array($result_array['logs'])) {
+                        foreach($result_array['logs'] as $log_line) { $batch_detailed_logs[] = "  " . esc_html($log_line); }
+                    }
+                    $batch_detailed_logs[] = "--- Result for {$log_ecwid_id}: " . strtoupper($result_array['status']) . " ---";
+                } else {
+                    $failed_count++;
+                     $batch_detailed_logs[] = "--- [CRITICAL ERROR] Failed to process customer: " . esc_html($item_data['email']) . ". Import function did not return expected result. ---";
+                }
+                 $batch_detailed_logs[] = " ";
+            }
+        } elseif ($offset === 0 && $limit_per_api_call > 0) {
+             $batch_detailed_logs[] = "No items received from Ecwid API for $sync_type with offset $offset and limit $limit_per_api_call. This might be normal if there are no items of this type or all have been processed.";
+        }
+
+        $new_offset = $offset + $count_in_current_api_response;
+        $has_more = false;
+        if ($count_in_current_api_response > 0) {
+            if (isset($body['total']) && isset($body['offset']) && isset($body['count'])) {
+                 $has_more = ($body['total'] > ($body['offset'] + $body['count']));
+            } elseif ($count_in_current_api_response === $limit_per_api_call) {
+                $has_more = true;
+            }
+        }
+        if (isset($body['total']) && $new_offset >= $body['total']) {
+            $has_more = false;
+        }
+
+        wp_send_json_success([
+            'message' => sprintf(__('%1$s: Processed %2$d items (Imported: %3$d, Skipped: %4$d, Failed: %5$d). Total (Ecwid): %6$d.', 'ecwid2woo-product-sync'), ucfirst($sync_type), count($items_from_api), $imported_count, $skipped_count, $failed_count, $total_items_reported_by_api),
+            'next_offset' => $new_offset,
+            'total_items' => $total_items_reported_by_api,
+            'has_more' => $has_more,
+            'processed_type' => $sync_type,
+            'batch_logs' => $batch_detailed_logs
+        ]);
+    }
+
+    // New AJAX handler for Order Batch Sync
+    public function ajax_order_batch_sync() {
+        check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]); return;
+        }
+        set_time_limit(600); // Orders can be very heavy
+
+        $api_essentials = $this->_get_api_essentials();
+        if (is_wp_error($api_essentials)) {
+            wp_send_json_error(['message' => $api_essentials->get_error_message()]); return;
+        }
+
+        $limit_per_api_call = apply_filters('ecwid_wc_sync_order_api_limit', 10); // Orders are complex
+        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        $sync_type = 'orders'; // Fixed
+
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("Ecwid Sync: ORDER BATCH - Offset: $offset, API Limit: $limit_per_api_call");
+        }
+        
+        $api_url_base = $api_essentials['base_url'] . '/orders';
+        // Define desired fields for orders - this needs to be comprehensive
+        $responseFields = 'items(orderNumber,vendorOrderNumber,customerId,email,customerGroup,ipAddress,paymentMethod,paymentModule,paymentStatus,fulfillmentStatus,orderComments,privateAdminNotes,items(productId,sku,name,price,quantity,options,taxes),billingPerson,shippingPerson,total,subtotal,tax,shipping,couponDiscount,volumeDiscount,discount,handlingFee,createDate,updateDate,refundedAmount,paymentParams,taxesOnShipping)'; // Highly detailed
+        $query_params_for_url = [
+            'limit' => $limit_per_api_call, 
+            'offset' => $offset, 
+            'responseFields' => $responseFields,
+            'sortBy' => 'UPDATE_DATE_DESC' // Or CREATION_DATE_ASC/DESC as preferred
+        ];
+
+        $api_url = add_query_arg($query_params_for_url, $api_url_base);
+        $response = wp_remote_get($api_url, [
+            'timeout' => 120, // Longer timeout for orders
+            'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
+        ]);
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'ecwid2woo-product-sync'), $response->get_error_message())]); return;
+        }
+        $raw_response_body = wp_remote_retrieve_body($response);
+        $body = json_decode($raw_response_body, true);
+        $http_code = wp_remote_retrieve_response_code($response);
+
+        if ($http_code !== 200 || !is_array($body) || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
+            wp_send_json_error(['message' => sprintf(__('Ecwid API Error (HTTP %s): %s', 'ecwid2woo-product-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error'))]); return;
+        }
+
+        $items_from_api = $body['items'] ?? [];
+        $total_items_reported_by_api = $body['total'] ?? 0;
+        $count_in_current_api_response = $body['count'] ?? count($items_from_api);
+        
+        $imported_count = 0; $skipped_count = 0; $failed_count = 0;
+        $batch_detailed_logs = [];
+
+        if (!empty($items_from_api)) {
+            foreach ($items_from_api as $item_data) {
+                 if (!is_array($item_data) || !isset($item_data['orderNumber'])) { // Ecwid uses orderNumber as a key identifier
+                    $batch_detailed_logs[] = "--- [CRITICAL ERROR] Encountered invalid order data in API response. Skipping. Item data: " . print_r($item_data, true) . " ---";
+                    $failed_count++;
+                    continue;
+                }
+                $result_array = $this->import_order($item_data);
+                // ... (Log handling similar to other batch syncs) ...
+                if ($result_array && isset($result_array['status'])) {
+                    if ($result_array['status'] === 'imported') $imported_count++;
+                    elseif ($result_array['status'] === 'skipped') $skipped_count++;
+                    else $failed_count++;
+
+                    $log_item_name = esc_html($result_array['item_name'] ?? ('Order #' . $item_data['orderNumber']));
+                    $log_ecwid_id = esc_html($result_array['ecwid_id'] ?? $item_data['orderNumber']); // Using orderNumber as a proxy for Ecwid ID here for logs
+
+                    $batch_detailed_logs[] = "--- Processing: {$log_item_name} (Ecwid OrderNumber: {$log_ecwid_id}) ---";
+                    if (!empty($result_array['logs']) && is_array($result_array['logs'])) {
+                        foreach($result_array['logs'] as $log_line) { $batch_detailed_logs[] = "  " . esc_html($log_line); }
+                    }
+                    $batch_detailed_logs[] = "--- Result for {$log_ecwid_id}: " . strtoupper($result_array['status']) . " ---";
+                } else {
+                    $failed_count++;
+                     $batch_detailed_logs[] = "--- [CRITICAL ERROR] Failed to process order: " . esc_html('Order #' . $item_data['orderNumber']) . ". Import function did not return expected result. ---";
+                }
+                 $batch_detailed_logs[] = " ";
+            }
+        } elseif ($offset === 0 && $limit_per_api_call > 0) {
+             $batch_detailed_logs[] = "No items received from Ecwid API for $sync_type with offset $offset and limit $limit_per_api_call. This might be normal if there are no items of this type or all have been processed.";
+        }
+
+        $new_offset = $offset + $count_in_current_api_response;
+        $has_more = false;
+        if ($count_in_current_api_response > 0) {
+            if (isset($body['total']) && isset($body['offset']) && isset($body['count'])) {
+                 $has_more = ($body['total'] > ($body['offset'] + $body['count']));
+            } elseif ($count_in_current_api_response === $limit_per_api_call) {
+                $has_more = true;
+            }
+        }
+        if (isset($body['total']) && $new_offset >= $body['total']) {
+            $has_more = false;
+        }
+        
+        wp_send_json_success([
+            'message' => sprintf(__('%1$s: Processed %2$d items (Imported: %3$d, Skipped: %4$d, Failed: %5$d). Total (Ecwid): %6$d.', 'ecwid2woo-product-sync'), ucfirst($sync_type), count($items_from_api), $imported_count, $skipped_count, $failed_count, $total_items_reported_by_api),
+            'next_offset' => $new_offset,
+            'total_items' => $total_items_reported_by_api,
+            'has_more' => $has_more,
+            'processed_type' => $sync_type,
+            'batch_logs' => $batch_detailed_logs
+        ]);
+    }
+
     private function import_category($item) {
         $category_logs = [];
         $ecwid_cat_id = $item['id'] ?? null;
@@ -688,6 +984,428 @@ class Ecwid_WC_Sync {
             return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
         }
     }
+
+    private function import_customer($item_data) {
+        $customer_logs = [];
+        $ecwid_customer_id = $item_data['id'] ?? null;
+        $email = $item_data['email'] ?? null;
+
+        if (!$ecwid_customer_id || !$email) {
+            $customer_logs[] = "[CRITICAL] Customer data missing Ecwid ID or Email.";
+            return ['status' => 'failed', 'logs' => $customer_logs, 'item_name' => ($email ?? 'Unknown'), 'ecwid_id' => ($ecwid_customer_id ?? 'N/A')];
+        }
+        $customer_logs[] = "Starting import for Customer: $email (Ecwid ID: $ecwid_customer_id)";
+
+        $user_id = null;
+        // Try to find existing user by Ecwid customer ID meta
+        $user_query_by_meta = new WP_User_Query([
+            'meta_key' => '_ecwid_customer_id',
+            'meta_value' => $ecwid_customer_id,
+            'number' => 1,
+            'fields' => 'ID',
+        ]);
+        if (!empty($user_query_by_meta->get_results())) {
+            $user_id = $user_query_by_meta->get_results()[0];
+            $customer_logs[] = "Found existing WC User ID $user_id by _ecwid_customer_id meta.";
+        }
+
+        // If not found by meta, try by email
+        if (!$user_id) {
+            $existing_user = get_user_by('email', $email);
+            if ($existing_user) {
+                $user_id = $existing_user->ID;
+                $customer_logs[] = "Found existing WC User ID $user_id by email $email. Will link to Ecwid ID $ecwid_customer_id.";
+                // Link it now if found by email but not meta
+                update_user_meta($user_id, '_ecwid_customer_id', $ecwid_customer_id);
+            }
+        }
+
+        $billing_person = $item_data['billingPerson'] ?? [];
+        $shipping_person = $item_data['shippingPerson'] ?? [];
+
+        $user_data = [
+            'user_email' => $email,
+            'first_name' => $billing_person['name'] ?? ($shipping_person['name'] ?? ''), // Ecwid often has full name in 'name'
+            // WooCommerce typically splits first/last name. Ecwid's 'name' field might need parsing logic.
+            // For simplicity, using full name as first_name or consider parsing logic.
+            'billing_first_name' => $billing_person['name'] ?? '',
+            'billing_company'    => $billing_person['companyName'] ?? '',
+            'billing_address_1'  => $billing_person['street'] ?? '',
+            'billing_city'       => $billing_person['city'] ?? '',
+            'billing_postcode'   => $billing_person['postalCode'] ?? '',
+            'billing_country'    => $billing_person['countryCode'] ?? '',
+            'billing_state'      => $billing_person['stateOrRegionCode'] ?? '',
+            'billing_phone'      => $billing_person['phone'] ?? '',
+            'shipping_first_name'=> $shipping_person['name'] ?? '',
+            'shipping_company'   => $shipping_person['companyName'] ?? '',
+            'shipping_address_1' => $shipping_person['street'] ?? '',
+            'shipping_city'      => $shipping_person['city'] ?? '',
+            'shipping_postcode'  => $shipping_person['postalCode'] ?? '',
+            'shipping_country'   => $shipping_person['countryCode'] ?? '',
+            'shipping_state'     => $shipping_person['stateOrRegionCode'] ?? '',
+            // 'shipping_phone'  // WC doesn't have a default shipping_phone on user meta directly, often on order
+        ];
+        // Split name if possible (basic example)
+        if (!empty($user_data['first_name'])) {
+            $name_parts = explode(' ', $user_data['first_name'], 2);
+            $user_data['first_name'] = $name_parts[0];
+            $user_data['last_name'] = $name_parts[1] ?? '';
+            if (empty($user_data['billing_last_name']) && !empty($user_data['last_name'])) $user_data['billing_last_name'] = $user_data['last_name'];
+            if (empty($user_data['shipping_last_name']) && !empty($user_data['last_name'])) $user_data['shipping_last_name'] = $user_data['last_name'];
+        }
+
+
+        if ($user_id) { // Update existing user
+            $customer_logs[] = "Updating existing user ID: $user_id.";
+            $user_data['ID'] = $user_id;
+            $result = wp_update_user($user_data); // wp_update_user handles core fields
+            if (is_wp_error($result)) {
+                $customer_logs[] = "[ERROR] Failed to update user: " . $result->get_error_message();
+                return ['status' => 'failed', 'logs' => $customer_logs, 'item_name' => $email, 'ecwid_id' => $ecwid_customer_id];
+            }
+            // Update user meta for billing/shipping
+            foreach ($user_data as $key => $value) {
+                if (strpos($key, 'billing_') === 0 || strpos($key, 'shipping_') === 0) {
+                    update_user_meta($user_id, $key, $value);
+                }
+            }
+            $customer_logs[] = "User updated successfully.";
+        } else { // Create new user
+            $customer_logs[] = "Creating new user for email: $email.";
+            $user_data['user_login'] = $email; // Or generate a unique username
+            $user_data['user_pass'] = wp_generate_password(); // Generate a random password
+            $user_data['role'] = 'customer';
+            
+            $new_user_id = wp_insert_user($user_data);
+            if (is_wp_error($new_user_id)) {
+                $customer_logs[] = "[ERROR] Failed to create user: " . $new_user_id->get_error_message();
+                return ['status' => 'failed', 'logs' => $customer_logs, 'item_name' => $email, 'ecwid_id' => $ecwid_customer_id];
+            }
+            $user_id = $new_user_id;
+            // Update user meta for billing/shipping for new user too
+             foreach ($user_data as $key => $value) {
+                if (strpos($key, 'billing_') === 0 || strpos($key, 'shipping_') === 0) {
+                    update_user_meta($user_id, $key, $value);
+                }
+            }
+            update_user_meta($user_id, '_ecwid_customer_id', $ecwid_customer_id);
+            $customer_logs[] = "User created successfully with ID: $user_id.";
+        }
+        
+        // Additional meta from Ecwid if needed
+        if (isset($item_data['customerGroupId'])) update_user_meta($user_id, '_ecwid_customer_group_id', $item_data['customerGroupId']);
+        if (isset($item_data['taxExempt'])) update_user_meta($user_id, '_ecwid_tax_exempt', $item_data['taxExempt']);
+        if (isset($item_data['taxId'])) update_user_meta($user_id, '_ecwid_tax_id', $item_data['taxId']);
+        if (isset($item_data['updatedDate'])) update_user_meta($user_id, '_ecwid_updated_date', gmdate('Y-m-d H:i:s', $item_data['updatedDate'] / 1000));
+
+
+        return ['status' => 'imported', 'logs' => $customer_logs, 'item_name' => $email, 'ecwid_id' => $ecwid_customer_id];
+    }
+
+    // New method to import/update a single order (Skeleton with key areas)
+    private function import_order($item_data) {
+        $order_logs = [];
+        $ecwid_order_number = $item_data['orderNumber'] ?? null; // Ecwid's primary order identifier
+        // Ecwid also has an internal 'id' for orders, but 'orderNumber' is often what's exposed/used.
+        // Let's assume 'orderNumber' is the unique key we'll store. If Ecwid provides a separate stable 'id', prefer that.
+        // For this example, we'll use 'orderNumber' as the reference.
+        $ecwid_internal_order_id = $item_data['id'] ?? $ecwid_order_number; // Prefer 'id' if available, fallback to orderNumber
+
+        if (!$ecwid_order_number) {
+            $order_logs[] = "[CRITICAL] Order data missing Ecwid Order Number.";
+            return ['status' => 'failed', 'logs' => $order_logs, 'item_name' => 'Unknown Order', 'ecwid_id' => 'N/A'];
+        }
+        $order_logs[] = "Starting import for Order: #$ecwid_order_number (Ecwid Internal ID: $ecwid_internal_order_id)";
+
+        // 1. Find existing WC Order by Ecwid Order Number/ID meta
+        $wc_order_id = null;
+        $order_query_args = [
+            'post_type'   => 'shop_order',
+            'post_status' => 'any', // wc_get_order_statuses() keys
+            'meta_query'  => [
+                [
+                    'key'     => '_ecwid_order_number', // Or _ecwid_order_id if using internal ID
+                    'value'   => $ecwid_order_number,
+                ]
+            ],
+            'posts_per_page' => 1,
+            'fields' => 'ids'
+        ];
+        $existing_orders = get_posts($order_query_args);
+        if (!empty($existing_orders)) {
+            $wc_order_id = $existing_orders[0];
+            $order_logs[] = "Found existing WC Order ID $wc_order_id for Ecwid Order #$ecwid_order_number.";
+        }
+
+        try {
+            $order = $wc_order_id ? wc_get_order($wc_order_id) : null;
+            $is_new_order = !$order;
+
+            if ($is_new_order) {
+                $order = wc_create_order(['status' => 'pending']); // Create with a default status
+                if (!$order) {
+                    $order_logs[] = "[CRITICAL] Failed to create new WC_Order object.";
+                    return ['status' => 'failed', 'logs' => $order_logs, 'item_name' => "#$ecwid_order_number", 'ecwid_id' => $ecwid_internal_order_id];
+                }
+                $wc_order_id = $order->get_id();
+                $order_logs[] = "Created new WC Order ID: $wc_order_id.";
+                update_post_meta($wc_order_id, '_ecwid_order_number', $ecwid_order_number);
+                update_post_meta($wc_order_id, '_ecwid_internal_order_id', $ecwid_internal_order_id); // Store internal ID too
+            } else {
+                $order_logs[] = "Updating existing WC Order ID: $wc_order_id.";
+                // Clear existing items, fees, shipping to rebuild from Ecwid data (or implement more granular update)
+                $order->remove_order_items('line_item');
+                $order->remove_order_items('fee');
+                $order->remove_order_items('shipping');
+                // $order->remove_order_items('tax'); // Be careful with tax if WC calculates it
+            }
+
+            // 2. Customer Association
+            $ecwid_customer_id_on_order = $item_data['customerId'] ?? null;
+            $customer_email_on_order = $item_data['email'] ?? null;
+            $wc_customer_id = 0;
+
+            if ($ecwid_customer_id_on_order) {
+                $user_query = new WP_User_Query([
+                    'meta_key' => '_ecwid_customer_id', 'meta_value' => $ecwid_customer_id_on_order,
+                    'number' => 1, 'fields' => 'ID'
+                ]);
+                if (!empty($user_query->get_results())) $wc_customer_id = $user_query->get_results()[0];
+            }
+            if (!$wc_customer_id && $customer_email_on_order) {
+                $user = get_user_by('email', $customer_email_on_order);
+                if ($user) $wc_customer_id = $user->ID;
+            }
+            if ($wc_customer_id) {
+                $order->set_customer_id($wc_customer_id);
+                $order_logs[] = "Associated order with WC Customer ID: $wc_customer_id.";
+            } else {
+                $order_logs[] = "No WC customer found to associate. Order will be guest order or use billing email.";
+                // For guest orders, WC uses billing email.
+            }
+
+
+
+            // 3. Billing & Shipping Addresses
+            $billing_person = $item_data['billingPerson'] ?? [];
+            $shipping_person = $item_data['shippingPerson'] ?? [];
+            $order->set_billing_first_name($this->parse_name_part($billing_person['name'] ?? '', 'first'));
+            $order->set_billing_last_name($this->parse_name_part($billing_person['name'] ?? '', 'last'));
+            $order->set_billing_company($billing_person['companyName'] ?? '');
+            $order->set_billing_address_1($billing_person['street'] ?? '');
+            // $order->set_billing_address_2(''); // Ecwid street might contain both lines
+            $order->set_billing_city($billing_person['city'] ?? '');
+            $order->set_billing_state($billing_person['stateOrRegionCode'] ?? '');
+            $order->set_billing_postcode($billing_person['postalCode'] ?? '');
+            $order->set_billing_country($billing_person['countryCode'] ?? '');
+            $order->set_billing_email($customer_email_on_order ?? ($billing_person['email'] ?? '')); // Ecwid might have email on billingPerson too
+            $order->set_billing_phone($billing_person['phone'] ?? '');
+
+            if (!empty($shipping_person)) {
+                $order->set_shipping_first_name($this->parse_name_part($shipping_person['name'] ?? '', 'first'));
+                $order->set_shipping_last_name($this->parse_name_part($shipping_person['name'] ?? '', 'last'));
+                $order->set_shipping_company($shipping_person['companyName'] ?? '');
+                $order->set_shipping_address_1($shipping_person['street'] ?? '');
+                $order->set_shipping_city($shipping_person['city'] ?? '');
+                $order->set_shipping_state($shipping_person['stateOrRegionCode'] ?? '');
+                $order->set_shipping_postcode($shipping_person['postalCode'] ?? '');
+                $order->set_shipping_country($shipping_person['countryCode'] ?? '');
+                // $order->set_shipping_phone($shipping_person['phone'] ?? ''); // WC_Order doesn't have set_shipping_phone
+            } else {
+                // If no shipping person, copy from billing (common WooCommerce behavior)
+                $order->set_shipping_first_name($order->get_billing_first_name());
+                $order->set_shipping_last_name($order->get_billing_last_name());
+                // ... and so on for all shipping fields
+            }
+            $order_logs[] = "Billing and shipping addresses set.";
+
+            // 4. Order Items
+            if (isset($item_data['items']) && is_array($item_data['items'])) {
+                foreach ($item_data['items'] as $ecwid_item) {
+                    $product_id = 0;
+                    $sku = $ecwid_item['sku'] ?? null;
+                    $ecwid_product_id = $ecwid_item['productId'] ?? null;
+
+                    if ($ecwid_product_id) {
+                         $product_posts = get_posts(['post_type' => 'product', 'meta_key' => '_ecwid_product_id', 'meta_value' => $ecwid_product_id, 'post_status' => 'any', 'numberposts' => 1, 'fields' => 'ids']);
+                         if (!empty($product_posts)) $product_id = $product_posts[0];
+                    }
+                    if (!$product_id && $sku) {
+                        $product_id = wc_get_product_id_by_sku($sku);
+                    }
+
+                    if ($product_id) {
+                        $product = wc_get_product($product_id);
+                        if ($product) {
+                            $item_args = [
+                                'name' => $ecwid_item['name'] ?? $product->get_name(),
+                                'quantity' => $ecwid_item['quantity'] ?? 1,
+                                'total' => floatval($ecwid_item['price'] ?? 0) * intval($ecwid_item['quantity'] ?? 1), // Ecwid 'price' is usually per item before quantity
+                                'subtotal' => floatval($ecwid_item['price'] ?? 0) * intval($ecwid_item['quantity'] ?? 1),
+                                // 'taxes' => [], // Handle taxes separately if needed
+                            ];
+                            // If it's a variation, find variation ID
+                            // This part is complex if Ecwid item options need to map to WC variation attributes
+                            // For simplicity, assuming simple product or already matched variation if $product_id is a variation_id
+                            $line_item_id = $order->add_product($product, $item_args['quantity'], $item_args);
+                            if ($line_item_id) {
+                                $order_logs[] = "Added product '{$item_args['name']}' (WC ID: $product_id) to order. Line item ID: $line_item_id.";
+                                // Add line item meta if Ecwid provides options, etc.
+                                if(isset($ecwid_item['options']) && is_array($ecwid_item['options'])){
+                                    foreach($ecwid_item['options'] as $opt){
+                                        wc_add_order_item_meta($line_item_id, sanitize_text_field($opt['name']), sanitize_text_field($opt['value']));
+                                    }
+                                }
+                            } else {
+                                $order_logs[] = "[ERROR] Failed to add product '{$item_args['name']}' (WC ID: $product_id) to order.";
+                            }
+                        } else {
+                            $order_logs[] = "[WARNING] WC Product not found for ID: $product_id (Ecwid SKU: $sku). Item '{$ecwid_item['name']}' not added.";
+                        }
+                    } else {
+                        $order_logs[] = "[WARNING] Could not find WC product for Ecwid item SKU: $sku, Name: '{$ecwid_item['name']}'. Item not added.";
+                        // Optionally, add as a simple line item with name and price if product not found
+                    }
+                }
+            }
+            $order_logs[] = "Order items processed.";
+
+            // 5. Shipping
+            if (isset($item_data['shippingOption']['shippingMethodName']) || isset($item_data['shipping'])) {
+                $shipping_method_title = $item_data['shippingOption']['shippingMethodName'] ?? 'Shipping';
+                $shipping_total = floatval($item_data['shipping'] ?? 0);
+                $shipping_item = new WC_Order_Item_Shipping();
+                $shipping_item->set_method_title($shipping_method_title);
+                $shipping_item->set_total($shipping_total);
+                // $shipping_item->set_taxes(...); // If Ecwid provides shipping tax details
+                $order->add_item($shipping_item);
+                $order_logs[] = "Shipping method '{$shipping_method_title}' with cost {$shipping_total} added.";
+            }
+
+            // 6. Fees, Discounts (Coupons) - Simplified
+            // Ecwid has couponDiscount, volumeDiscount, discount. WC has coupon lines.
+            if (isset($item_data['couponDiscount']) && floatval($item_data['couponDiscount']) > 0) {
+                $fee_item = new WC_Order_Item_Fee();
+                $fee_item->set_name(__('Coupon Discount', 'ecwid2woo-product-sync')); // Or Ecwid coupon code if available
+                $fee_item->set_total(-floatval($item_data['couponDiscount'])); // Negative for discount
+                $fee_item->set_tax_status('none'); // Or apply tax if applicable
+                $order->add_item($fee_item);
+                $order_logs[] = "Added coupon discount: " . $item_data['couponDiscount'];
+            }
+            // Other discounts might be harder to map directly to WC coupon system.
+
+            // 7. Taxes - Complex: WC can calculate taxes or use imported ones.
+            // Ecwid provides 'tax'. If you want to use Ecwid's tax amount:
+            if (isset($item_data['tax'])) {
+                // This is a simplified way. WC tax handling is intricate.
+                // $order->set_total_tax(floatval($item_data['tax']));
+                // Or add as a tax line item if you know the rate and label
+                // $tax_item = new WC_Order_Item_Tax();
+                // $tax_item->set_rate_id(...); $tax_item->set_label(...); $tax_item->set_tax_total(...);
+                // $order->add_item($tax_item);
+                $order_logs[] = "Ecwid tax amount: " . $item_data['tax'] . ". Manual or specific tax line handling might be needed.";
+            }
+
+
+            // 8. Totals
+            $order->set_discount_total(floatval($item_data['discount'] ?? 0) + floatval($item_data['couponDiscount'] ?? 0) + floatval($item_data['volumeDiscount'] ?? 0));
+            // $order->set_shipping_total(floatval($item_data['shipping'] ?? 0)); // Already handled by shipping item
+            $order->set_total(floatval($item_data['total'] ?? 0)); // This should be the final amount
+            $order_logs[] = "Order totals set. Grand Total: " . $order->get_total();
+
+            // 9. Order Status Mapping
+            $ecwid_payment_status = $item_data['paymentStatus'] ?? 'AWAITING_PAYMENT';
+            $ecwid_fulfillment_status = $item_data['fulfillmentStatus'] ?? 'AWAITING_PROCESSING';
+            $wc_status = 'pending'; // Default
+
+            // Basic mapping (this needs to be robust and cover all Ecwid statuses)
+            if ($ecwid_payment_status === 'PAID') {
+                if ($ecwid_fulfillment_status === 'SHIPPED' || $ecwid_fulfillment_status === 'DELIVERED') {
+                    $wc_status = 'completed';
+                } else {
+                    $wc_status = 'processing';
+                }
+            } elseif ($ecwid_payment_status === 'CANCELLED' || $ecwid_payment_status === 'DECLINED') {
+                $wc_status = 'cancelled';
+            } elseif ($ecwid_payment_status === 'REFUNDED' || $ecwid_payment_status === 'PARTIALLY_REFUNDED') {
+                $wc_status = 'refunded'; // Or custom status if partially
+            }
+            // Add more mappings as needed
+            $order->set_status($wc_status, 'Imported from Ecwid.', false); // false to not save yet
+            $order_logs[] = "Ecwid Payment Status: $ecwid_payment_status, Fulfillment: $ecwid_fulfillment_status. Mapped to WC Status: $wc_status.";
+
+            // 10. Payment Information
+            $order->set_payment_method($item_data['paymentModule'] ?? ($item_data['paymentMethod'] ?? 'unknown'));
+            $order->set_payment_method_title($item_data['paymentMethod'] ?? 'Unknown');
+            if (isset($item_data['paymentParams']) && is_array($item_data['paymentParams'])) {
+                foreach($item_data['paymentParams'] as $key => $value) {
+                    if (is_scalar($value)) { // Only store scalar values
+                         update_post_meta($wc_order_id, '_ecwid_payment_param_' . sanitize_key($key), sanitize_text_field($value));
+                    }
+                }
+            }
+            if ($ecwid_payment_status === 'PAID' && !$order->is_paid()) {
+                // $order->payment_complete($transaction_id_if_available_from_ecwid); // Mark as paid
+                // Ecwid might not provide a transaction ID directly in the main order object easily.
+                // It might be in paymentParams or require another API call.
+                // For now, just log.
+                $order_logs[] = "Order marked as PAID in Ecwid. Consider calling \$order->payment_complete().";
+            }
+
+            // 11. Order Notes / Comments
+            if (!empty($item_data['orderComments'])) {
+                $order->add_order_note('Customer Comment (from Ecwid): ' . esc_html($item_data['orderComments']), false, false); // is_customer_note = false
+            }
+            if (!empty($item_data['privateAdminNotes'])) {
+                $order->add_order_note('Private Admin Note (from Ecwid): ' . esc_html($item_data['privateAdminNotes']), false, false);
+            }
+
+            // 12. Dates
+            if (isset($item_data['createDate'])) { // Ecwid timestamp is in milliseconds
+                $order->set_date_created(gmdate('Y-m-d H:i:s', $item_data['createDate'] / 1000));
+            }
+            if (isset($item_data['updateDate'])) {
+                $order->set_date_modified(gmdate('Y-m-d H:i:s', $item_data['updateDate'] / 1000));
+            }
+            
+            // 13. Refunds
+            // Ecwid's `refundedAmount` field indicates total refunded.
+            // Creating actual WC_Refund objects is more involved.
+            // If `refundedAmount` > 0 and no WC refunds exist for this order matching that amount,
+            // you might create a WC refund. This is a simplified check.
+            $ecwid_refunded_amount = floatval($item_data['refundedAmount'] ?? 0);
+            if ($ecwid_refunded_amount > 0) {
+                $order_logs[] = "Ecwid order has refundedAmount: $ecwid_refunded_amount. Manual refund creation in WC might be needed or further logic to create WC_Refund objects.";
+                // Example: wc_create_refund( array( 'amount' => $ecwid_refunded_amount, 'reason' => 'Refunded in Ecwid', 'order_id' => $wc_order_id, 'line_items' => array() ) );
+                // This requires careful handling of line items for refunds.
+            }
+
+            // 14. Save Order
+            $order->save();
+            $order_logs[] = "WC Order #$wc_order_id saved successfully.";
+
+            return ['status' => 'imported', 'logs' => $order_logs, 'item_name' => "#$ecwid_order_number", 'ecwid_id' => $ecwid_internal_order_id];
+
+        } catch (Exception $e) {
+            $order_logs[] = "[PHP EXCEPTION] During order import for Ecwid Order #$ecwid_order_number: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine();
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: PHP Exception during order import for Ecwid Order #$ecwid_order_number: " . $e->getMessage() . " Trace: " . $e->getTraceAsString());
+            }
+            return ['status' => 'failed', 'logs' => $order_logs, 'item_name' => "#$ecwid_order_number", 'ecwid_id' => $ecwid_internal_order_id];
+        }
+    }
+
+    // Helper to parse name from Ecwid's single 'name' field
+    private function parse_name_part($full_name, $part = 'first') {
+        $name_parts = explode(' ', trim($full_name), 2);
+        if ($part === 'first') {
+            return $name_parts[0] ?? '';
+        } elseif ($part === 'last') {
+            return $name_parts[1] ?? '';
+        }
+        return $full_name;
+    }
+
 
     private function import_product($item) {
         $product_logs = [];
