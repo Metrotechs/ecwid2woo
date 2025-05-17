@@ -4,76 +4,112 @@ Synchronize your Ecwid store’s categories and products into WooCommerce, compl
 
 ## Key Features
 
-- **Two-Phase Full Sync**  
-  1. Import all Ecwid categories (with parent/child relationships).  
-  2. Import all enabled Ecwid products (simple & variable).
+- **Comprehensive Full Sync**
+  -   Fetches and displays initial counts of total categories, products, and variations to be synced.
+  -   **Phase 1: Category Import:** Imports all Ecwid categories, preserving parent/child relationships.
+  -   **Phase 2: Product Import:** Imports all enabled Ecwid products (both simple and variable types).
 
-- **Category-Only Sync**  
-  A dedicated “Category Sync” tab to import or update categories without touching products—including a “Fix Category Hierarchy” helper.
+- **Dedicated Category Sync & Management**
+  -   A “Category Sync” tab allows importing or updating categories independently of products.
+  -   Includes a “Fix Category Hierarchy” tool to resolve parent-child relationships if parent categories were initially missing.
+  -   Manages "Placeholder" categories for items whose parents were not yet synced, accessible via a "Placeholders" admin menu.
 
-- **Selective Product Sync**  
-  The “Product Sync” tab lets you load your Ecwid catalog, pick individual items, and import/update just those products.
+- **Selective Product Sync**
+  -   The “Product Sync” tab enables loading your Ecwid product catalog.
+  -   Allows you to select individual products (or all) for import or update.
 
-- **Full Product Data**  
-  - Names, SKUs, long & short descriptions  
-  - Regular & sale prices (uses Ecwid’s “Compare-To” price)  
-  - Stock quantity & management status  
-  - Weight, dimensions, publish status  
-  - Featured and gallery images (avoids re-downloading unchanged files)
+- **Detailed Product Data Sync**
+  -   Syncs product names, SKUs, and both long and short descriptions.
+  -   Handles regular and sale prices (utilizing Ecwid’s “Compare-To” price for sale prices).
+  -   Manages stock quantity and stock management status.
+  -   Imports product weight and dimensions.
+  -   Sets WooCommerce product publish status based on Ecwid's enabled status.
+  -   Syncs featured images and gallery images, with checks to avoid re-downloading unchanged files.
 
-- **Variable Products & Attributes**  
-  Translates Ecwid options/combinations into WooCommerce global attributes, terms, and variations with per-variation SKU, price, stock, and weight.
+- **Advanced Variable Products & Attributes Handling**
+  -   Translates Ecwid product options and combinations into WooCommerce global product attributes and terms.
+  -   Creates corresponding product variations in WooCommerce.
+  -   Syncs per-variation SKU, price (regular and sale), stock quantity, and weight.
 
-- **Batch Processing & AJAX UI**  
-  All sync operations run in batches via AJAX to prevent timeouts, with progress bars & live logs for clear feedback.
+- **Robust AJAX-Powered UI & Batch Processing**
+  -   All synchronization operations (Full, Category, Product) are performed in batches using AJAX to prevent server timeouts.
+  -   Provides real-time feedback through progress bars for overall and step-specific progress.
+  -   Displays live, detailed logging for each operation within the respective sync tab.
 
-- **Idempotent Updates**  
-  Matches existing WooCommerce terms/products by Ecwid ID (stored in meta) or SKU—no duplicates on re-sync.
+- **Idempotent Operations for Safe Re-Syncing**
+  -   Intelligently matches existing WooCommerce terms (categories) and products.
+  -   Uses Ecwid ID (stored in WooCommerce meta fields) as the primary identifier, falling back to SKU for products.
+  -   Prevents duplicate entries on subsequent syncs, updating existing items instead.
 
 ## Requirements
 
-- WordPress 5.0+  
-- WooCommerce 3.0+  
-- PHP 7.2+ with cURL extension  
-- Valid Ecwid Store ID & Secret Token
+- WordPress 5.0+
+- WooCommerce 3.0+
+- PHP 7.2+ with the cURL extension enabled
+- A valid Ecwid Store ID and API Secret Token
 
 ## Installation
 
-1. Download the ZIP from GitHub.  
-2. In WP Admin → **Plugins → Add New** → **Upload Plugin**, choose the ZIP → **Install Now** → **Activate**.  
-   _Or manually unzip into `/wp-content/plugins/ecwid2woo-product-sync/` and activate._
+1.  Download the latest release ZIP file from the GitHub repository.
+2.  In your WordPress Admin dashboard, navigate to **Plugins → Add New**.
+3.  Click the **Upload Plugin** button.
+4.  Choose the downloaded ZIP file and click **Install Now**.
+5.  After installation, click **Activate Plugin**.
+
+Alternatively, you can manually unzip the plugin and upload the `ecwid2woo-product-sync` folder to your `/wp-content/plugins/` directory, then activate it from the Plugins page.
 
 ## Usage
 
-After activation you’ll see a top-level menu in WooCommerce admin:
+Once activated, the plugin adds a new top-level menu item in your WordPress admin sidebar: **Ecwid2Woo Sync**.
 
-**Ecwid2Woo Product Sync**
+### 1. Configure Settings
 
-### 1. Sync Settings
+1.  Navigate to **Ecwid2Woo Sync → Settings**.
+2.  Enter your Ecwid **Store ID**.
+3.  Enter your Ecwid **API Secret Token**.
+4.  Click **Save Settings**.
+    *   _These credentials are required for the plugin to communicate with your Ecwid store._
 
-1. Go to **Ecwid2Woo Product Sync → Settings**.  
-2. Enter your Ecwid **Store ID** and **API Secret Token**.  
-3. Save Changes.
+### 2. Perform a Full Sync
 
-### 2. Full Sync
+This is recommended for the initial setup or when you want to synchronize everything.
 
-1. Navigate to **Ecwid2Woo Product Sync → Full Sync**.  
-2. Click **Start Full Sync**.  
-3. Watch the progress bar and log for category import, then product import.
+1.  Navigate to **Ecwid2Woo Sync → Full Sync**.
+2.  The page will first attempt to fetch and display the total number of categories, products, and variations found in your Ecwid store.
+3.  Click the **Start Full Sync** button.
+4.  Monitor the progress:
+    *   An overall progress bar tracks the entire sync process (categories, then products).
+    *   The status text will show "X of Y" for the current step (e.g., "Syncing Categories: 50 of 100...").
+    *   A detailed log provides real-time updates on each item being processed.
 
-### 3. Category Sync
+### 3. Sync Categories Only
 
-1. Open **Ecwid2Woo Product Sync → Category Sync**.  
-2. Click **Start Category Sync** to import/update only categories.  
-3. If any parents were missing in the initial pass, use **Fix Category Hierarchy** to re-assign or create placeholders.
+Use this if you only need to update your category structure.
 
-### 4. Product Sync
+1.  Navigate to **Ecwid2Woo Sync → Category Sync**.
+2.  Click **Start Category Sync** to import or update all categories.
+3.  **Fix Category Hierarchy:** If some categories were imported before their parents, their hierarchy might be incorrect. After the category sync, click the **Fix Category Hierarchy** button to attempt to resolve these relationships. This tool uses placeholder data created during the sync.
 
-1. Select **Ecwid2Woo Product Sync → Product Sync**.  
-2. Click **Load Ecwid Products for Selection**.  
-3. Choose one or more products from the list.  
-4. Click **Import Selected Products**—only those items will be fetched and synced.
+### 4. Sync Specific Products (Selective Sync)
+
+Use this to import or update only selected products.
+
+1.  Navigate to **Ecwid2Woo Sync → Product Sync**.
+2.  Click **Load Ecwid Products for Selection**. This will fetch a list of all enabled products from your Ecwid store.
+3.  Once the list appears, you can select individual products using the checkboxes. A "Select All/None" option is also available.
+4.  After making your selections, click **Import Selected Products**.
+5.  The plugin will then process only the chosen products, with progress and logs displayed.
+
+### 5. Manage Placeholders
+
+During category sync, if a category's parent is not yet synced, a temporary placeholder term and a corresponding "Ecwid Placeholder" post are created.
+
+1.  Navigate to **Ecwid2Woo Sync → Placeholders**.
+2.  This screen lists all placeholder posts. While direct management here is limited, these placeholders are primarily used by the "Fix Category Hierarchy" tool. Once hierarchies are fixed, these placeholders may no longer be actively referenced.
 
 ---
 
-_For detailed troubleshooting, enable WP_DEBUG_LOG to capture server-side errors in `wp-content/debug.log`. Logs appear live in each sync tab’s log panel._
+**Troubleshooting & Logs:**
+
+-   Each sync tab (Full, Category, Product) provides a live log panel displaying detailed information about the ongoing process, including successes, warnings, and errors.
+-   For server-side debugging, ensure `WP_DEBUG` and `WP_DEBUG_LOG` are enabled in your `wp-config.php` file. PHP errors and plugin-specific error_log messages will be written to `/wp-content/debug.log`.
