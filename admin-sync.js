@@ -45,7 +45,7 @@
         const fullSyncProgressBar = $('#full-sync-bar');
         const fullSyncStatusDiv = $('#full-sync-status');
         const fullSyncLogDiv = $('#full-sync-log');
-        const fullSyncStepProgressBar = $('#full-sync-step-bar'); // New progress bar element
+        const fullSyncCountsInfoDiv = $('#full-sync-counts-info'); // New UI element
 
         // Category Sync Page UI Elements
         const categoryPageSyncButton = $('#category-page-sync-button');
@@ -64,6 +64,9 @@
 
         let currentFullSyncStepIndex = 0;
         let overallFullSyncProgressOffset = 0; 
+        let totalCategoriesToSync = 0; // To store fetched category count
+        let totalProductsToSync = 0;   // To store fetched product count
+        let totalVariationsToSync = 0; // ADDED: To store fetched variation count
 
         let ecwidProductsForSelection = []; // Holds all products fetched for selection {id, name, sku, enabled, options}
         let productsToImportSelectedIds = []; // Holds IDs of products selected for import
@@ -93,28 +96,102 @@
         }
 
         // --- Full Sync Logic ---
+
+        // Function to fetch and display initial counts for Full Sync
+        function fetchAndDisplayFullSyncCounts() {
+            if (!fullSyncCountsInfoDiv.length) return; // Only run if the element exists
+
+            fullSyncCountsInfoDiv.text(i18n.fetching_counts);
+            fullSyncButton.addClass('disabled');
+
+            $.ajax({
+                url: ajax_url,
+                method: 'POST',
+                data: {
+                    action: 'ecwid_wc_fetch_full_sync_counts',
+                    nonce: nonce
+                },
+                success: function(response) {
+                    if (response.success) {
+                        totalCategoriesToSync = response.data.category_count || 0;
+                        totalProductsToSync = response.data.product_count || 0;
+                        totalVariationsToSync = response.data.variation_count || 0; // ADDED
+                        let countsText = '';
+                        countsText += i18n.categories_to_sync_info.replace('{count}', totalCategoriesToSync) + '<br>';
+                        countsText += i18n.products_to_sync_info.replace('{count}', totalProductsToSync) + '<br>';
+                        countsText += i18n.variations_to_sync_info.replace('{count}', totalVariationsToSync); // ADDED
+                        fullSyncCountsInfoDiv.html(countsText);
+                        fullSyncButton.removeClass('disabled');
+                    } else {
+                        let errorMsg = i18n.ajax_error;
+                        if (response.data && response.data.message) {
+                            errorMsg = response.data.message;
+                        }
+                        if (response.data && response.data.details) {
+                             errorMsg += " Details: " + response.data.details.join(", ");
+                        }
+                        // Still display any counts we did get
+                        totalCategoriesToSync = response.data && response.data.category_count ? response.data.category_count : 0;
+                        totalProductsToSync = response.data && response.data.product_count ? response.data.product_count : 0;
+                        totalVariationsToSync = response.data && response.data.variation_count ? response.data.variation_count : 0; // ADDED
+                        let countsText = `Error fetching counts. Sync may proceed with partial info.<br>`;
+                        countsText += i18n.categories_to_sync_info.replace('{count}', totalCategoriesToSync) + '<br>';
+                        countsText += i18n.products_to_sync_info.replace('{count}', totalProductsToSync) + '<br>';
+                        countsText += i18n.variations_to_sync_info.replace('{count}', totalVariationsToSync); // ADDED
+                        fullSyncCountsInfoDiv.html(`<span style="color:red;">${countsText}</span>`);
+                        logMessage(fullSyncLogDiv, "Error fetching initial counts: " + errorMsg, 'error');
+                        fullSyncButton.removeClass('disabled'); 
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    totalCategoriesToSync = 0;
+                    totalProductsToSync = 0;
+                    totalVariationsToSync = 0; // ADDED
+                    fullSyncCountsInfoDiv.html(`<span style="color:red;">${i18n.ajax_error} (fetching counts): ${textStatus} ${errorThrown || ''}</span>`);
+                    logMessage(fullSyncLogDiv, `AJAX Error fetching initial counts: ${textStatus} ${errorThrown || ''}`, 'error');
+                    fullSyncButton.removeClass('disabled'); 
+                }
+            });
+        }
+
+        // Call to fetch counts when the relevant page section is ready
+        if (fullSyncButton.length) { // Check if we are on the full sync page
+            fetchAndDisplayFullSyncCounts();
+        }
+
+
         fullSyncButton.on('click', function(e) {
             e.preventDefault();
             if (fullSyncButton.hasClass('disabled')) return;
 
             fullSyncButton.addClass('disabled').text(i18n.syncing_button);
-            fullSyncStatusDiv.text(i18n.sync_starting);
+            fullSyncStatusDiv.text(i18n.sync_starting); // Initial status
             updateProgressBar(fullSyncProgressBar, 0);
-            updateProgressBar(fullSyncStepProgressBar, 0); // Reset step progress bar
             fullSyncLogDiv.html('');
             currentFullSyncStepIndex = 0;
             overallFullSyncProgressOffset = 0;
             logMessage(fullSyncLogDiv, i18n.sync_starting, 'info');
+            // If counts were not fetched successfully, fetchAndDisplayFullSyncCounts might have left button enabled with error.
+            // Optionally, re-check counts or ensure they are valid before proceeding.
+            // For now, assume if button is clickable, we proceed.
             processNextFullSyncStep();
         });
 
         function processNextFullSyncStep() {
             if (currentFullSyncStepIndex < totalFullSyncSteps) {
                 const syncType = fullSyncSteps[currentFullSyncStepIndex];
-                updateStatus(fullSyncStatusDiv, i18n.syncing + ' ' + syncType + '...');
-                if (currentFullSyncStepIndex > 0) { // Reset step bar for subsequent steps
-                    updateProgressBar(fullSyncStepProgressBar, 0);
+                let currentTotalForStep = 0;
+                if (syncType === 'categories') {
+                    currentTotalForStep = totalCategoriesToSync;
+                } else if (syncType === 'products') {
+                    currentTotalForStep = totalProductsToSync;
                 }
+                // Update status to "Syncing {type}: 0 of {total}..."
+                const initialStepStatus = i18n.syncing_item_of_total
+                    .replace('{syncType}', syncType.charAt(0).toUpperCase() + syncType.slice(1))
+                    .replace('{current}', 0)
+                    .replace('{total}', currentTotalForStep > 0 ? currentTotalForStep : 'N/A');
+                updateStatus(fullSyncStatusDiv, initialStepStatus);
                 processFullSyncBatch(syncType, 0); 
             } else {
                 stopBatchStatusAnimation();
@@ -122,13 +199,12 @@
                 logMessage(fullSyncLogDiv, i18n.sync_complete, 'success');
                 fullSyncButton.removeClass('disabled').text(i18n.start_sync);
                 updateProgressBar(fullSyncProgressBar, 100);
-                updateProgressBar(fullSyncStepProgressBar, 100); // Show last step as 100%
             }
         }
 
         function processFullSyncBatch(syncType, offset) {
-            const baseStatusMessage = i18n.syncing + ' ' + syncType;
-            startBatchStatusAnimation(fullSyncStatusDiv, baseStatusMessage);
+            const currentStatusText = fullSyncStatusDiv.text(); 
+            startBatchStatusAnimation(fullSyncStatusDiv, currentStatusText);
 
             $.ajax({
                 url: ajax_url,
@@ -139,26 +215,38 @@
                     if (response.success) {
                         (response.data.batch_logs || []).forEach(logEntry => categorizeAndLog(fullSyncLogDiv, logEntry));
                         
+                        const itemsProcessedInStep = response.data.next_offset || 0;
+                        let grandTotalForStep = 0;
+                        if (syncType === 'categories') {
+                            grandTotalForStep = totalCategoriesToSync;
+                        } else if (syncType === 'products') {
+                            grandTotalForStep = totalProductsToSync;
+                        }
+
                         let rawCurrentStepProgress = 0; 
-                        if (response.data.total_items > 0) {
-                            rawCurrentStepProgress = (response.data.next_offset / response.data.total_items) * 100;
+                        if (grandTotalForStep > 0) {
+                            rawCurrentStepProgress = (itemsProcessedInStep / grandTotalForStep) * 100;
+                        } else if (response.data.total_items > 0) { // Fallback if initial counts were zero
+                            rawCurrentStepProgress = (itemsProcessedInStep / response.data.total_items) * 100;
                         } else if (response.data.has_more === false) { 
-                            rawCurrentStepProgress = 100;
+                            rawCurrentStepProgress = 100; // Step is complete if no total but has_more is false
                         }
                         rawCurrentStepProgress = Math.max(0, Math.min(100, rawCurrentStepProgress));
-                        let displayStepProgress = Math.round(rawCurrentStepProgress);
                         
                         let progressPerStep = 100 / totalFullSyncSteps;
                         let overallProgress = overallFullSyncProgressOffset + (rawCurrentStepProgress / 100 * progressPerStep);
                         
                         updateProgressBar(fullSyncProgressBar, overallProgress); 
-                        updateProgressBar(fullSyncStepProgressBar, displayStepProgress); // Update current step progress bar
-                        updateStatus(fullSyncStatusDiv, i18n.syncing + ' ' + syncType + `... ${displayStepProgress}%`);
+                        
+                        const stepStatusUpdate = i18n.syncing_item_of_total
+                            .replace('{syncType}', syncType.charAt(0).toUpperCase() + syncType.slice(1))
+                            .replace('{current}', itemsProcessedInStep)
+                            .replace('{total}', grandTotalForStep > 0 ? grandTotalForStep : (response.data.total_items || 'N/A'));
+                        updateStatus(fullSyncStatusDiv, stepStatusUpdate);
 
                         if (response.data.has_more) {
                             processFullSyncBatch(syncType, response.data.next_offset);
                         } else {
-                            updateProgressBar(fullSyncStepProgressBar, 100); // Ensure step bar shows 100% on completion
                             overallFullSyncProgressOffset += progressPerStep;
                             overallFullSyncProgressOffset = Math.min(100, overallFullSyncProgressOffset); 
                             currentFullSyncStepIndex++;
