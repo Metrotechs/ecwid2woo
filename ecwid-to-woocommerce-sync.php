@@ -16,12 +16,19 @@ WC requires at least: 3.0
 WC tested up to: 8.8 
 */
 
+// Declare HPOS compatibility
+add_action( 'before_woocommerce_init', function() {
+    if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
+    }
+} );
+
 if (!defined('ABSPATH')) {
     exit; // Exit if accessed directly
 }
 
 if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
-    define('ECWID2WOO_VARIATION_BATCH_SIZE', 10); // Number of variations to process per batch
+    define('ECWID2WOO_VARIATION_BATCH_SIZE', 50); // Number of variations to process per batch
 }
 
 define('ECWID2WOO_VERSION', '1.9.2'); // Define version constant
@@ -178,7 +185,7 @@ class Ecwid_WC_Sync {
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce'    => wp_create_nonce('ecwid_wc_sync_nonce'),
             'sync_steps' => $this->sync_steps,
-            'variation_batch_size' => defined('ECWID2WOO_VARIATION_BATCH_SIZE') ? ECWID2WOO_VARIATION_BATCH_SIZE : 10,
+            'variation_batch_size' => defined('ECWID2WOO_VARIATION_BATCH_SIZE') ? ECWID2WOO_VARIATION_BATCH_SIZE : 50,
             'i18n' => [
                 'sync_starting' => __('Sync starting...', 'ecwid2woo-product-sync'),
                 'sync_complete' => __('Sync Complete!', 'ecwid2woo-product-sync'),
@@ -1641,14 +1648,14 @@ class Ecwid_WC_Sync {
     public function ajax_fetch_full_sync_counts() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]);
+            wp_send_json_error(['message' => __('You do not have permission to perform this action.', 'ecwid2woo-product-sync')], 403);
             return;
         }
-        set_time_limit(600); // Increase time limit as variation counting can be long
+        set_time_limit(300); // 5 minutes
 
         $api_essentials = $this->_get_api_essentials();
         if (is_wp_error($api_essentials)) {
-            wp_send_json_error(['message' => $api_essentials->get_error_message()]);
+            wp_send_json_error(['message' => $api_essentials->get_error_message()], 500);
             return;
         }
 
@@ -1656,107 +1663,88 @@ class Ecwid_WC_Sync {
         $product_count = 0;
         $total_variation_count = 0;
         $errors = [];
+        $categories_preview = [];
+        $products_preview = [];
 
-        // Fetch category count
-        $cat_api_url = add_query_arg(['limit' => 1], $api_essentials['base_url'] . '/categories');
-        $cat_response = wp_remote_get($cat_api_url, [
+        // Fetch Categories
+        $categories_url = add_query_arg([
+            'limit' => 100, // Fetch up to 100 for preview and total count
+            'offset' => 0,
+            'responseFields' => 'items(id,name),total' // Request specific fields for items and the total count
+        ], $api_essentials['base_url'] . '/categories');
+        
+        error_log("Ecwid2Woo Debug: Fetching categories for preview from URL: " . $categories_url);
+
+        $cat_response = wp_remote_get($categories_url, [
+            'headers' => [
+                'Accept' => 'application/json',
+                'Authorization' => 'Bearer ' . $api_essentials['token']
+            ],
             'timeout' => 30,
-            'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
         ]);
 
         if (is_wp_error($cat_response)) {
-            $errors[] = "Category count fetch error (wp_remote_get): " . $cat_response->get_error_message();
+            error_log("Ecwid2Woo Debug: WP_Error fetching categories: " . $cat_response->get_error_message());
+            $errors[] = sprintf(__('Error fetching categories from Ecwid: %s', 'ecwid2woo-product-sync'), $cat_response->get_error_message());
         } else {
-            $cat_body = json_decode(wp_remote_retrieve_body($cat_response), true);
+            $cat_body = wp_remote_retrieve_body($cat_response);
+            $cat_data = json_decode($cat_body, true);
             $cat_http_code = wp_remote_retrieve_response_code($cat_response);
-            if ($cat_http_code === 200) {
-                if (isset($cat_body['total'])) {
-                    $category_count = intval($cat_body['total']);
-                } else {
-                    // HTTP 200 but 'total' field is missing. This is unexpected for a count query (limit=1).
-                    $errors[] = "Category count: Ecwid API returned HTTP 200 but the 'total' field was missing in the response. Response body: " . wp_json_encode($cat_body);
-                }
+
+            error_log("Ecwid2Woo Debug: Categories API response code: " . $cat_http_code);
+            error_log("Ecwid2Woo Debug: Categories API response body: " . $cat_body);
+            
+            if ($cat_http_code === 200 && isset($cat_data['items'])) {
+                $category_count = isset($cat_data['total']) ? $cat_data['total'] : count($cat_data['items']);
+                $categories_preview = $cat_data['items'];
             } else {
-                // Non-200 HTTP code
-                $error_message_from_api = isset($cat_body['errorMessage']) ? $cat_body['errorMessage'] : wp_json_encode($cat_body);
-                $errors[] = "Category count fetch error: Ecwid API returned HTTP $cat_http_code. Error: " . $error_message_from_api;
+                $errors[] = sprintf(__('Failed to fetch categories. HTTP Status: %s. Response: %s', 'ecwid2woo-product-sync'), $cat_http_code, $cat_body);
             }
         }
 
-        // Fetch product count
-        $prod_api_url = add_query_arg(['limit' => 1, 'enabled' => 'true'], $api_essentials['base_url'] . '/products');
-        $prod_response = wp_remote_get($prod_api_url, [
+        // Fetch Products
+        $products_url = add_query_arg([
+            'limit' => 100, // Fetch up to 100 for preview and total count
+            'offset' => 0,
+            'enabled' => 'true',
+            'responseFields' => 'items(id,name,enabled),total' // Request specific fields for items and the total count
+        ], $api_essentials['base_url'] . '/products');
+        
+        error_log("Ecwid2Woo Debug: Fetching products for preview from URL: " . $products_url);
+
+        $prod_response = wp_remote_get($products_url, [
+            'headers' => [
+                'Accept' => 'application/json',
+                'Authorization' => 'Bearer ' . $api_essentials['token']
+            ],
             'timeout' => 30,
-            'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
         ]);
 
         if (is_wp_error($prod_response)) {
-            $errors[] = "Product count fetch error (wp_remote_get): " . $prod_response->get_error_message();
+            error_log("Ecwid2Woo Debug: WP_Error fetching products: " . $prod_response->get_error_message());
+            $errors[] = sprintf(__('Error fetching products from Ecwid: %s', 'ecwid2woo-product-sync'), $prod_response->get_error_message());
         } else {
-            $prod_body = json_decode(wp_remote_retrieve_body($prod_response), true);
+            $prod_body = wp_remote_retrieve_body($prod_response);
+            $prod_data = json_decode($prod_body, true);
             $prod_http_code = wp_remote_retrieve_response_code($prod_response);
-            if ($prod_http_code === 200) {
-                if (isset($prod_body['total'])) {
-                    $product_count = intval($prod_body['total']);
-                } else {
-                    // HTTP 200 but 'total' field is missing.
-                    $errors[] = "Product count: Ecwid API returned HTTP 200 but the 'total' field was missing in the response. Response body: " . wp_json_encode($prod_body);
+
+            error_log("Ecwid2Woo Debug: Products API response code: " . $prod_http_code);
+            error_log("Ecwid2Woo Debug: Products API response body: " . $prod_body);
+            
+            if ($prod_http_code === 200 && isset($prod_data['items'])) {
+                $product_count = isset($prod_data['total']) ? $prod_data['total'] : count($prod_data['items']);
+                $products_preview = $prod_data['items'];
+                
+                // Total variation count will be derived from the product data fetched
+                foreach ($prod_data['items'] as $product_item) {
+                    if (isset($product_item['combinations']) && is_array($product_item['combinations'])) {
+                        $total_variation_count += count($product_item['combinations']);
+                    }
                 }
             } else {
-                // Non-200 HTTP code
-                $error_message_from_api = isset($prod_body['errorMessage']) ? $prod_body['errorMessage'] : wp_json_encode($prod_body);
-                $errors[] = "Product count fetch error: Ecwid API returned HTTP $prod_http_code. Error: " . $error_message_from_api;
+                $errors[] = sprintf(__('Failed to fetch products. HTTP Status: %s. Response: %s', 'ecwid2woo-product-sync'), $prod_http_code, $prod_body);
             }
         }
-
-        // Fetch total variation count only if product_count > 0 and no critical errors so far in fetching counts
-        if ($product_count > 0 && empty($errors)) {
-            $prod_offset = 0;
-            $prod_limit = 50; 
-            
-            do {
-                $var_count_query_params = [
-                    'limit' => $prod_limit,
-                    'offset' => $prod_offset,
-                    'enabled' => 'true',
-                    'responseFields' => 'items(id,combinations),total,count,offset' 
-                ];
-                $var_count_api_url = add_query_arg($var_count_query_params, $api_essentials['base_url'] . '/products');
-                $var_count_response = wp_remote_get($var_count_api_url, [
-                    'timeout' => 60,
-                    'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
-                ]);
-
-                if (is_wp_error($var_count_response)) {
-                    $errors[] = "Variation count fetch error during product batch (offset $prod_offset, wp_remote_get): " . $var_count_response->get_error_message();
-                    break; 
-                }
-                $var_count_body = json_decode(wp_remote_retrieve_body($var_count_response), true);
-                $var_count_http_code = wp_remote_retrieve_response_code($var_count_response);
-
-                if ($var_count_http_code === 200 && isset($var_count_body['items'])) {
-                    foreach ($var_count_body['items'] as $product_item) {
-                        if (isset($product_item['combinations']) && is_array($product_item['combinations'])) {
-                            $total_variation_count += count($product_item['combinations']);
-                        }
-                    }
-                    $current_batch_item_count = $var_count_body['count'] ?? 0;
-                    // Use the 'total' from this response to ensure we're aligned with the API's view of total products for this loop
-                    $total_products_for_variation_loop = $var_count_body['total'] ?? $product_count; 
-                    
-                    $prod_offset += $current_batch_item_count;
-
-                    if ($current_batch_item_count == 0 || $prod_offset >= $total_products_for_variation_loop) {
-                        break;
-                    }
-                } else {
-                    $error_message_from_api = isset($var_count_body['errorMessage']) ? $var_count_body['errorMessage'] : wp_json_encode($var_count_body);
-                    $errors[] = "Variation count fetch API error during product batch (offset $prod_offset, HTTP $var_count_http_code): " . $error_message_from_api;
-                    break;
-                }
-            } while (true);
-        }
-
 
         if (!empty($errors)) {
             wp_send_json_error([
@@ -1764,13 +1752,17 @@ class Ecwid_WC_Sync {
                 'details' => $errors, 
                 'categories_count' => $category_count, // Send current counts even if errors occurred
                 'products_count' => $product_count,
-                'variation_count' => $total_variation_count 
+                'variation_count' => $total_variation_count,
+                'categories_preview' => $categories_preview,
+                'products_preview' => $products_preview
             ]);
         } else {
             wp_send_json_success([
                 'categories_count' => $category_count, 
                 'products_count' => $product_count,
-                'variation_count' => $total_variation_count
+                'variation_count' => $total_variation_count,
+                'categories_preview' => $categories_preview,
+                'products_preview' => $products_preview
             ]);
         }
     }

@@ -64,11 +64,9 @@
             if (!i18n[key]) {
                 i18n[key] = i18n_defaults[key];
             }
-        }
-
-        const fullSyncSteps = (ecwid_sync_params.sync_steps && ecwid_sync_params.sync_steps.length > 0) ? ecwid_sync_params.sync_steps : ['categories', 'products'];
+        }        const fullSyncSteps = (ecwid_sync_params.sync_steps && ecwid_sync_params.sync_steps.length > 0) ? ecwid_sync_params.sync_steps : ['categories', 'products'];
         const totalFullSyncSteps = fullSyncSteps.length;
-        const variationBatchSize = parseInt(ecwid_sync_params.variation_batch_size) || 10; // Ensure it's an integer
+        const variationBatchSize = parseInt(ecwid_sync_params.variation_batch_size) || 50; // Ensure it's an integer
 
         // --- Utility Functions ---
         function sanitizeHTML(str) {
@@ -78,7 +76,7 @@
         }
 
         function capitalizeFirstLetter(string) {
-            if (!string) return '';
+            if (!string) return ''; // Handle empty or null string
             return string.charAt(0).toUpperCase() + string.slice(1);
         }
 
@@ -198,21 +196,43 @@
         let animationInterval = null; // For status text animation
 
         // --- Helper Functions ---
-        function sanitizeHTML(str) {
-            const temp = document.createElement('div');
-            temp.textContent = str;
-            return temp.innerHTML;
-        }
+        // REMOVED duplicate sanitizeHTML function
+
+        const MAX_LOG_LINES = 500; // Maximum number of log lines to keep in the DOM
 
         function logMessage(logDiv, message, type) {
-            let color = 'black';
-            if (type === 'success') color = 'green';
-            else if (type === 'error') color = 'red';
-            else if (type === 'info') color = '#005a9c'; // Darker blue for info
-            else if (type === 'warning') color = '#e69500'; // Darker orange for warning
+            if (!logDiv || !logDiv.length) return; // Guard against missing logDiv
 
-            const cleanMessage = $('<div/>').text(message).html();
-            logDiv.append(`<p style="color:${color}; margin: 2px 0; padding: 0; white-space: pre-wrap; word-wrap: break-word;">${cleanMessage}</p>`);
+            let color = 'black';
+            let prefix = '';
+            switch (type) {
+                case 'success':
+                    color = 'green';
+                    prefix = 'SUCCESS: ';
+                    break;
+                case 'error':
+                    color = 'red';
+                    prefix = 'ERROR: ';
+                    break;
+                case 'warning':
+                    color = 'orange';
+                    prefix = 'WARNING: ';
+                    break;
+                case 'info':
+                default:
+                    color = 'black';
+                    break;
+            }
+        
+            // Sanitize the message content, not the HTML structure of the paragraph
+            const cleanMessage = sanitizeHTML(message); 
+            logDiv.append(`<p style="color:${color}; margin: 2px 0; padding: 0; white-space: pre-wrap; word-wrap: break-word;"><strong>${prefix}</strong>${cleanMessage}</p>`);
+        
+            // Limit log lines
+            const lines = logDiv.children('p');
+            if (lines.length > MAX_LOG_LINES) {
+                lines.slice(0, lines.length - MAX_LOG_LINES).remove();
+            }
             logDiv.scrollTop(logDiv[0].scrollHeight);
         }
         
@@ -299,136 +319,138 @@
 
         // Define fetchAndDisplayFullSyncCounts first
         function fetchAndDisplayFullSyncCounts() {
-            if (!fullSyncCountsInfoDiv.length || !fullSyncButton.length) return; 
-
-            fullSyncCountsInfoDiv.text(i18n.fetching_counts || 'Fetching item counts...');
-            
-            $.ajax({
-                url: ajax_url,
-                method: 'POST',
-                data: { action: 'ecwid_wc_fetch_full_sync_counts', nonce: nonce },
-                success: function(response) {
-                    if (response.success) {
-                        totalCategoriesToSync = parseInt(response.data.categories_count) || 0;
-                        totalProductsToSync = parseInt(response.data.products_count) || 0;
-                        grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync; // CALCULATE GRAND TOTAL
-
-                        let countText = (i18n.categories_to_sync_info || 'Categories to sync: {count}').replace('{count}', totalCategoriesToSync) + '<br>' +
-                                        (i18n.products_to_sync_info || 'Products to sync: {count}').replace('{count}', totalProductsToSync);
-                                        // REMOVED: + '<br>' + (i18n.variations_count_in_preview || 'Variation count will be determined when sync starts.');
-                        fullSyncCountsInfoDiv.html(countText);
-                        fullSyncStatusDiv.text(i18n.preview_loaded_ready_to_sync || 'Preview loaded. Ready to start full sync.');
-                        fullSyncButton.removeClass('disabled').prop('disabled', false).show(); 
-                    } else {
-                        const errorMsg = response.data && response.data.message ? response.data.message : 'Error fetching counts.';
-                        fullSyncCountsInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
-                        fullSyncStatusDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
-                        fullSyncButton.show().removeClass('disabled').prop('disabled', false); // Still show, allow user to try
-                    }
-                },
-                error: function(jqXHR, textStatus, errorThrown) {
-                    fullSyncCountsInfoDiv.html('<span style="color:red;">AJAX error fetching counts: ' + sanitizeHTML(textStatus) + '</span>');
-                    fullSyncStatusDiv.html('<span style="color:red;">AJAX error fetching counts.</span>');
-                    fullSyncButton.show().removeClass('disabled').prop('disabled', false); // Still show
-                }
-            });
+            // This function might be part of loadAndDisplayFullSyncPreview or called by it.
+            // For now, assuming loadAndDisplayFullSyncPreview handles its own data fetching for preview.
+            // If this function is solely for fetching counts for display elsewhere, its current stub is fine.
+            // If it's meant to provide data for the preview lists, it should be integrated with loadAndDisplayFullSyncPreview.
+            updateStatus(fullSyncStatusDiv, i18n.fetching_counts || 'Fetching item counts...');
+            // Actual AJAX call to get counts (e.g., total categories, total products)
+            // and update fullSyncCountsInfoDiv.
+            // This function seems to be more about the *counts* than the preview *lists*.
+            // The preview lists are handled by loadAndDisplayFullSyncPreview.
         }
 
         // Function to load and display the sync preview
         function loadAndDisplayFullSyncPreview() {
-            // Corrected guard condition: if EITHER is missing, return.
-            if (!loadFullSyncPreviewButton.length || !fullSyncPreviewContainer.length) {
-                 // If the container is missing but button isn't, it implies we are not on the full sync page or HTML is broken.
-                if (loadFullSyncPreviewButton.length && !fullSyncPreviewContainer.length) {
-                    console.warn("loadFullSyncPreviewButton exists, but fullSyncPreviewContainer does not. Cannot load preview.");
-                }
-                return;
-            }
+            if (!loadFullSyncPreviewButton.length) return;
 
-            const $button = loadFullSyncPreviewButton; 
-            const originalButtonText = $button.length ? $button.text() : i18n.load_sync_preview;
+            // Removed the MAX_PREVIEW_ITEMS limit as we're now showing all items
 
-            if ($button.length) {
-                $button.text(i18n.loading_sync_preview).addClass('disabled').prop('disabled', true);
-            }
-            fullSyncStatusDiv.text(i18n.loading_sync_preview);
-            fullSyncCountsInfoDiv.text(i18n.loading_sync_preview);
-            fullSyncCategoryPreviewList.html(`<p>${i18n.loading_ecwid_categories}</p>`);
-            fullSyncProductPreviewList.html(`<p>${i18n.loading_products}</p>`);
-            fullSyncPreviewContainer.show();
-            fullSyncButton.hide().addClass('disabled').prop('disabled', true); // Hide and disable start button until preview and counts are loaded
+            loadFullSyncPreviewButton.prop('disabled', true).text(i18n.loading_sync_preview || 'Loading sync preview data...');
+            updateStatus(fullSyncStatusDiv, i18n.loading_sync_preview || 'Loading sync preview data...');
+            fullSyncCategoryPreviewList.html('<em>' + (i18n.loading_ecwid_categories || 'Loading Categories...') + '</em>');
+            fullSyncProductPreviewList.html('<em>' + (i18n.loading_products || 'Loading Products...') + '</em>');
 
-            const fetchCategories = $.ajax({
+            $.ajax({
                 url: ajax_url,
-                method: 'POST',
-                data: { action: 'ecwid_wc_fetch_categories_for_display', nonce: nonce }
-            });
-
-            const fetchProducts = $.ajax({
-                url: ajax_url,
-                method: 'POST',
-                data: { action: 'ecwid_wc_fetch_products_for_selection', nonce: nonce }
-            });
-
-            $.when(fetchCategories, fetchProducts).done(function(categoriesResponse, productsResponse) {
-                let catData = categoriesResponse[0]; 
-                let prodData = productsResponse[0];
-                let catCount = 0;
-                let prodCount = 0;
-
-                // Populate Categories
-                if (catData.success && catData.data && catData.data.categories) {
-                    catCount = catData.data.total_count || catData.data.categories.length;
-                    if (catData.data.categories.length > 0) {
-                        let catListHtml = '<ul style="list-style: disc; padding-left: 20px; margin:0;">';
-                        catData.data.categories.forEach(function(category) {
-                            catListHtml += `<li style="padding: 1px 0;">${sanitizeHTML(category.name)} <span style="font-size:0.85em; color:#777;">(ID: ${category.id || 'N/A'})</span></li>`;
-                        });
-                        catListHtml += '</ul>';
-                        fullSyncCategoryPreviewList.html(catListHtml);
-                    } else {
-                        fullSyncCategoryPreviewList.html(`<p>${i18n.no_categories_found_display}</p>`);
-                    }
-                } else {
-                    fullSyncCategoryPreviewList.html(`<p style="color:red;">${sanitizeHTML((catData.data && catData.data.message) || i18n.ajax_error)}</p>`);
-                }
-
-                // Populate Products
-                if (prodData.success && prodData.data && prodData.data.products) {
-                    prodCount = prodData.data.total_found || prodData.data.products.length;
-                    if (prodData.data.products.length > 0) {
-                        let prodListHtml = '<ul style="list-style: disc; padding-left: 20px; margin:0;">';
-                        prodData.data.products.forEach(function(product) {
-                            prodListHtml += `<li style="padding: 1px 0;">${sanitizeHTML(product.name)} <span style="font-size:0.85em; color:#777;">(SKU: ${product.sku || 'N/A'}, ID: ${product.id || 'N/A'})</span></li>`;
-                        });
-                        prodListHtml += '</ul>';
-                        fullSyncProductPreviewList.html(prodListHtml);
-                    } else {
-                        fullSyncProductPreviewList.html(`<p>${i18n.no_products_found}</p>`);
-                    }
-                } else {
-                    fullSyncProductPreviewList.html(`<p style="color:red;">${sanitizeHTML((prodData.data && prodData.data.message) || i18n.ajax_error)}</p>`);
-                }
+                type: 'POST',
+                data: {
+                    action: 'ecwid_wc_fetch_full_sync_counts', // This action should return counts AND preview data
+                    nonce: nonce,
+                },
+                dataType: 'json'
+            })
+            .done(function(response) {
+                console.log('Full sync preview response:', response); // Debug the response
                 
-                // Update counts with preview data, then fetch more accurate counts
-                fullSyncCountsInfoDiv.html(
-                    `${i18n.categories_to_sync_info.replace('{count}', catCount)}<br>` +
-                    `${i18n.products_to_sync_info.replace('{count}', prodCount)}`
-                    // REMOVED: + `<br>${i18n.variations_count_in_preview}`
-                );
-                // Now fetch the more accurate counts which will also enable the sync button
-                fetchAndDisplayFullSyncCounts(); 
+                if (response.success && response.data) {
+                    totalCategoriesToSync = parseInt(response.data.categories_count) || 0;
+                    totalProductsToSync = parseInt(response.data.products_count) || 0;
+                    grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync;
 
-            }).fail(function() {
-                fullSyncStatusDiv.html(`<span style="color:red;">${i18n.preview_load_error}</span>`);
-                fullSyncCountsInfoDiv.text('');
-                fullSyncCategoryPreviewList.html(`<p style="color:red;">${i18n.preview_load_error}</p>`);
-                fullSyncProductPreviewList.html(`<p style="color:red;">${i18n.preview_load_error}</p>`);
-                fullSyncButton.show().removeClass('disabled').prop('disabled', false); // Show button even on fail, user might want to try sync
-            }).always(function() {
-                if ($button.length) {
-                    $button.text(originalButtonText).removeClass('disabled').prop('disabled', false);
+                    const categories = response.data.categories_preview || [];
+                    const products = response.data.products_preview || [];
+                    
+                    console.log('Categories preview data available:', categories ? categories.length : 0);
+                    console.log('Products preview data available:', products ? products.length : 0);
+                    
+                    // For detailed debugging of the actual data
+                    if (categories && categories.length > 0) {
+                        console.log('First category sample:', categories[0]);
+                    }
+                    if (products && products.length > 0) {
+                        console.log('First product sample:', products[0]);
+                    }
+
+                    fullSyncCategoryPreviewList.empty();
+                    if (categories && categories.length > 0) {
+                        // Show ALL categories instead of limiting to MAX_PREVIEW_ITEMS
+                        categories.forEach(cat => {
+                            fullSyncCategoryPreviewList.append(`<div>${sanitizeHTML(cat.name || 'Unnamed Category')}</div>`);
+                        });
+                        // Removed the "...and X more categories" message since we're showing all categories
+                        fullSyncCategoryPreviewList.append(`<hr><p><strong>Total categories to sync: ${totalCategoriesToSync}</strong></p>`);
+                    } else {
+                        fullSyncCategoryPreviewList.html('<em>' + (i18n.no_categories_found_display || 'No categories found or an error occurred.') + '</em>');
+                    }
+
+                    fullSyncProductPreviewList.empty();
+                    if (products && products.length > 0) {
+                        // Show ALL products
+                        products.forEach(prod => {
+                            fullSyncProductPreviewList.append(`<div>${sanitizeHTML(prod.name || 'Unnamed Product')} (ID: ${prod.id || 'N/A'})</div>`);
+                        });
+                        fullSyncProductPreviewList.append(`<hr><p><strong>Total products to sync: ${totalProductsToSync}</strong></p>`);
+                    } else {
+                        fullSyncProductPreviewList.html('<em>' + (i18n.no_products_found || 'No enabled products found or failed to fetch.') + '</em>');
+                    }
+                    
+                    let countText = (i18n.categories_to_sync_info || 'Categories to sync: {count}').replace('{count}', totalCategoriesToSync) + ', ' +
+                                    (i18n.products_to_sync_info || 'Products to sync: {count}').replace('{count}', totalProductsToSync);
+                    fullSyncCountsInfoDiv.text(countText);
+
+                    updateStatus(fullSyncStatusDiv, i18n.preview_loaded_ready_to_sync || 'Preview loaded. Ready to start full sync.');
+                    fullSyncPreviewContainer.slideDown();
+                    fullSyncButton.show(); // Show the main sync button
+                } else {
+                    const errorMsg = response.data && response.data.message ? response.data.message : (i18n.preview_load_error || 'Error loading preview data.');
+                    updateStatus(fullSyncStatusDiv, errorMsg);
+                    logMessage(fullSyncLogDiv, 'Preview Error: ' + errorMsg, 'error');
+                    
+                    // Handle error case but still try to show preview data if available
+                    if (response.data) {
+                        const categories = response.data.categories_preview || [];
+                        const products = response.data.products_preview || [];
+                        
+                        console.log('Error response categories preview data available:', categories ? categories.length : 0);
+                        console.log('Error response products preview data available:', products ? products.length : 0);
+                        
+                        // Even in error state, try to show preview data if available
+                        if (categories && categories.length > 0) {
+                            fullSyncCategoryPreviewList.empty();
+                            // Show ALL categories in error case too
+                            categories.forEach(cat => {
+                                fullSyncCategoryPreviewList.append(`<div>${sanitizeHTML(cat.name || 'Unnamed Category')}</div>`);
+                            });
+                        } else {
+                            fullSyncCategoryPreviewList.html('<em>' + (i18n.no_categories_found_display || 'No categories found or an error occurred.') + '</em>');
+                        }
+                        
+                        if (products && products.length > 0) {
+                            fullSyncProductPreviewList.empty();
+                            // Show ALL products in error case too
+                            products.forEach(prod => {
+                                fullSyncProductPreviewList.append(`<div>${sanitizeHTML(prod.name || 'Unnamed Product')} (ID: ${prod.id || 'N/A'})</div>`);
+                            });
+                        } else {
+                            fullSyncProductPreviewList.html('<em>' + (i18n.no_products_found || 'No enabled products found or failed to fetch.') + '</em>');
+                        }
+                    } else {
+                        fullSyncCategoryPreviewList.html('<em>Error loading categories.</em>');
+                        fullSyncProductPreviewList.html('<em>Error loading products.</em>');
+                    }
                 }
+            })
+            .fail(function(jqXHR, textStatus, errorThrown) {
+                const errorMsg = i18n.ajax_error || 'AJAX Error. Check console or log for details.';
+                updateStatus(fullSyncStatusDiv, errorMsg + ` (${textStatus})`);
+                logMessage(fullSyncLogDiv, `Failed to load sync preview: ${textStatus}, ${errorThrown}`, 'error');
+                console.error('AJAX error details:', jqXHR.responseText);
+                fullSyncCategoryPreviewList.html('<em>AJAX error loading categories.</em>');
+                fullSyncProductPreviewList.html('<em>AJAX error loading products.</em>');
+            })
+            .always(function() {
+                loadFullSyncPreviewButton.prop('disabled', false).text(i18n.load_sync_preview || 'Load Sync Preview');
             });
         }
 
@@ -610,7 +632,7 @@
             const { wc_product_id, ecwid_product_id, item_name, sku, all_combinations, total_combinations, original_options, current_variation_offset } = currentFullSyncVariationProductData;
 
             if (current_variation_offset >= total_combinations) {
-                logMessage(fullSyncLogDiv, i18n.variations_imported_successfully.replace('{productName}', sanitizeHTML(item_name)) + " (Full Sync)", 'success');
+                logMessage(fullSyncLogDiv, i18n.variations_imported_successfully.replace('{productName}', sanitizeHTML(item_name)), 'success');
                 currentFullSyncVariationProductData = null; // Done with this product
                 // TODO: Potentially update a sub-progress bar for variations of this product
                 handleFullSyncContinuation(); // Move to next in queue or parent batch
