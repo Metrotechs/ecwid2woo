@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
 }
 
 if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
-    define('ECWID2WOO_VARIATION_BATCH_SIZE', 20); // Number of variations to process per batch
+    define('ECWID2WOO_VARIATION_BATCH_SIZE', 10); // Number of variations to process per batch
 }
 
 define('ECWID2WOO_VERSION', '1.9.2'); // Define version constant
@@ -597,6 +597,7 @@ class Ecwid_WC_Sync {
 
         $imported_count = 0; $skipped_count = 0; $failed_count = 0;
         $batch_detailed_logs = [];
+        $batch_item_results = []; // <-- ADDED: To store structured results
 
         if (!empty($items_from_api)) {
             foreach ($items_from_api as $item_data) {
@@ -620,7 +621,8 @@ class Ecwid_WC_Sync {
                     }
 
                     if ($result_array && isset($result_array['status'])) {
-                        if ($result_array['status'] === 'imported') $imported_count++;
+                        $batch_item_results[] = $result_array; // <-- ADDED: Store structured result
+                        if ($result_array['status'] === 'imported' || $result_array['status'] === 'imported_parent_pending_variations') $imported_count++;
                         elseif ($result_array['status'] === 'skipped' ) $skipped_count++;
                         else $failed_count++;
 
@@ -635,7 +637,14 @@ class Ecwid_WC_Sync {
                         $batch_detailed_logs[] = "--- Result for {$log_ecwid_id}: " . strtoupper($result_array['status']) . " ---";
                     } else {
                         $failed_count++;
-                        $batch_detailed_logs[] = "--- [CRITICAL ERROR] Failed to process item: " . esc_html($item_identifier_for_log) . ". Import function did not return expected result or status. Result: " . print_r($result_array, true) . " ---";
+                        $current_item_log_name = ($item_data['name'] ?? ('Ecwid ID ' . ($item_data['id'] ?? 'Unknown')));
+                        $batch_detailed_logs[] = "--- [CRITICAL ERROR] Failed to process item: " . esc_html($current_item_log_name) . ". Import function did not return expected result or status. Result: " . print_r($result_array, true) . " ---";
+                        $batch_item_results[] = [ // <-- ADDED: Store failure result
+                            'status' => 'failed',
+                            'item_name' => $current_item_log_name,
+                            'ecwid_id' => $item_data['id'] ?? 'Unknown',
+                            'logs' => ["--- [CRITICAL ERROR] Failed to process item. Import function did not return expected result or status. ---"]
+                        ];
                     }
                 } catch (Exception $e) {
                     $failed_count++;
@@ -669,7 +678,8 @@ class Ecwid_WC_Sync {
             'total_items' => $total_items_reported_by_api,
             'has_more' => $has_more,
             'processed_type' => $sync_type,
-            'batch_logs' => $batch_detailed_logs
+            'batch_logs' => $batch_detailed_logs,
+            'batch_item_results' => $batch_item_results // <-- ADDED: Send structured results
         ]);
     }
 
@@ -1220,7 +1230,9 @@ class Ecwid_WC_Sync {
                         'sku' => $sku_for_log,
                         'wc_product_id' => $product_saved_id,
                         'is_variable' => true,
-                        'total_combinations' => $total_combinations
+                        'total_combinations' => $total_combinations,
+                        'all_combinations' => $item['combinations'] ?? [], // Ensure this is the raw Ecwid combinations data
+                        'original_options' => $item['options'] ?? []    // Ensure this is the raw Ecwid options data
                     ];
                 } else {
                      $product_logs[] = "Product was marked as variable from Ecwid options, but no actual combinations found. Treated as simple/variable shell.";
