@@ -75,6 +75,17 @@ During category sync, if a parent category hasn't been imported yet when a child
 
 == Changelog ==
 
+= 2.0.0 =
+* Fix: Fixed Full Sync preview page to properly display categories and products data
+* Enhance: Increased variation batch size from 10 to 50 for faster syncing of variable products
+* Enhance: Modified preview pages to show all categories and products instead of limiting the display
+* Optimize: Ensured memory usage is optimized across all sync pages (Full Sync, Category Sync, and Partial Sync)
+* Fix: Improved API authentication by adding proper Authorization Bearer headers
+* Fix: Added better error handling and debug logging throughout the synchronization process
+* Fix: Added null/undefined checks for categories and products arrays to prevent JavaScript errors
+* Fix: Fixed i18n (internationalization) fallback mechanism to ensure all strings display correctly
+* Enhance: Ensured preview data is included in both success and error responses for better UX
+
 = 1.9.2 =
 * Feat: Enhance sync UX with animated status indicators for AJAX operations.
 * Feat: Added 'ajax_error' to i18n localization for improved JavaScript error messaging.
@@ -88,6 +99,9 @@ During category sync, if a parent category hasn't been imported yet when a child
 * Initial release. (You might want to add more details here if you have them from earlier versions or development milestones)
 
 == Upgrade Notice ==
+
+= 2.0.0 =
+This major update fixes critical issues with the Full Sync preview page, increases variation batch size for faster syncing, shows more comprehensive previews, and optimizes memory usage across all sync operations. Upgrade recommended for all users.
 
 = 1.9.2 =
 This version includes important internationalization fixes, security enhancements, and UI improvements. Please update for improved stability and future compatibility. It is recommended to review your settings after updating.
