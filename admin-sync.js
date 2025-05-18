@@ -23,7 +23,7 @@
             fetching_counts: 'Fetching item counts...',
             categories_to_sync_info: 'Categories to sync: {count}',
             products_to_sync_info: 'Products to sync: {count}',
-            variations_to_sync_info: 'Variations to sync: {count}',
+            // variations_to_sync_info: 'Variations to sync: {count}', // This one is for actual count, keep if used
             syncing_item_of_total: 'Syncing {syncType}: {current} of {total}...',
             load_products: 'Load Ecwid Products for Selection',
             loading_products: 'Loading Products...',
@@ -54,7 +54,7 @@
             categories_for_preview: 'Categories to be Synced:',
             products_for_preview: 'Products to be Synced:',
             preview_load_error: 'Error loading preview data. Please try again or proceed with sync.',
-            variations_count_in_preview: 'Variation count will be determined when sync starts.',
+            // REMOVED: variations_count_in_preview: 'Variation count will be determined when sync starts.',
             products_available_info: 'Ecwid products available for selection: {count}',
             categories_step_complete: 'Categories step complete! Starting product sync...',
             products_step_complete: 'Products step complete!',
@@ -314,8 +314,8 @@
                         grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync; // CALCULATE GRAND TOTAL
 
                         let countText = (i18n.categories_to_sync_info || 'Categories to sync: {count}').replace('{count}', totalCategoriesToSync) + '<br>' +
-                                        (i18n.products_to_sync_info || 'Products to sync: {count}').replace('{count}', totalProductsToSync) + '<br>' +
-                                        (i18n.variations_count_in_preview || 'Variation count will be determined when sync starts.');
+                                        (i18n.products_to_sync_info || 'Products to sync: {count}').replace('{count}', totalProductsToSync);
+                                        // REMOVED: + '<br>' + (i18n.variations_count_in_preview || 'Variation count will be determined when sync starts.');
                         fullSyncCountsInfoDiv.html(countText);
                         fullSyncStatusDiv.text(i18n.preview_loaded_ready_to_sync || 'Preview loaded. Ready to start full sync.');
                         fullSyncButton.removeClass('disabled').prop('disabled', false).show(); 
@@ -413,8 +413,8 @@
                 // Update counts with preview data, then fetch more accurate counts
                 fullSyncCountsInfoDiv.html(
                     `${i18n.categories_to_sync_info.replace('{count}', catCount)}<br>` +
-                    `${i18n.products_to_sync_info.replace('{count}', prodCount)}<br>` +
-                    `${i18n.variations_count_in_preview}`
+                    `${i18n.products_to_sync_info.replace('{count}', prodCount)}`
+                    // REMOVED: + `<br>${i18n.variations_count_in_preview}`
                 );
                 // Now fetch the more accurate counts which will also enable the sync button
                 fetchAndDisplayFullSyncCounts(); 
@@ -625,7 +625,7 @@
             const statusMsg = i18n.syncing_item_of_total
                 .replace('{syncType}', `Variations for '${sanitizeHTML(item_name)}'`)
                 .replace('{current}', current_variation_offset) // Variations processed *before* this batch
-                .replace('{total}', total_combinations) + " (Full Sync)";
+                .replace('{total}', total_combinations);
             startBatchStatusAnimation(fullSyncStatusDiv, statusMsg);
 
             $.ajax({
