@@ -18,7 +18,7 @@ Ecwid2Woo Product Sync is a robust plugin for migrating and synchronizing your E
 This plugin provides a comprehensive solution for transferring your product data, including names, descriptions, prices, images, SKUs, stock levels, categories, and product variations from Ecwid to WooCommerce. 
 It features a user-friendly interface with real-time progress updates and detailed logging for a smooth and transparent synchronization experience.
 
-== What's New in 2.0.1 ==
+== What's New in 0.0.7 ==
 
 * UI/UX: Changed "Load Sync Preview" to "Reload Sync Data" for clarity.
 * Feature: Added red STOP SYNC button to allow cancellation of sync in progress.
@@ -126,14 +126,14 @@ The plugin will automatically create the missing attribute term (e.g., "Fuchsia"
 
 == Changelog ==
 
-= 2.0.1 =
+= 0.0.6 =
 * UI/UX: Changed "Load Sync Preview" to "Reload Sync Data" for clarity.
 * Feature: Added red STOP SYNC button to allow cancellation of sync in progress.
 * Feature: Sync cancellation logic with user feedback in the log.
 * Fix: Variation import now auto-creates missing attribute terms for Ecwid options/values.
 * Enhance: Improved error handling and feedback for all sync operations.
 
-= 2.0.0 =
+= 0.0.5 =
 * Fix: Fixed Full Sync preview page to properly display categories and products data
 * Enhance: Increased variation batch size from 10 to 50 for faster syncing of variable products
 * Enhance: Modified preview pages to show all categories and products instead of limiting the display
@@ -144,7 +144,7 @@ The plugin will automatically create the missing attribute term (e.g., "Fuchsia"
 * Fix: Fixed i18n (internationalization) fallback mechanism to ensure all strings display correctly
 * Enhance: Ensured preview data is included in both success and error responses for better UX
 
-= 1.9.2 =
+= 0.0.4 =
 * Feat: Enhance sync UX with animated status indicators for AJAX operations.
 * Feat: Added 'ajax_error' to i18n localization for improved JavaScript error messaging.
 * Fix: Ensured consistent text domain ('ecwid2woo-product-sync') across all internationalization functions.
