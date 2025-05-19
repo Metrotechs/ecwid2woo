@@ -7,8 +7,8 @@
 ## Features
 
 ### 🟢 Full Data Sync with Preview
-- **Automatic Preview:** On page load, fetches and displays a preview of categories and products to be synced, with item counts.
-- **Two-Phase Sync:** 
+- **Automatic Preview:** On page load, fetches and displays a preview of categories and products from Ecwid, with item counts.
+- **Two-Phase Sync:**
   - **Phase 1:** Imports all Ecwid categories, preserving parent/child relationships.
   - **Phase 2:** Imports all enabled Ecwid products, supporting both simple and variable product types.
 - **Progress Tracking:** Real-time progress bars and status updates for each sync phase.
@@ -16,8 +16,9 @@
 
 ### 🟢 Category Sync & Hierarchy Management
 - **Category Preview:** Dedicated tab to preview and sync categories independently.
-- **Hierarchy Fix Tool:** "Fix Category Hierarchy" button resolves parent-child relationships if parents were imported after children, using a placeholder system.
-- **Placeholder Management:** Temporary "Ecwid Placeholder" posts and terms are created for missing parents, with a dedicated admin menu for review.
+- **Hierarchy Fix Tool:** "Fix Category Hierarchy" button resolves parent-child relationships if parents were imported after children.
+- **Placeholder Management:** Temporary "Ecwid Placeholder" posts and terms are created for missing parents, with a dedicated admin menu for review. (Note: This might be less relevant if hierarchy fix is robust, but keeping for now based on existing text).
+- **Complex Structures:** Handles complex category structures and ensures accurate replication in WooCommerce.
 
 ### 🟢 Selective Product Sync
 - **Product Selection:** Load all Ecwid products for selection; choose individual or all products for import/update.
@@ -26,24 +27,33 @@
 
 ### 🟢 Product & Variation Data Handling
 - **Comprehensive Data Import:** Names, SKUs, descriptions, prices (regular/sale), stock, weight, dimensions, images, and publish status.
-- **Attribute & Variation Support:** 
-  - Ecwid options are mapped to WooCommerce global attributes and terms.
+- **Attribute & Variation Support:**
+  - Ecwid product options (e.g., Size, Color) are mapped to WooCommerce global product attributes and terms.
   - Missing attribute terms are auto-created during sync.
-  - Variations are created for all Ecwid combinations, with per-variation data (SKU, price, stock, etc.).
-  - Stale WooCommerce variations are cleaned up if removed from Ecwid.
+  - Product variations are created for all Ecwid product option combinations, with per-variation data (SKU, price, stock, image, etc.).
+  - Stale WooCommerce product variations (those no longer in Ecwid) are cleaned up.
 
 ### 🟢 AJAX-Powered Batch Processing
-- **Batch Size Control:** Sync operations are performed in small, configurable batches to prevent server timeouts.
+- **Batch Size Control:** Sync operations are performed in small, configurable batches to prevent server timeouts on large catalogs.
 - **Live Feedback:** Progress bars, animated status messages, and real-time logs keep you informed.
 
 ### 🟢 Idempotent & Safe Re-Syncing
 - **Duplicate Prevention:** Existing WooCommerce terms and products are matched by Ecwid ID (or SKU as fallback) to avoid duplicates.
 - **Meta Fields:** Ecwid IDs are stored in WooCommerce meta fields for categories (`_ecwid_category_id`), products (`_ecwid_product_id`), and variations (`_ecwid_variation_id`).
+- **Update Existing:** Running the sync multiple times updates existing items rather than creating duplicates.
 
 ### 🟢 Error Handling & Troubleshooting
 - **API Response Validation:** Strict checks for required fields in Ecwid API responses.
 - **Detailed Error Logs:** AJAX and API errors are logged with clear messages.
 - **Sync Cancellation:** A bright red "STOP SYNC" button allows you to halt a sync in progress, with immediate feedback in the log.
+
+### 🟢 User-Friendly Interface
+- **Intuitive Admin Pages:** Settings, full sync, category sync, and selective product sync.
+- **Clear Instructions:** Clear instructions and feedback throughout the process.
+
+### 🟢 Developer Friendly
+- **WordPress Best Practices:** Uses WordPress best practices, including actions and filters where appropriate.
+- **Organized Code:** Code is organized and commented for easier understanding and extension.
 
 ---
 
