@@ -14,24 +14,48 @@ Easily Sync Ecwid Product Data (products, categories, images, SKUs, etc.) to Woo
 
 == Description ==
 
-Ecwid2Woo Product Sync provides a comprehensive solution for migrating and synchronizing your product catalog from Ecwid to WooCommerce. This plugin allows you to:
+Ecwid2Woo Product Sync is a robust plugin for migrating and synchronizing your Ecwid product catalog with WooCommerce. It is ideal for store owners moving to WooCommerce or keeping WooCommerce in sync with Ecwid. Key features include:
 
-*   **Two-Phase Full Sync:**
-    1.  Import all Ecwid categories (with parent/child relationships).
-    2.  Import all enabled Ecwid products (simple & variable).
-*   **Category-Only Sync:** A dedicated “Category Sync” tab to import or update categories without touching products—including a “Fix Category Hierarchy” helper.
-*   **Selective Product Sync:** The “Product Sync” tab lets you load your Ecwid catalog, pick individual items, and import/update just those products.
-*   **Full Product Data Handled:**
-    *   Names, SKUs, long & short descriptions
-    *   Regular & sale prices (uses Ecwid’s “Compare-To” price)
-    *   Stock quantity & management status
-    *   Weight, dimensions, publish status
-    *   Featured and gallery images (avoids re-downloading unchanged files)
-*   **Variable Products & Attributes:** Translates Ecwid options/combinations into WooCommerce global attributes, terms, and variations with per-variation SKU, price, stock, and weight.
-*   **Batch Processing & AJAX UI:** All sync operations run in batches via AJAX to prevent timeouts, with progress bars & live logs for clear feedback.
-*   **Idempotent Updates:** Matches existing WooCommerce terms/products by Ecwid ID (stored in meta) or SKU—no duplicates on re-sync.
+== What's New in 2.0.1 ==
 
-This plugin is ideal for store owners looking to move their e-commerce operations to WooCommerce or keep a WooCommerce store in sync with an Ecwid catalog.
+* UI/UX: Changed "Load Sync Preview" to "Reload Sync Data" for clarity.
+* Feature: Added red STOP SYNC button to allow cancellation of sync in progress.
+* Feature: Sync cancellation logic with user feedback in the log.
+* Fix: Variation import now auto-creates missing attribute terms for Ecwid options/values.
+* Enhance: Improved error handling and feedback for all sync operations.
+
+== Key Features ==
+
+* **Comprehensive Full Sync with Preview:**
+    * Automatically fetches and displays a preview of categories and products, with initial counts, on page load.
+    * **Phase 1:** Imports all Ecwid categories, preserving parent/child relationships.
+    * **Phase 2:** Imports all enabled Ecwid products, supporting both simple and variable product types.
+    * Real-time progress bars and status updates for each sync phase.
+    * Detailed, categorized logs (info, success, warning, error) for every operation.
+* **Category Sync & Hierarchy Management:**
+    * Dedicated tab to preview and sync categories independently.
+    * "Fix Category Hierarchy" button resolves parent-child relationships if parents were imported after children, using a placeholder system.
+    * Temporary "Ecwid Placeholder" posts and terms are created for missing parents, with a dedicated admin menu for review.
+* **Selective Product Sync:**
+    * Load all Ecwid products for selection; choose individual or all products for import/update.
+    * "Select All/None" for efficient bulk selection.
+    * Per-product logging and progress.
+* **Product & Variation Data Handling:**
+    * Names, SKUs, descriptions, prices (regular/sale), stock, weight, dimensions, images, and publish status.
+    * Ecwid options are mapped to WooCommerce global attributes and terms.
+    * Missing attribute terms are auto-created during sync.
+    * Variations are created for all Ecwid combinations, with per-variation data (SKU, price, stock, etc.).
+    * Stale WooCommerce variations are cleaned up if removed from Ecwid.
+* **AJAX-Powered Batch Processing:**
+    * Sync operations are performed in small, configurable batches to prevent server timeouts.
+    * Live feedback: progress bars, animated status messages, and real-time logs keep you informed.
+* **Idempotent & Safe Re-Syncing:**
+    * Existing WooCommerce terms and products are matched by Ecwid ID (or SKU as fallback) to avoid duplicates.
+    * Ecwid IDs are stored in WooCommerce meta fields for categories (`_ecwid_category_id`), products (`_ecwid_product_id`), and variations (`_ecwid_variation_id`).
+* **Error Handling & Troubleshooting:**
+    * Strict checks for required fields in Ecwid API responses.
+    * Detailed error logs for AJAX and API errors.
+    * Sync cancellation: a bright red "STOP SYNC" button allows you to halt a sync in progress, with immediate feedback in the log.
 
 == Installation ==
 
@@ -52,7 +76,7 @@ Currently, this plugin focuses on synchronizing products and categories. Order a
 The plugin attempts to match existing items by a stored Ecwid ID (meta field) or by SKU (for products) / name (for categories). If a match is found, it will update the existing item. Otherwise, it will create a new one.
 
 = Are product variations (Ecwid options/combinations) supported? =
-Yes, the plugin supports syncing Ecwid product options and combinations as WooCommerce product attributes and variations. It will attempt to create global attributes in WooCommerce based on your Ecwid product options.
+Yes, the plugin supports syncing Ecwid product options and combinations as WooCommerce product attributes and variations. It will attempt to create global attributes and terms in WooCommerce based on your Ecwid product options. Missing attribute terms are now auto-created during sync.
 
 = What if my Ecwid categories have parent-child relationships? =
 The plugin attempts to replicate the category hierarchy during the sync. A "Fix Category Hierarchy" tool is also provided on the Category Sync page to resolve potential ordering issues after an initial sync, especially if parent categories were imported after their children in some batches.
@@ -62,6 +86,9 @@ You can find your Store ID and generate an API Secret Token in your Ecwid contro
 
 = How does the "Fix Category Hierarchy" tool work? =
 During category sync, if a parent category hasn't been imported yet when a child category is processed, the child might temporarily become a top-level category. The "Fix Category Hierarchy" tool re-evaluates these relationships once all categories are imported and attempts to set the correct parent-child links.
+
+= Can I stop a sync in progress? =
+Yes! The Full Sync page now features a bright red "STOP SYNC" button. Clicking it will immediately halt the sync process and log a message indicating the sync was stopped by the user.
 
 == Screenshots ==
 
@@ -74,6 +101,13 @@ During category sync, if a parent category hasn't been imported yet when a child
 (Note: You will need to create these screenshots and name them `screenshot-1.png`, `screenshot-2.png`, etc., and place them in the `assets` folder of your SVN repository once your plugin is approved.)
 
 == Changelog ==
+
+= 2.0.1 =
+* UI/UX: Changed "Load Sync Preview" to "Reload Sync Data" for clarity.
+* Feature: Added red STOP SYNC button to allow cancellation of sync in progress.
+* Feature: Sync cancellation logic with user feedback in the log.
+* Fix: Variation import now auto-creates missing attribute terms for Ecwid options/values.
+* Enhance: Improved error handling and feedback for all sync operations.
 
 = 2.0.0 =
 * Fix: Fixed Full Sync preview page to properly display categories and products data
@@ -100,6 +134,9 @@ During category sync, if a parent category hasn't been imported yet when a child
 
 == Upgrade Notice ==
 
+= 2.0.1 =
+This update adds a STOP SYNC button, improves the Full Sync UI, and ensures all variation attribute terms are created automatically. Upgrade recommended for all users.
+
 = 2.0.0 =
 This major update fixes critical issues with the Full Sync preview page, increases variation batch size for faster syncing, shows more comprehensive previews, and optimizes memory usage across all sync operations. Upgrade recommended for all users.
 
@@ -110,86 +147,3 @@ This version includes important internationalization fixes, security enhancement
 
 For support, please use the plugin's support forum on WordPress.org. (This is the standard practice. If you offer premium support elsewhere, you can mention it, but the primary support channel for .org plugins is their forum.)
 You can also find more information at https://metrotechs.io.
-
-```
-
----
-
-**3. `languages/ecwid2woo-product-sync.pot` (Translation Template)**
-
-Creating a full `.pot` file by hand is tedious. It's best to use a tool.
-**Recommendation:** Use the `wp i18n make-pot` command via WP-CLI, or a desktop tool like Poedit to scan your plugin files and generate this file.
-
-Here's a very basic structure. A real one would list every translatable string.
-
-````text
-// filepath: ecwid2woo-product-sync/languages/ecwid2woo-product-sync.pot
-# Copyright (C) 2025 Metrotechs
-# This file is distributed under the GPLv2 or later.
-msgid ""
-msgstr ""
-"Project-Id-Version: Ecwid2Woo Product Sync 1.9.2\n"
-"Report-Msgid-Bugs-To: https://metrotechs.io/support\n"
-"POT-Creation-Date: 2025-05-14 10:00:00+00:00\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
-"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
-
-#: ecwid-to-woocommerce-sync.php:NN
-msgid "Ecwid Placeholders"
-msgstr ""
-
-#: ecwid-to-woocommerce-sync.php:NN
-msgid "Ecwid Placeholder"
-msgstr ""
-
-#: ecwid-to-woocommerce-sync.php:NN
-msgid "Ecwid2Woo Product Sync Settings"
-msgstr ""
-
-#: ecwid-to-woocommerce-sync.php:NN
-msgid "Ecwid2Woo Sync"
-msgstr ""
-
-# ... and so on for every translatable string ...
-
-#: ecwid-to-woocommerce-sync.php:NN
-msgid "Ecwid API Credentials"
-msgstr ""
-
-#: ecwid-to-woocommerce-sync.php:NN
-msgid "Ecwid Store ID"
-msgstr ""
-
-#: ecwid-to-woocommerce-sync.php:NN
-msgid "Enter your Ecwid Store ID."
-msgstr ""
-
-#: ecwid-to-woocommerce-sync.php:NN
-msgid "Ecwid API Token (Secret Token)"
-msgstr ""
-
-#: ecwid-to-woocommerce-sync.php:NN
-msgid "Your Ecwid API Secret Token. This is sensitive information."
-msgstr ""
-
-#: ecwid-to-woocommerce-sync.php:NN
-msgid "Save Settings"
-msgstr ""
-
-# --- Strings from admin-sync.js (via wp_localize_script) ---
-#: ecwid-to-woocommerce-sync.php:NN (line where wp_localize_script is)
-msgid "Sync starting..."
-msgstr ""
-
-#: ecwid-to-woocommerce-sync.php:NN
-msgid "Sync Complete!"
-msgstr ""
-
-# ... etc.
-````
