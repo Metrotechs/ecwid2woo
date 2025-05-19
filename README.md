@@ -59,8 +59,8 @@
 
 ## Requirements
 
-- WordPress 5.0+
-- WooCommerce 3.0+
+- WordPress 5.0+ (Tested up to 6.8)
+- WooCommerce 3.0+ (Tested up to 9.2)
 - PHP 7.2+ (with cURL extension)
 - A valid Ecwid Store ID and API Secret Token
 

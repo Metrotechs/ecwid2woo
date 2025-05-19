@@ -3,12 +3,12 @@ Contributors: Metrotechs, Richard Hunting
 Donate link: https://metrotechs.io/donate
 Tags: ecwid, woocommerce, sync, products, categories, import, migration, ecwid sync, woocommerce sync, product import, category import, product sync, category sync, ecwid to woocommerce, woocommerce ecwid
 Requires at least: 5.0
-Tested up to: 6.5
+Tested up to: 6.8
 Requires PHP: 7.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
-WC tested up to: 8.8
+WC tested up to: 9.2
 
 Easily Sync Ecwid Product Data (products, categories, images, SKUs, etc.) to WooCommerce.
 
