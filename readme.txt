@@ -1,7 +1,7 @@
 === Ecwid2Woo Product Sync ===
-Contributors: Metrotechs, richa (your WordPress.org username)
+Contributors: Metrotechs, Richard Hunting
 Donate link: https://metrotechs.io/donate
-Tags: ecwid, woocommerce, sync, products, categories, import, migration, ecwid sync, woocommerce sync, product import, category import
+Tags: ecwid, woocommerce, sync, products, categories, import, migration, ecwid sync, woocommerce sync, product import, category import, product sync, category sync, ecwid to woocommerce, woocommerce ecwid
 Requires at least: 5.0
 Tested up to: 6.5
 Requires PHP: 7.2
@@ -15,6 +15,8 @@ Easily Sync Ecwid Product Data (products, categories, images, SKUs, etc.) to Woo
 == Description ==
 
 Ecwid2Woo Product Sync is a robust plugin for migrating and synchronizing your Ecwid product catalog with WooCommerce. It is ideal for store owners moving to WooCommerce or keeping WooCommerce in sync with Ecwid. Key features include:
+This plugin provides a comprehensive solution for transferring your product data, including names, descriptions, prices, images, SKUs, stock levels, categories, and product variations from Ecwid to WooCommerce. 
+It features a user-friendly interface with real-time progress updates and detailed logging for a smooth and transparent synchronization experience.
 
 == What's New in 2.0.1 ==
 
@@ -27,35 +29,42 @@ Ecwid2Woo Product Sync is a robust plugin for migrating and synchronizing your E
 == Key Features ==
 
 * **Comprehensive Full Sync with Preview:**
-    * Automatically fetches and displays a preview of categories and products, with initial counts, on page load.
+    * Automatically fetches and displays a preview of categories and products from Ecwid, with initial counts, on page load.
     * **Phase 1:** Imports all Ecwid categories, preserving parent/child relationships.
     * **Phase 2:** Imports all enabled Ecwid products, supporting both simple and variable product types.
     * Real-time progress bars and status updates for each sync phase.
     * Detailed, categorized logs (info, success, warning, error) for every operation.
 * **Category Sync & Hierarchy Management:**
     * Dedicated tab to preview and sync categories independently.
-    * "Fix Category Hierarchy" button resolves parent-child relationships if parents were imported after children, using a placeholder system.
-    * Temporary "Ecwid Placeholder" posts and terms are created for missing parents, with a dedicated admin menu for review.
+    * "Fix Category Hierarchy" button resolves parent-child relationships if parents were imported after children.
+    * Handles complex category structures and ensures accurate replication in WooCommerce.
 * **Selective Product Sync:**
     * Load all Ecwid products for selection; choose individual or all products for import/update.
     * "Select All/None" for efficient bulk selection.
     * Per-product logging and progress.
 * **Product & Variation Data Handling:**
     * Names, SKUs, descriptions, prices (regular/sale), stock, weight, dimensions, images, and publish status.
-    * Ecwid options are mapped to WooCommerce global attributes and terms.
+    * Ecwid product options (e.g., Size, Color) are mapped to WooCommerce global product attributes and terms.
     * Missing attribute terms are auto-created during sync.
-    * Variations are created for all Ecwid combinations, with per-variation data (SKU, price, stock, etc.).
-    * Stale WooCommerce variations are cleaned up if removed from Ecwid.
+    * Product variations are created for all Ecwid product option combinations, with per-variation data (SKU, price, stock, image, etc.).
+    * Stale WooCommerce product variations (those no longer in Ecwid) are cleaned up.
 * **AJAX-Powered Batch Processing:**
-    * Sync operations are performed in small, configurable batches to prevent server timeouts.
+    * Sync operations are performed in small, configurable batches to prevent server timeouts on large catalogs.
     * Live feedback: progress bars, animated status messages, and real-time logs keep you informed.
 * **Idempotent & Safe Re-Syncing:**
     * Existing WooCommerce terms and products are matched by Ecwid ID (or SKU as fallback) to avoid duplicates.
     * Ecwid IDs are stored in WooCommerce meta fields for categories (`_ecwid_category_id`), products (`_ecwid_product_id`), and variations (`_ecwid_variation_id`).
+    * This ensures that running the sync multiple times updates existing items rather than creating duplicates.
 * **Error Handling & Troubleshooting:**
     * Strict checks for required fields in Ecwid API responses.
     * Detailed error logs for AJAX and API errors.
     * Sync cancellation: a bright red "STOP SYNC" button allows you to halt a sync in progress, with immediate feedback in the log.
+* **User-Friendly Interface:**
+    * Intuitive admin pages for settings, full sync, category sync, and selective product sync.
+    * Clear instructions and feedback throughout the process.
+* **Developer Friendly:**
+    * Uses WordPress best practices, including actions and filters where appropriate.
+    * Code is organized and commented for easier understanding and extension.
 
 == Installation ==
 
@@ -70,25 +79,40 @@ It is highly recommended to **backup your WordPress database** before running an
 == Frequently Asked Questions ==
 
 = Does this plugin sync orders or customers? =
-Currently, this plugin focuses on synchronizing products and categories. Order and customer synchronization is not included in this version.
+No, this plugin is specifically designed for synchronizing products and categories from Ecwid to WooCommerce. Order and customer data are not handled.
 
 = What happens if a product or category already exists in WooCommerce? =
-The plugin attempts to match existing items by a stored Ecwid ID (meta field) or by SKU (for products) / name (for categories). If a match is found, it will update the existing item. Otherwise, it will create a new one.
+The plugin first checks for an existing WooCommerce product or category using a stored Ecwid ID (saved in a meta field). If not found by ID, it may attempt to match by SKU for products or name for categories as a fallback. If a match is found, the existing item is updated with the data from Ecwid. If no match is found, a new item is created in WooCommerce. This prevents duplicate entries.
 
 = Are product variations (Ecwid options/combinations) supported? =
-Yes, the plugin supports syncing Ecwid product options and combinations as WooCommerce product attributes and variations. It will attempt to create global attributes and terms in WooCommerce based on your Ecwid product options. Missing attribute terms are now auto-created during sync.
+Yes, absolutely. Ecwid product options (like Size, Color) are converted into WooCommerce global product attributes, and their respective values (like Small, Medium, Large or Red, Blue, Green) become attribute terms. The plugin then creates product variations in WooCommerce for each combination of these options, complete with their specific SKU, price, stock, and image if available. Missing attribute terms are automatically created.
 
 = What if my Ecwid categories have parent-child relationships? =
-The plugin attempts to replicate the category hierarchy during the sync. A "Fix Category Hierarchy" tool is also provided on the Category Sync page to resolve potential ordering issues after an initial sync, especially if parent categories were imported after their children in some batches.
+The plugin is designed to replicate your Ecwid category hierarchy in WooCommerce. Parent-child relationships are preserved. The "Fix Category Hierarchy" tool on the Category Sync page can be used to correct any discrepancies that might occur if, for example, a child category is processed by the sync before its parent.
 
 = Where do I get my Ecwid API credentials? =
 You can find your Store ID and generate an API Secret Token in your Ecwid control panel. Typically, this is under a section like "Apps" > "API" or "Platform" > "API Keys". Please refer to Ecwid's documentation for the most current instructions.
 
 = How does the "Fix Category Hierarchy" tool work? =
-During category sync, if a parent category hasn't been imported yet when a child category is processed, the child might temporarily become a top-level category. The "Fix Category Hierarchy" tool re-evaluates these relationships once all categories are imported and attempts to set the correct parent-child links.
+If a child category is synced before its parent category from Ecwid, it might temporarily appear as a top-level category in WooCommerce. The "Fix Category Hierarchy" tool scans all synced categories and re-establishes the correct parent-child relationships based on the original Ecwid structure.
 
 = Can I stop a sync in progress? =
 Yes! The Full Sync page now features a bright red "STOP SYNC" button. Clicking it will immediately halt the sync process and log a message indicating the sync was stopped by the user.
+
+= What happens to products or categories I delete in Ecwid? =
+This plugin primarily focuses on syncing data *from* Ecwid *to* WooCommerce. If you delete a product or category in Ecwid, it will not be automatically deleted from WooCommerce by this plugin in the current version. You would need to manage deletions in WooCommerce separately. However, stale product variations (e.g., a "Small, Red" t-shirt variation that no longer exists in Ecwid for a product) *are* removed from the corresponding WooCommerce product during a sync.
+
+= Are product images synced? =
+Yes, the main product image and gallery images from Ecwid are synced to the WooCommerce product. For variable products, if variations in Ecwid have their own specific images, these are also synced to the corresponding WooCommerce variations.
+
+= Is there a limit to how many products or categories can be synced? =
+The plugin uses AJAX-based batch processing, meaning it syncs data in small chunks to avoid server timeouts. This design allows it to handle large catalogs with many thousands of products and categories. The batch size is configurable in the plugin's internal settings (though not exposed in the UI in this version).
+
+= Will this plugin slow down my site? =
+The sync process is resource-intensive while it's running, as it involves making API calls to Ecwid and performing database operations in WordPress. It's best to run syncs during off-peak hours if you have a very busy site. The plugin itself, when not actively syncing, should have minimal to no impact on your site's performance.
+
+= What if an attribute term (e.g., a color like "Fuchsia") exists in Ecwid but not in WooCommerce? =
+The plugin will automatically create the missing attribute term (e.g., "Fuchsia" for the "Color" attribute) in WooCommerce during the sync process. You don't need to pre-define all possible terms.
 
 == Screenshots ==
 
