@@ -225,13 +225,17 @@ class Ecwid_WC_Sync {
                 'variations_imported_successfully' => __('All variations imported successfully for {productName}.', 'ecwid2woo-product-sync'),
                 'error_importing_variations' => __('Error importing variations for {productName}. See log.', 'ecwid2woo-product-sync'),
                 'parent_product_imported_pending_variations' => __('Parent product {productName} imported. Starting variation import...', 'ecwid2woo-product-sync'),
-                'load_sync_preview' => __('Load Sync Preview', 'ecwid2woo-product-sync'), // ADDED
-                'loading_sync_preview' => __('Loading sync preview data...', 'ecwid2woo-product-sync'), // ADDED
+                'load_sync_preview' => __('Reload Sync Data', 'ecwid2woo-product-sync'), // MODIFIED
+                'loading_sync_preview' => __('Reloading sync data...', 'ecwid2woo-product-sync'), // MODIFIED
                 'preview_loaded_ready_to_sync' => __('Preview loaded. Ready to start full sync.', 'ecwid2woo-product-sync'), // ADDED
                 'categories_for_preview' => __('Categories to be Synced:', 'ecwid2woo-product-sync'), // ADDED
                 'products_for_preview' => __('Products to be Synced:', 'ecwid2woo-product-sync'), // ADDED
                 'preview_load_error' => __('Error loading preview data. Please try again or proceed with sync.', 'ecwid2woo-product-sync'), // ADDED
                 'variations_count_in_preview' => __('Variation count will be determined when sync starts.', 'ecwid2woo-product-sync'), // ADDED
+                'stop_full_sync_button_text' => __('STOP SYNC', 'ecwid2woo-product-sync'), // ADDED
+                'sync_stopped_by_user_log' => __('SYNC HAS BEEN STOPPED BY THE USER.', 'ecwid2woo-product-sync'), // ADDED
+                'sync_stopped_by_user_status' => __('Sync stopped by user.', 'ecwid2woo-product-sync'), // ADDED
+                'sync_cancelled_log_message' => __('Sync cancelled by user, aborting further operations.', 'ecwid2woo-product-sync'), // ADDED
             ]
         ]);
 
@@ -278,7 +282,7 @@ class Ecwid_WC_Sync {
         <h1><?php esc_html_e('Full Data Sync', 'ecwid2woo-product-sync'); ?></h1>
         <p><?php esc_html_e('This will sync all categories and then all enabled products from Ecwid to WooCommerce. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'ecwid2woo-product-sync'); ?></p>
         
-        <button id="load-full-sync-preview-button" class="button" style="margin-bottom: 15px;"><?php esc_html_e('Load Sync Preview', 'ecwid2woo-product-sync'); ?></button>
+        <button id="load-full-sync-preview-button" class="button" style="margin-bottom: 15px;"><?php esc_html_e('Reload Sync Data', 'ecwid2woo-product-sync'); ?></button>
 
         <div id="full-sync-preview-container" style="display:none;">
             <div style="display:flex; flex-wrap: wrap; gap: 20px; margin-bottom:15px;">
@@ -308,6 +312,7 @@ class Ecwid_WC_Sync {
         </div>
 
         <button id="full-sync-button" class="button button-primary" style="display:none;"><?php esc_html_e('Start Full Sync', 'ecwid2woo-product-sync'); ?></button>
+        <button id="stop-full-sync-button" class="button button-secondary" style="background-color: #dc3545; color: white; border-color: #bd2130; display:none; margin-left: 10px;"><?php esc_html_e('STOP SYNC', 'ecwid2woo-product-sync'); ?></button>
         <div id="full-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
         <?php
     }
@@ -1368,6 +1373,23 @@ class Ecwid_WC_Sync {
                     $term_value_from_ecwid = sanitize_text_field($combo_opt_val['value']);
 
                     $term_object = get_term_by('name', $term_value_from_ecwid, $wc_attr_taxonomy_slug);
+                    
+                    // MODIFIED: Create the term if it doesn't exist
+                    if (!$term_object || is_wp_error($term_object)) {
+                        $batch_logs[] = "Term '$term_value_from_ecwid' not found in '$wc_attr_taxonomy_slug'. Creating it now...";
+                        
+                        $term_slug = sanitize_title($term_value_from_ecwid);
+                        $term_result = wp_insert_term($term_value_from_ecwid, $wc_attr_taxonomy_slug, ['slug' => $term_slug]);
+                        
+                        if (is_wp_error($term_result)) {
+                            $batch_logs[] = "[ERROR] Failed to create term '$term_value_from_ecwid' for attribute '$wc_attr_taxonomy_slug': " . $term_result->get_error_message();
+                        } else {
+                            // Get the newly created term
+                            $term_object = get_term_by('id', $term_result['term_id'], $wc_attr_taxonomy_slug);
+                            $batch_logs[] = "Successfully created term '$term_value_from_ecwid' with ID {$term_result['term_id']} for attribute '$wc_attr_taxonomy_slug'.";
+                        }
+                    }
+                    
                     if ($term_object && !is_wp_error($term_object)) {
                         $variation_attributes_for_wc[$wc_attr_taxonomy_slug] = $term_object->slug;
                         $batch_logs[] = "For combo $ecwid_combination_id, attribute '$wc_attr_taxonomy_slug' mapped to term '{$term_object->name}' (slug: '{$term_object->slug}').";

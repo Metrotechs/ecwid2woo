@@ -48,8 +48,8 @@
             variations_imported_successfully: 'All variations imported successfully for {productName}.',
             error_importing_variations: 'Error importing variations for {productName}. See log.',
             parent_product_imported_pending_variations: 'Parent product {productName} imported. Starting variation import...',
-            load_sync_preview: 'Load Sync Preview',
-            loading_sync_preview: 'Loading sync preview data...',
+            load_sync_preview: 'Reload Sync Data', // MODIFIED
+            loading_sync_preview: 'Reloading sync data...', // MODIFIED
             preview_loaded_ready_to_sync: 'Preview loaded. Ready to start full sync.',
             categories_for_preview: 'Categories to be Synced:',
             products_for_preview: 'Products to be Synced:',
@@ -58,6 +58,10 @@
             products_available_info: 'Ecwid products available for selection: {count}',
             categories_step_complete: 'Categories step complete! Starting product sync...',
             products_step_complete: 'Products step complete!',
+            stop_full_sync_button_text: 'STOP SYNC',
+            sync_stopped_by_user_log: 'SYNC HAS BEEN STOPPED BY THE USER.',
+            sync_stopped_by_user_status: 'Sync stopped by user.',
+            sync_cancelled_log_message: 'Sync cancelled by user, aborting further operations.',
             // Add any other i18n strings used in the JS with their defaults
         };
         for (const key in i18n_defaults) {
@@ -142,6 +146,7 @@
         const fullSyncCategoryPreviewList = $('#full-sync-category-preview-list');
         const fullSyncProductPreviewList = $('#full-sync-product-preview-list');
         const fullSyncProgressContainer = $('#full-sync-progress-container');
+        const stopFullSyncButton = $('#stop-full-sync-button'); // ADDED
 
         // Category Sync Page UI Elements
         const categoryPageSyncButton = $('#category-page-sync-button');
@@ -173,11 +178,10 @@
 
         let totalCategoriesToSync = 0; // Ensure these are declared in a scope accessible by updateOverallFullSyncProgress
         let totalProductsToSync = 0;   // and are updated by fetchAndDisplayFullSyncCounts
-        let grandTotalAllItemsForSync = 0; // This will be categories + products
-
-        let fullSyncVariationQueue = []; // <-- ADDED: Queue for products needing variation sync in Full Sync
-        let currentFullSyncVariationProductData = null; // <-- ADDED: Data for the product whose variations are currently being synced
-
+        let grandTotalAllItemsForSync = 0;
+        let fullSyncVariationQueue = [];
+        let currentFullSyncVariationProductData = null;
+        let isSyncCancelledByUser = false; // ADDED: Flag to control sync cancellation
         // Store continuation data for parent batch processing
         let fullSyncParentContinuation = {
             hasMore: false,
@@ -319,10 +323,9 @@
 
         // Define fetchAndDisplayFullSyncCounts first
         function fetchAndDisplayFullSyncCounts() {
-            // This function might be part of loadAndDisplayFullSyncPreview or called by it.
-            // For now, assuming loadAndDisplayFullSyncPreview handles its own data fetching for preview.
-            // If this function is solely for fetching counts for display elsewhere, its current stub is fine.
-            // If it's meant to provide data for the preview lists, it should be integrated with loadAndDisplayFullSyncPreview.
+            if (isSyncCancelledByUser) return; // ADDED: Check cancellation
+            if (!loadFullSyncPreviewButton.length) return;
+
             updateStatus(fullSyncStatusDiv, i18n.fetching_counts || 'Fetching item counts...');
             // Actual AJAX call to get counts (e.g., total categories, total products)
             // and update fullSyncCountsInfoDiv.
@@ -332,12 +335,13 @@
 
         // Function to load and display the sync preview
         function loadAndDisplayFullSyncPreview() {
+            if (isSyncCancelledByUser) return; // ADDED: Check cancellation
             if (!loadFullSyncPreviewButton.length) return;
 
             // Removed the MAX_PREVIEW_ITEMS limit as we're now showing all items
 
-            loadFullSyncPreviewButton.prop('disabled', true).text(i18n.loading_sync_preview || 'Loading sync preview data...');
-            updateStatus(fullSyncStatusDiv, i18n.loading_sync_preview || 'Loading sync preview data...');
+            loadFullSyncPreviewButton.prop('disabled', true).text(i18n.loading_sync_preview || 'Reloading sync data...');
+            updateStatus(fullSyncStatusDiv, i18n.loading_sync_preview || 'Reloading sync data...');
             fullSyncCategoryPreviewList.html('<em>' + (i18n.loading_ecwid_categories || 'Loading Categories...') + '</em>');
             fullSyncProductPreviewList.html('<em>' + (i18n.loading_products || 'Loading Products...') + '</em>');
 
@@ -450,7 +454,7 @@
                 fullSyncProductPreviewList.html('<em>AJAX error loading products.</em>');
             })
             .always(function() {
-                loadFullSyncPreviewButton.prop('disabled', false).text(i18n.load_sync_preview || 'Load Sync Preview');
+                loadFullSyncPreviewButton.prop('disabled', false).text(i18n.load_sync_preview || 'Reload Sync Data');
             });
         }
 
@@ -467,31 +471,58 @@
             });
         }
 
-        if (fullSyncButton.length) { // This check is fine for attaching the click handler
-            fullSyncButton.on('click', function(e) {
-                e.preventDefault();
-                if (fullSyncButton.hasClass('disabled')) return;
+        if (fullSyncButton.length) {
+            fullSyncButton.on('click', function() {
+                isSyncCancelledByUser = false; // Reset cancellation flag
+                logMessage(fullSyncLogDiv, i18n.sync_starting || 'Sync starting...', 'info');
+                fullSyncButton.prop('disabled', true).text(i18n.syncing_button || 'Syncing...');
+                stopFullSyncButton.show(); // Show STOP button
+                loadFullSyncPreviewButton.prop('disabled', true); // Disable reload preview during sync
 
-                // Ensure totalCategoriesToSync and totalProductsToSync are populated
-                // If they are still 0, it means fetchAndDisplayFullSyncCounts might have failed
-                // or not completed. For robustness, you could re-trigger it or alert the user.
-                // For now, we assume they are set if the button is enabled.
-
-                fullSyncButton.addClass('disabled').text(i18n.syncing_button);
-                fullSyncStatusDiv.text(i18n.sync_starting); // Initial status
-                updateProgressBar(fullSyncProgressBar, 0);
-                fullSyncProgressContainer.show(); // Ensure progress bar container is visible
-                fullSyncLogDiv.html('');
                 currentFullSyncStepIndex = 0;
-                logMessage(fullSyncLogDiv, i18n.sync_starting, 'info');
-                // If counts were not fetched successfully, fetchAndDisplayFullSyncCounts might have left button enabled with error.
-                // Optionally, re-check counts or ensure they are valid before proceeding.
-                // For now, assume if button is clickable, we proceed.
+                currentFullSyncStepOffset = 0;
+                fullSyncOverallProgress = 0;
+                grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync; // Recalculate here or ensure it's fresh
+
+                fullSyncProgressBar.css('width', '0%').text('0%');
+                fullSyncProgressContainer.show();
+                fullSyncLogDiv.html(''); // Clear previous logs
+
                 processNextFullSyncStep();
             });
         }
 
+        if (stopFullSyncButton.length) { // ADDED: Stop button handler
+            stopFullSyncButton.on('click', function() {
+                isSyncCancelledByUser = true;
+                logMessage(fullSyncLogDiv, i18n.sync_stopped_by_user_log || 'SYNC HAS BEEN STOPPED BY THE USER.', 'warning');
+                updateStatus(fullSyncStatusDiv, i18n.sync_stopped_by_user_status || 'Sync stopped by user.');
+                
+                stopFullSyncButton.hide();
+                fullSyncButton.text(i18n.start_sync || 'Start Full Sync').prop('disabled', false);
+                loadFullSyncPreviewButton.prop('disabled', false); // Re-enable reload preview
+
+                // Reset progress and state
+                fullSyncProgressBar.css('width', '0%').text('0%');
+                // fullSyncProgressContainer.hide(); // Optionally hide progress bar
+                stopBatchStatusAnimation();
+                
+                // Clear queues and reset relevant state variables
+                fullSyncVariationQueue = [];
+                currentFullSyncVariationProductData = null;
+                currentFullSyncStepIndex = 0; 
+                currentFullSyncStepOffset = 0;
+                fullSyncOverallProgress = 0;
+                // Add any other specific full sync state resets here if needed
+            });
+        }
+
         function processNextFullSyncStep() {
+            if (isSyncCancelledByUser) { // ADDED: Check cancellation
+                logMessage(fullSyncLogDiv, i18n.sync_cancelled_log_message || 'Sync cancelled, not proceeding to next step.', 'info');
+                return;
+            }
+
             if (currentFullSyncStepIndex < totalFullSyncSteps) {
                 const syncType = fullSyncSteps[currentFullSyncStepIndex];
                 let currentTotalForStep = 0;
@@ -509,16 +540,21 @@
                 processFullSyncBatch(syncType, 0, currentTotalForStep); // Pass the total for this step
             } else {
                 stopBatchStatusAnimation();
-                updateStatus(fullSyncStatusDiv, i18n.sync_complete);
-                logMessage(fullSyncLogDiv, i18n.sync_complete, 'success');
-                fullSyncButton.removeClass('disabled').text(i18n.start_sync);
-                // Ensure progress bar hits 100% at the very end
-                // It should be very close or at 100 already if grandTotalAllItemsForSync was > 0
-                updateProgressBar(fullSyncProgressBar, 100); 
+                updateStatus(fullSyncStatusDiv, i18n.sync_complete || 'Sync Complete!');
+                logMessage(fullSyncLogDiv, i18n.sync_complete || 'Sync Complete!', 'success');
+                fullSyncButton.text(i18n.start_sync || 'Start Full Sync').prop('disabled', false);
+                stopFullSyncButton.hide(); // Hide STOP button on completion
+                loadFullSyncPreviewButton.prop('disabled', false); // Re-enable reload preview
+                updateOverallFullSyncProgress(100); // Ensure it hits 100%
+                return;
             }
         }
 
-        function processFullSyncBatch(syncType, offset, totalKnownItems) { // totalKnownItems is for the current step
+        function processFullSyncBatch(syncType, offset, totalKnownItems) {
+            if (isSyncCancelledByUser) { // ADDED: Check cancellation
+                logMessage(fullSyncLogDiv, i18n.sync_cancelled_log_message || 'Sync cancelled, aborting batch processing.', 'info');
+                return;
+            }
             currentFullSyncStepType = syncType; 
             currentFullSyncStepOffset = offset;
             // currentFullSyncStepTotalItems = totalKnownItems; // This was for the step, not used by updateOverallFullSyncProgress directly
@@ -601,6 +637,12 @@
 
         // New function to decide what to do after a parent batch or a variation product is processed
         function handleFullSyncContinuation() {
+            if (isSyncCancelledByUser) { // ADDED: Check cancellation
+                logMessage(fullSyncLogDiv, i18n.sync_cancelled_log_message || 'Sync cancelled, not continuing.', 'info');
+                return;
+            }
+
+            // If there are items in the variation queue, process them first
             if (fullSyncVariationQueue.length > 0) {
                 currentFullSyncVariationProductData = fullSyncVariationQueue.shift(); // Get and remove first item
                 logMessage(fullSyncLogDiv, `[INFO] Starting variation processing for ${currentFullSyncVariationProductData.item_name} (Full Sync Queue).`, 'info');
@@ -623,6 +665,18 @@
 
         // New function to process variations for a single product from the fullSyncVariationQueue
         function processFullSyncVariationBatchLoop() {
+            if (isSyncCancelledByUser) { // ADDED: Check cancellation
+                logMessage(fullSyncLogDiv, i18n.sync_cancelled_log_message || 'Sync cancelled, stopping variation loop.', 'info');
+                currentFullSyncVariationProductData = null; // Clear current product data
+                fullSyncVariationQueue = []; // Clear the queue
+                return;
+            }
+
+            if (!currentFullSyncVariationProductData && fullSyncVariationQueue.length > 0) {
+                currentFullSyncVariationProductData = fullSyncVariationQueue.shift(); // Get and remove first item
+                logMessage(fullSyncLogDiv, `[INFO] Starting variation processing for ${currentFullSyncVariationProductData.item_name} (Full Sync Queue).`, 'info');
+            }
+
             if (!currentFullSyncVariationProductData) {
                 logMessage(fullSyncLogDiv, "[ERROR] currentFullSyncVariationProductData is null in processFullSyncVariationBatchLoop. Attempting to continue.", 'error');
                 handleFullSyncContinuation(); // Try to continue with next in queue or parent batch
@@ -715,12 +769,12 @@
                 processFullSyncBatch(syncType, 0, currentTotalForStep); // Pass the total for this step
             } else {
                 stopBatchStatusAnimation();
-                updateStatus(fullSyncStatusDiv, i18n.sync_complete);
-                logMessage(fullSyncLogDiv, i18n.sync_complete, 'success');
-                fullSyncButton.removeClass('disabled').text(i18n.start_sync);
-                // Ensure progress bar hits 100% at the very end
-                // It should be very close or at 100 already if grandTotalAllItemsForSync was > 0
-                updateProgressBar(fullSyncProgressBar, 100); 
+                updateStatus(fullSyncStatusDiv, i18n.sync_complete || 'Sync Complete!');
+                logMessage(fullSyncLogDiv, i18n.sync_complete || 'Sync Complete!', 'success');
+                fullSyncButton.text(i18n.start_sync || 'Start Full Sync').prop('disabled', false);
+                stopFullSyncButton.hide(); // Hide STOP button on completion
+                loadFullSyncPreviewButton.prop('disabled', false); // Re-enable reload preview
+                updateOverallFullSyncProgress(100); // Ensure it hits 100%
             }
         }
 
