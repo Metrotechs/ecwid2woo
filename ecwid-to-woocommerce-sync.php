@@ -623,7 +623,7 @@ class Ecwid_WC_Sync {
                 <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'ecwid2woo-product-sync'); ?>
             </a>
             <a href="<?php echo admin_url('admin.php?page=' . $this->partial_sync_slug); ?>" class="nav-link">
-                <span class="nav-icon">🎯</span> <?php esc_html_e('Partial Sync', 'ecwid2woo-product-sync'); ?>
+                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'ecwid2woo-product-sync'); ?>
             </a>
         </div>
 
@@ -732,7 +732,7 @@ class Ecwid_WC_Sync {
                 <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'ecwid2woo-product-sync'); ?>
             </span>
             <a href="<?php echo admin_url('admin.php?page=' . $this->partial_sync_slug); ?>" class="nav-link">
-                <span class="nav-icon">🎯</span> <?php esc_html_e('Partial Sync', 'ecwid2woo-product-sync'); ?>
+                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'ecwid2woo-product-sync'); ?>
             </a>
         </div>
 
@@ -812,7 +812,9 @@ class Ecwid_WC_Sync {
         <div class="ecwid-page-header">
             <h1><?php esc_html_e('Partial Product Sync', 'ecwid2woo-product-sync'); ?></h1>
             <p><?php esc_html_e('Load products from your Ecwid store and select which ones to import or update in WooCommerce.', 'ecwid2woo-product-sync'); ?></p>
-        </div>        <!-- Navigation Bar -->
+        </div>
+
+        <!-- Navigation Bar -->
         <div class="ecwid-page-nav">
             <a href="<?php echo admin_url('admin.php?page=' . $this->settings_slug); ?>" class="nav-link">
                 <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'ecwid2woo-product-sync'); ?>
@@ -826,15 +828,14 @@ class Ecwid_WC_Sync {
             <span class="nav-link current">
                 <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'ecwid2woo-product-sync'); ?>
             </span>
-            <a href="<?php echo admin_url('edit.php?post_type=ecwid_placeholder'); ?>" class="nav-link">
-                <span class="nav-icon">🔧</span> <?php esc_html_e('Placeholders', 'ecwid2woo-product-sync'); ?>
-            </a>
         </div>
 
         <div class="ecwid-sync-container">
             <div id="selective-sync-initial-info" style="margin-bottom: 10px; padding: 5px; border: 1px solid #e0e0e0; background-color: #f9f9f9;">
                 <!-- This will be populated by JavaScript -->
-            </div>            <button id="load-ecwid-products-button" class="button"><?php esc_html_e('Reload Products', 'ecwid2woo-product-sync'); ?></button>
+            </div>
+
+            <button id="load-ecwid-products-button" class="button"><?php esc_html_e('Reload Products', 'ecwid2woo-product-sync'); ?></button>
             <div id="selective-product-list-container" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff;">
                 <?php esc_html_e('Product list will appear here...', 'ecwid2woo-product-sync'); ?>
             </div>
@@ -846,6 +847,57 @@ class Ecwid_WC_Sync {
             </div>
             <div id="selective-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
         </div>
+
+        <style>
+        .ecwid-page-header {
+            margin-bottom: 20px;
+        }
+        
+        .ecwid-page-nav {
+            display: flex;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 8px;
+            margin-bottom: 25px;
+            gap: 4px;
+        }
+        
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 10px 16px;
+            text-decoration: none;
+            color: #495057;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+        
+        .nav-link:hover {
+            background: #e9ecef;
+            color: #212529;
+            text-decoration: none;
+        }
+        
+        .nav-link.current {
+            background: #007cba;
+            color: white;
+        }
+        
+        .nav-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        
+        .ecwid-sync-container {
+            background: #fff;
+            border: 1px solid #e1e1e1;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        </style>
         <?php
     }
 
@@ -1284,6 +1336,8 @@ class Ecwid_WC_Sync {
                     $update_args_for_named = ['name' => wp_slash($ecwid_cat_name)];
                     if (isset($args['description'])) $update_args_for_named['description'] = $args['description'];
                     if (isset($args['parent'])) $update_args_for_named['parent'] = $args['parent'];
+
+                   
 
                     $update_named_result = wp_update_term($wc_term_id_found_by_name, 'product_cat', $update_args_for_named);
 
