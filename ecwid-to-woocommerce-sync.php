@@ -31,7 +31,7 @@ if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
     define('ECWID2WOO_VARIATION_BATCH_SIZE', 50); // Number of variations to process per batch
 }
 
-define('ECWID2WOO_VERSION', '2.0.0'); // Define version constant
+define('ECWID2WOO_VERSION', '0.0.7'); // Define version constant
 
 class Ecwid_WC_Sync {
     private $options;
@@ -44,7 +44,7 @@ class Ecwid_WC_Sync {
     private $category_sync_slug = 'ecwid-sync-categories';
 
     public function __construct() {
-        $this->load_textdomain(); // Load text domain
+        $this->load_textdomain();
         $this->options = get_option('ecwid_wc_sync_options');
         add_action('init', [$this, 'register_placeholder_cpt']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
@@ -56,7 +56,7 @@ class Ecwid_WC_Sync {
         add_action('wp_ajax_ecwid_wc_process_variation_batch', [$this, 'ajax_process_variation_batch']);
         add_action('wp_ajax_ecwid_wc_fetch_full_sync_counts', [$this, 'ajax_fetch_full_sync_counts']);
         add_action('wp_ajax_ecwid_wc_fetch_categories_for_display', [$this, 'ajax_fetch_categories_for_display']);
-        // REMOVED: add_action('wp_ajax_ecwid_wc_import_selected_category', [$this, 'ajax_import_selected_category']);
+        add_action('wp_ajax_ecwid_wc_test_connection', [$this, 'ajax_test_api_connection']); // Make sure this line exists
     }
 
     public function load_textdomain() {
@@ -199,9 +199,9 @@ class Ecwid_WC_Sync {
                 'products_to_sync_info' => __('Products to sync: {count}', 'ecwid2woo-product-sync'), 
                 'variations_to_sync_info' => __('Variations to sync: {count}', 'ecwid2woo-product-sync'), 
                 'syncing_item_of_total' => __('Syncing {syncType}: {current} of {total}...', 'ecwid2woo-product-sync'), 
-                'load_products' => __('Load Ecwid Products for Selection', 'ecwid2woo-product-sync'),
+                'load_products' => __('Reload Products', 'ecwid2woo-product-sync'),
                 'loading_products' => __('Loading Products...', 'ecwid2woo-product-sync'),
-                'load_ecwid_categories' => __('Load Ecwid Category List', 'ecwid2woo-product-sync'), 
+                'load_ecwid_categories' => __('Reload Ecwid Categories', 'ecwid2woo-product-sync'), 
                 'loading_ecwid_categories' => __('Loading Categories...', 'ecwid2woo-product-sync'), 
                 'no_categories_found_display' => __('No categories found in your Ecwid store or an error occurred.', 'ecwid2woo-product-sync'), 
                 'categories_loaded_for_display' => __('{count} categories loaded for display.', 'ecwid2woo-product-sync'), 
@@ -211,9 +211,6 @@ class Ecwid_WC_Sync {
                 'select_all_none' => __('Select All/None', 'ecwid2woo-product-sync'), 
                 'no_products_found' => __('No enabled products found in Ecwid store or failed to fetch.', 'ecwid2woo-product-sync'),
                 'start_category_sync_page' => __('Start Category Sync', 'ecwid2woo-product-sync'), // RESTORED/KEPT
-                // REMOVED: 'import_selected_categories' => __('Import Selected Categories', 'ecwid2woo-product-sync'), 
-                // REMOVED: 'importing_selected_categories' => __('Importing Selected Categories...', 'ecwid2woo-product-sync'), 
-                // REMOVED: 'no_categories_selected' => __('Please select at least one category to import.', 'ecwid2woo-product-sync'), 
                 'syncing_categories_page_button' => __('Syncing Categories...', 'ecwid2woo-product-sync'),
                 'category_sync_page_complete' => __('Category Sync Complete!', 'ecwid2woo-product-sync'),
                 'syncing_just_categories_page_status' => __('Syncing categories...', 'ecwid2woo-product-sync'),
@@ -236,6 +233,10 @@ class Ecwid_WC_Sync {
                 'sync_stopped_by_user_log' => __('SYNC HAS BEEN STOPPED BY THE USER.', 'ecwid2woo-product-sync'), // ADDED
                 'sync_stopped_by_user_status' => __('Sync stopped by user.', 'ecwid2woo-product-sync'), // ADDED
                 'sync_cancelled_log_message' => __('Sync cancelled by user, aborting further operations.', 'ecwid2woo-product-sync'), // ADDED
+                'testing_connection' => __('Testing...', 'ecwid2woo-product-sync'),
+                'connection_successful' => __('CONNECTION SUCCESSFUL!', 'ecwid2woo-product-sync'),
+                'connection_failed' => __('CONNECTION UNSUCCESSFUL - PLEASE CHECK YOUR API KEY AND STORE ID AND TRY AGAIN', 'ecwid2woo-product-sync'),
+                'save_settings_failed' => __('Failed to save settings. Please try again.', 'ecwid2woo-product-sync'),
             ]
         ]);
 
@@ -262,106 +263,589 @@ class Ecwid_WC_Sync {
                 break;
         }
         echo '</div>';
-    }
-
-    private function render_settings_page() {
+    }    private function render_settings_page() {
         ?>
-        <h1><?php esc_html_e('Ecwid Sync Settings', 'ecwid2woo-product-sync'); ?></h1>
-        <form action='options.php' method='post'>
-            <?php
-            settings_fields('ecwidSyncSettingsGroup');
-            do_settings_sections($this->settings_slug);
-            submit_button(__('Save Settings', 'ecwid2woo-product-sync'));
-            ?>
-        </form>
-        <?php
-    }
+        <div class="ecwid-settings-header">
+            <h1><?php esc_html_e('Ecwid2Woo Sync Settings', 'ecwid2woo-product-sync'); ?></h1>
+            <p class="description"><?php esc_html_e('Configure your Ecwid API credentials to enable synchronization between your Ecwid store and WooCommerce.', 'ecwid2woo-product-sync'); ?></p>
+        </div>
 
-    private function render_full_sync_page() {
-        ?>
-        <h1><?php esc_html_e('Full Data Sync', 'ecwid2woo-product-sync'); ?></h1>
-        <p><?php esc_html_e('This will sync all categories and then all enabled products from Ecwid to WooCommerce. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'ecwid2woo-product-sync'); ?></p>
-        
-        <button id="load-full-sync-preview-button" class="button" style="margin-bottom: 15px;"><?php esc_html_e('Reload Sync Data', 'ecwid2woo-product-sync'); ?></button>
-
-        <div id="full-sync-preview-container" style="display:none;">
-            <div style="display:flex; flex-wrap: wrap; gap: 20px; margin-bottom:15px;">
-                <div style="flex:1; min-width: 300px;">
-                    <h3><?php esc_html_e('Categories to be Synced:', 'ecwid2woo-product-sync'); ?></h3>
-                    <div id="full-sync-category-preview-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff;">
-                        <?php esc_html_e('Category list will appear here after loading preview...', 'ecwid2woo-product-sync'); ?>
-                    </div>
+        <div class="ecwid-settings-container">
+            <div class="ecwid-settings-card">
+                <div class="card-header">
+                    <h2><?php esc_html_e('API Configuration', 'ecwid2woo-product-sync'); ?></h2>
+                    <p><?php esc_html_e('Enter your Ecwid store credentials below:', 'ecwid2woo-product-sync'); ?></p>
                 </div>
-                <div style="flex:1; min-width: 300px;">
-                    <h3><?php esc_html_e('Products to be Synced:', 'ecwid2woo-product-sync'); ?></h3>
-                    <div id="full-sync-product-preview-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff;">
-                        <?php esc_html_e('Product list will appear here after loading preview...', 'ecwid2woo-product-sync'); ?>
+                
+                <form action='options.php' method='post' id="ecwid-settings-form">
+                    <?php
+                    settings_fields('ecwidSyncSettingsGroup');
+                    do_settings_sections($this->settings_slug);
+                    ?>
+                    
+                    <div class="settings-actions">
+                        <button type="submit" class="button button-primary button-large"><?php esc_html_e('Save Settings', 'ecwid2woo-product-sync'); ?></button>
+                        <button type="button" id="test-api-connection" class="button button-secondary button-large"><?php esc_html_e('Test Connection', 'ecwid2woo-product-sync'); ?></button>
                     </div>
+                </form>
+                
+                <div id="test-connection-result" class="connection-status"></div>
+                <div id="save-status" class="save-status"></div>
+            </div>
+
+            <div class="ecwid-navigation-card">
+                <div class="card-header">
+                    <h2><?php esc_html_e('Quick Actions', 'ecwid2woo-product-sync'); ?></h2>
+                    <p><?php esc_html_e('Navigate to different sync options:', 'ecwid2woo-product-sync'); ?></p>
+                </div>
+                
+                <div class="nav-buttons-grid">
+                    <a href="<?php echo admin_url('admin.php?page=' . $this->full_sync_slug); ?>" class="nav-button nav-button-primary">
+                        <div class="nav-button-icon">🔄</div>
+                        <div class="nav-button-content">
+                            <h3><?php esc_html_e('Full Sync', 'ecwid2woo-product-sync'); ?></h3>
+                            <p><?php esc_html_e('Sync all categories and products', 'ecwid2woo-product-sync'); ?></p>
+                        </div>
+                    </a>
+                    
+                    <a href="<?php echo admin_url('admin.php?page=' . $this->category_sync_slug); ?>" class="nav-button nav-button-secondary">
+                        <div class="nav-button-icon">📁</div>
+                        <div class="nav-button-content">
+                            <h3><?php esc_html_e('Category Sync', 'ecwid2woo-product-sync'); ?></h3>
+                            <p><?php esc_html_e('Import and organize categories', 'ecwid2woo-product-sync'); ?></p>
+                        </div>
+                    </a>
+                    
+                    <a href="<?php echo admin_url('admin.php?page=' . $this->partial_sync_slug); ?>" class="nav-button nav-button-tertiary">
+                        <div class="nav-button-icon">🎯</div>
+                        <div class="nav-button-content">
+                            <h3><?php esc_html_e('Partial Sync', 'ecwid2woo-product-sync'); ?></h3>
+                            <p><?php esc_html_e('Select specific products to import', 'ecwid2woo-product-sync'); ?></p>
+                        </div>
+                    </a>
+                    
+                    <a href="<?php echo admin_url('edit.php?post_type=ecwid_placeholder'); ?>" class="nav-button nav-button-quaternary">
+                        <div class="nav-button-icon">📋</div>
+                        <div class="nav-button-content">
+                            <h3><?php esc_html_e('Placeholders', 'ecwid2woo-product-sync'); ?></h3>
+                            <p><?php esc_html_e('Manage import placeholders', 'ecwid2woo-product-sync'); ?></p>
+                        </div>
+                    </a>
                 </div>
             </div>
         </div>
+
+        <style>
+        .ecwid-settings-header {
+            margin-bottom: 30px;
+        }
         
-        <div id="full-sync-counts-info" style="margin-bottom: 10px; font-style: italic;"><?php esc_html_e('Item counts will be displayed here.', 'ecwid2woo-product-sync'); ?></div>
-        <div id="full-sync-status" style="margin-bottom: 10px; font-weight: bold;"></div>
+        .ecwid-settings-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            max-width: 1200px;
+        }
         
-        <div style="margin-bottom: 5px;">
-            <label for="full-sync-bar" style="display: block; margin-bottom: 2px; font-size: 0.9em;"><?php esc_html_e('Overall Progress:', 'ecwid2woo-product-sync'); ?></label>
-            <div id="full-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; border: 1px solid #ccc; box-sizing: border-box; display:none;">
-                <div id="full-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+        @media (max-width: 1024px) {
+            .ecwid-settings-container {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .ecwid-settings-card, .ecwid-navigation-card {
+            background: #fff;
+            border: 1px solid #e1e1e1;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .card-header {
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .card-header h2 {
+            margin: 0 0 8px 0;
+            color: #1d2327;
+            font-size: 18px;
+        }
+        
+        .card-header p {
+            margin: 0;
+            color: #646970;
+            font-size: 14px;
+        }
+        
+        .settings-actions {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid #f0f0f0;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .button-large {
+            padding: 8px 16px !important;
+            font-size: 14px !important;
+            height: auto !important;
+        }
+        
+        .connection-status, .save-status {
+            margin-top: 15px;
+            padding: 12px 16px;
+            border-radius: 4px;
+            display: none;
+            animation: slideDown 0.3s ease-out;
+        }
+        
+        .connection-status.success, .save-status.success {
+            background: #d1eddb;
+            border: 1px solid #00a32a;
+            color: #00a32a;
+        }
+        
+        .connection-status.error, .save-status.error {
+            background: #f9dcdc;
+            border: 1px solid #d63638;
+            color: #d63638;
+        }
+        
+        .nav-buttons-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        
+        @media (max-width: 768px) {
+            .nav-buttons-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .nav-button {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            min-height: 100px;
+        }
+        
+        .nav-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-decoration: none;
+        }
+        
+        .nav-button-primary {
+            background: linear-gradient(135deg, #0073aa 0%, #005a87 100%);
+            color: white;
+        }
+        
+        .nav-button-primary:hover {
+            background: linear-gradient(135deg, #005a87 0%, #004a70 100%);
+            color: white;
+        }
+        
+        .nav-button-secondary {
+            background: linear-gradient(135deg, #00a32a 0%, #007c20 100%);
+            color: white;
+        }
+        
+        .nav-button-secondary:hover {
+            background: linear-gradient(135deg, #007c20 0%, #006318 100%);
+            color: white;
+        }
+        
+        .nav-button-tertiary {
+            background: linear-gradient(135deg, #f56e28 0%, #e55100 100%);
+            color: white;
+        }
+        
+        .nav-button-tertiary:hover {
+            background: linear-gradient(135deg, #e55100 0%, #cc4400 100%);
+            color: white;
+        }
+        
+        .nav-button-quaternary {
+            background: linear-gradient(135deg, #8c8f94 0%, #6c7781 100%);
+            color: white;
+        }
+        
+        .nav-button-quaternary:hover {
+            background: linear-gradient(135deg, #6c7781 0%, #50575e 100%);
+            color: white;
+        }
+        
+        .nav-button-icon {
+            font-size: 24px;
+            margin-right: 15px;
+            min-width: 30px;
+        }
+        
+        .nav-button-content h3 {
+            margin: 0 0 5px 0;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .nav-button-content p {
+            margin: 0;
+            font-size: 13px;
+            opacity: 0.9;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #0073aa;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        </style>
+
+        <script type="text/javascript">
+        jQuery(document).ready(function($) {
+            // Auto-test connection on page load if credentials exist
+            var storeId = $('input[name="ecwid_wc_sync_options[store_id]"]').val();
+            var token = $('input[name="ecwid_wc_sync_options[token]"]').val();
+            
+            if (storeId && token && storeId.length > 0 && token.length > 0) {
+                setTimeout(function() {
+                    $('#test-api-connection').trigger('click');
+                }, 500);
+            }
+            
+            // Enhanced connection test with better UI feedback
+            $('#test-api-connection').click(function() {
+                var button = $(this);
+                var originalText = button.text();
+                var resultDiv = $('#test-connection-result');
+                
+                button.html('<span class="loading-spinner"></span>' + '<?php echo esc_js(__('Testing...', 'ecwid2woo-product-sync')); ?>').prop('disabled', true);
+                resultDiv.hide().removeClass('success error');
+                
+                $.ajax({
+                    url: ecwid_sync_params.ajax_url,
+                    type: 'POST',
+                    data: {
+                        action: 'ecwid_wc_test_connection',
+                        nonce: ecwid_sync_params.nonce
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            resultDiv.addClass('success')
+                                    .html('<strong>✅ <?php echo esc_js(__('CONNECTION SUCCESSFUL!', 'ecwid2woo-product-sync')); ?></strong><br>' + response.data.message)
+                                    .show();
+                        } else {
+                            resultDiv.addClass('error')
+                                    .html('<strong>❌ <?php echo esc_js(__('CONNECTION FAILED', 'ecwid2woo-product-sync')); ?></strong><br>' + response.data.message)
+                                    .show();
+                        }
+                    },
+                    error: function() {
+                        resultDiv.addClass('error')
+                                .html('<strong>❌ <?php echo esc_js(__('CONNECTION ERROR', 'ecwid2woo-product-sync')); ?></strong><br><?php echo esc_js(__('Connection test failed. Please try again.', 'ecwid2woo-product-sync')); ?>')
+                                .show();
+                    },
+                    complete: function() {
+                        button.text(originalText).prop('disabled', false);
+                    }
+                });
+            });
+            
+            // Enhanced form submission with feedback
+            $('#ecwid-settings-form').submit(function(e) {
+                var saveStatusDiv = $('#save-status');
+                saveStatusDiv.hide().removeClass('success error');
+                
+                // Show saving status
+                setTimeout(function() {
+                    saveStatusDiv.addClass('success')
+                            .html('<strong>✅ <?php echo esc_js(__('Settings saved successfully!', 'ecwid2woo-product-sync')); ?></strong>')
+                            .show();
+                    
+                    // Auto-test connection after successful save
+                    setTimeout(function() {
+                        $('#test-api-connection').trigger('click');
+                    }, 1000);
+                }, 100);
+            });
+            
+            // Add input change detection for real-time validation
+            $('input[name="ecwid_wc_sync_options[store_id]"], input[name="ecwid_wc_sync_options[token]"]').on('input', function() {
+                $('#test-connection-result').hide();
+            });
+        });
+        </script>
+        <?php
+    }    private function render_full_sync_page() {
+        ?>
+        <div class="ecwid-page-header">
+            <h1><?php esc_html_e('Full Data Sync', 'ecwid2woo-product-sync'); ?></h1>
+            <p class="description"><?php esc_html_e('This will sync all categories and then all enabled products from Ecwid to WooCommerce. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'ecwid2woo-product-sync'); ?></p>
+        </div>
+
+        <!-- Navigation Bar -->
+        <div class="ecwid-page-nav">
+            <a href="<?php echo admin_url('admin.php?page=' . $this->settings_slug); ?>" class="nav-link">
+                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'ecwid2woo-product-sync'); ?>
+            </a>
+            <span class="nav-link current">
+                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'ecwid2woo-product-sync'); ?>
+            </span>
+            <a href="<?php echo admin_url('admin.php?page=' . $this->category_sync_slug); ?>" class="nav-link">
+                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'ecwid2woo-product-sync'); ?>
+            </a>
+            <a href="<?php echo admin_url('admin.php?page=' . $this->partial_sync_slug); ?>" class="nav-link">
+                <span class="nav-icon">🎯</span> <?php esc_html_e('Partial Sync', 'ecwid2woo-product-sync'); ?>
+            </a>
+        </div>
+
+        <div class="ecwid-sync-container">
+            <button id="load-full-sync-preview-button" class="button" style="margin-bottom: 15px;"><?php esc_html_e('Reload Sync Data', 'ecwid2woo-product-sync'); ?></button>
+
+            <div id="full-sync-preview-container" style="display:none;">
+                <div style="display:flex; flex-wrap: wrap; gap: 20px; margin-bottom:15px;">
+                    <div style="flex:1; min-width: 300px;">
+                        <h3><?php esc_html_e('Categories to be Synced:', 'ecwid2woo-product-sync'); ?></h3>
+                        <div id="full-sync-category-preview-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff;">
+                            <?php esc_html_e('Category list will appear here after loading preview...', 'ecwid2woo-product-sync'); ?>
+                        </div>
+                    </div>
+                    <div style="flex:1; min-width: 300px;">
+                        <h3><?php esc_html_e('Products to be Synced:', 'ecwid2woo-product-sync'); ?></h3>
+                        <div id="full-sync-product-preview-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff;">
+                            <?php esc_html_e('Product list will appear here after loading preview...', 'ecwid2woo-product-sync'); ?>
+                        </div>
+                    </div>
+                </div>
             </div>
+            
+            <div id="full-sync-counts-info" style="margin-bottom: 10px; font-style: italic;"><?php esc_html_e('Item counts will be displayed here.', 'ecwid2woo-product-sync'); ?></div>
+            <div id="full-sync-status" style="margin-bottom: 10px; font-weight: bold;"></div>
+            
+            <div style="margin-bottom: 5px;">
+                <label for="full-sync-bar" style="display: block; margin-bottom: 2px; font-size: 0.9em;"><?php esc_html_e('Overall Progress:', 'ecwid2woo-product-sync'); ?></label>
+                <div id="full-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; border: 1px solid #ccc; box-sizing: border-box; display:none;">
+                    <div id="full-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+                </div>
+            </div>
+
+            <button id="full-sync-button" class="button button-primary" style="display:none;"><?php esc_html_e('Start Full Sync', 'ecwid2woo-product-sync'); ?></button>
+            <button id="stop-full-sync-button" class="button button-secondary" style="background-color: #dc3545; color: white; border-color: #bd2130; display:none; margin-left: 10px;"><?php esc_html_e('STOP SYNC', 'ecwid2woo-product-sync'); ?></button>
+            <div id="full-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
         </div>
 
-        <button id="full-sync-button" class="button button-primary" style="display:none;"><?php esc_html_e('Start Full Sync', 'ecwid2woo-product-sync'); ?></button>
-        <button id="stop-full-sync-button" class="button button-secondary" style="background-color: #dc3545; color: white; border-color: #bd2130; display:none; margin-left: 10px;"><?php esc_html_e('STOP SYNC', 'ecwid2woo-product-sync'); ?></button>
-        <div id="full-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
+        <style>
+        .ecwid-page-header {
+            margin-bottom: 20px;
+        }
+        
+        .ecwid-page-nav {
+            display: flex;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 8px;
+            margin-bottom: 25px;
+            gap: 4px;
+        }
+        
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 10px 16px;
+            text-decoration: none;
+            color: #495057;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+        
+        .nav-link:hover {
+            background: #e9ecef;
+            color: #212529;
+            text-decoration: none;
+        }
+        
+        .nav-link.current {
+            background: #007cba;
+            color: white;
+        }
+        
+        .nav-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        
+        .ecwid-sync-container {
+            background: #fff;
+            border: 1px solid #e1e1e1;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        </style>
         <?php
-    }
-
-    private function render_category_sync_page() {
+    }    private function render_category_sync_page() {
         ?>
-        <h1><?php esc_html_e('Ecwid Category Sync', 'ecwid2woo-product-sync'); ?></h1>
-        <p><?php esc_html_e('This will sync all categories from Ecwid to WooCommerce. You can load the list to see which categories will be imported.', 'ecwid2woo-product-sync'); ?></p>
-        
-        <div id="category-sync-initial-info" style="margin-bottom: 10px; font-style: italic;">
-            <?php esc_html_e('Click "Load Ecwid Category List" to see details.', 'ecwid2woo-product-sync'); ?>
-        </div>
-        <button id="load-ecwid-categories-button" class="button" style="margin-bottom: 15px;"><?php esc_html_e('Load Ecwid Category List', 'ecwid2woo-product-sync'); ?></button>
-        
-        <div id="category-list-container" style="margin-bottom:15px; max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff; display: none;">
-            <?php esc_html_e('Category list will appear here...', 'ecwid2woo-product-sync'); ?>
+        <div class="ecwid-page-header">
+            <h1><?php esc_html_e('Ecwid Category Sync', 'ecwid2woo-product-sync'); ?></h1>
+            <p class="description"><?php esc_html_e('This will sync all categories from Ecwid to WooCommerce. You can load the list to see which categories will be imported.', 'ecwid2woo-product-sync'); ?></p>
         </div>
 
-        <button id="category-page-sync-button" class="button button-primary" style="margin-bottom:15px;"><?php esc_html_e('Start Category Sync', 'ecwid2woo-product-sync'); // Reverted button text and ID ?></button>
-        <button id="fix-category-hierarchy-button" class="button" style="margin-left: 10px;"><?php esc_html_e('Fix Category Hierarchy', 'ecwid2woo-product-sync'); ?></button>
-        
-        <div id="category-page-sync-status" style="margin-bottom: 10px; font-weight: bold;"></div>
-        <div id="category-page-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box; display:none;">
-            <div id="category-page-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+        <!-- Navigation Bar -->
+        <div class="ecwid-page-nav">
+            <a href="<?php echo admin_url('admin.php?page=' . $this->settings_slug); ?>" class="nav-link">
+                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'ecwid2woo-product-sync'); ?>
+            </a>
+            <a href="<?php echo admin_url('admin.php?page=' . $this->full_sync_slug); ?>" class="nav-link">
+                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'ecwid2woo-product-sync'); ?>
+            </a>
+            <span class="nav-link current">
+                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'ecwid2woo-product-sync'); ?>
+            </span>
+            <a href="<?php echo admin_url('admin.php?page=' . $this->partial_sync_slug); ?>" class="nav-link">
+                <span class="nav-icon">🎯</span> <?php esc_html_e('Partial Sync', 'ecwid2woo-product-sync'); ?>
+            </a>
         </div>
-        <div id="category-page-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
+
+        <div class="ecwid-sync-container">
+            <div id="category-sync-initial-info" style="margin-bottom: 10px; font-style: italic;">
+                <?php esc_html_e('Click "Load Ecwid Category List" to see details.', 'ecwid2woo-product-sync'); ?>
+            </div>
+            <button id="load-ecwid-categories-button" class="button" style="margin-bottom: 15px;"><?php esc_html_e('Reload Ecwid Categories', 'ecwid2woo-product-sync'); ?></button>
+            
+            <div id="category-list-container" style="margin-bottom:15px; max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff; display: none;">
+                <?php esc_html_e('Category list will appear here...', 'ecwid2woo-product-sync'); ?>
+            </div>
+
+            <button id="category-page-sync-button" class="button button-primary" style="margin-bottom:15px;"><?php esc_html_e('Start Category Sync', 'ecwid2woo-product-sync'); ?></button>
+            <button id="fix-category-hierarchy-button" class="button" style="margin-left: 10px;"><?php esc_html_e('Fix Category Hierarchy', 'ecwid2woo-product-sync'); ?></button>
+            
+            <div id="category-page-sync-status" style="margin-bottom: 10px; font-weight: bold;"></div>
+            <div id="category-page-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box; display:none;">
+                <div id="category-page-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+            </div>
+            <div id="category-page-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
+        </div>
+
+        <style>
+        .ecwid-page-header {
+            margin-bottom: 20px;
+        }
+        
+        .ecwid-page-nav {
+            display: flex;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 8px;
+            margin-bottom: 25px;
+            gap: 4px;
+        }
+        
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 10px 16px;
+            text-decoration: none;
+            color: #495057;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+        
+        .nav-link:hover {
+            background: #e9ecef;
+            color: #212529;
+            text-decoration: none;
+        }
+        
+        .nav-link.current {
+            background: #007cba;
+            color: white;
+        }
+        
+        .nav-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+        
+        .ecwid-sync-container {
+            background: #fff;
+            border: 1px solid #e1e1e1;
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        </style>
         <?php
-    }
-
-    private function render_partial_sync_page() {
+    }    private function render_partial_sync_page() {
         ?>
-        <h1><?php esc_html_e('Partial Product Sync', 'ecwid2woo-product-sync'); ?></h1>
-        <p><?php esc_html_e('Load products from your Ecwid store and select which ones to import or update in WooCommerce.', 'ecwid2woo-product-sync'); ?></p>
-
-        <div id="selective-sync-initial-info" style="margin-bottom: 10px; padding: 5px; border: 1px solid #e0e0e0; background-color: #f9f9f9;">
-            <!-- This will be populated by JavaScript -->
+        <div class="ecwid-page-header">
+            <h1><?php esc_html_e('Partial Product Sync', 'ecwid2woo-product-sync'); ?></h1>
+            <p><?php esc_html_e('Load products from your Ecwid store and select which ones to import or update in WooCommerce.', 'ecwid2woo-product-sync'); ?></p>
+        </div>        <!-- Navigation Bar -->
+        <div class="ecwid-page-nav">
+            <a href="<?php echo admin_url('admin.php?page=' . $this->settings_slug); ?>" class="nav-link">
+                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'ecwid2woo-product-sync'); ?>
+            </a>
+            <a href="<?php echo admin_url('admin.php?page=' . $this->full_sync_slug); ?>" class="nav-link">
+                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'ecwid2woo-product-sync'); ?>
+            </a>
+            <a href="<?php echo admin_url('admin.php?page=' . $this->category_sync_slug); ?>" class="nav-link">
+                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'ecwid2woo-product-sync'); ?>
+            </a>
+            <span class="nav-link current">
+                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'ecwid2woo-product-sync'); ?>
+            </span>
+            <a href="<?php echo admin_url('edit.php?post_type=ecwid_placeholder'); ?>" class="nav-link">
+                <span class="nav-icon">🔧</span> <?php esc_html_e('Placeholders', 'ecwid2woo-product-sync'); ?>
+            </a>
         </div>
 
-        <button id="load-ecwid-products-button" class="button"><?php esc_html_e('Load Ecwid Products for Selection', 'ecwid2woo-product-sync'); ?></button>
-        <div id="selective-product-list-container" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff;">
-            <?php esc_html_e('Product list will appear here...', 'ecwid2woo-product-sync'); ?>
-        </div>
-        <button id="import-selected-products-button" class="button button-primary" style="margin-top: 10px; display: none;"><?php esc_html_e('Import Selected Products', 'ecwid2woo-product-sync'); ?></button>
+        <div class="ecwid-sync-container">
+            <div id="selective-sync-initial-info" style="margin-bottom: 10px; padding: 5px; border: 1px solid #e0e0e0; background-color: #f9f9f9;">
+                <!-- This will be populated by JavaScript -->
+            </div>            <button id="load-ecwid-products-button" class="button"><?php esc_html_e('Reload Products', 'ecwid2woo-product-sync'); ?></button>
+            <div id="selective-product-list-container" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff;">
+                <?php esc_html_e('Product list will appear here...', 'ecwid2woo-product-sync'); ?>
+            </div>
+            <button id="import-selected-products-button" class="button button-primary" style="margin-top: 10px; display: none;"><?php esc_html_e('Import Selected Products', 'ecwid2woo-product-sync'); ?></button>
 
-        <div id="selective-sync-status" style="margin-top:15px; margin-bottom: 10px; font-weight: bold;"></div>
-        <div id="selective-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box; display:none;">
-            <div id="selective-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+            <div id="selective-sync-status" style="margin-top:15px; margin-bottom: 10px; font-weight: bold;"></div>
+            <div id="selective-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box; display:none;">
+                <div id="selective-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+            </div>
+            <div id="selective-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
         </div>
-        <div id="selective-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
         <?php
     }
 
@@ -1007,7 +1491,35 @@ class Ecwid_WC_Sync {
 
             if ($featured_image_url) {
                 $existing_featured_image_id = $product_id ? $product->get_image_id('edit') : null;
-                $is_already_imported = $existing_featured_image_id && (get_post_meta($existing_featured_image_id, '_ecwid_image_source_url', true) === $featured_image_url);
+                $existing_source_url = $existing_featured_image_id ? get_post_meta($existing_featured_image_id, '_ecwid_image_source_url', true) : '';
+                
+                // Enhanced check: compare source URL OR check if the image URL is already in the attachment
+                $is_already_imported = false;
+                
+                if ($existing_featured_image_id) {
+                    // First check: exact source URL match
+                    if ($existing_source_url === $featured_image_url) {
+                        $is_already_imported = true;
+                        $product_logs[] = "Featured image already imported (exact source URL match). Skipping re-download.";
+                    } else {
+                        // Second check: look for existing attachment with same source URL
+                        global $wpdb;
+                        $existing_attachment = $wpdb->get_var($wpdb->prepare(
+                            "SELECT post_id FROM {$wpdb->postmeta} 
+                            WHERE meta_key = '_ecwid_image_source_url' 
+                            AND meta_value = %s 
+                            LIMIT 1",
+                            $featured_image_url
+                        ));
+                        
+                        if ($existing_attachment) {
+                            // Update the product to use the existing attachment
+                            $product->set_image_id($existing_attachment);
+                            $is_already_imported = true;
+                            $product_logs[] = "Found existing attachment (ID: $existing_attachment) for this image URL. Reusing instead of re-importing.";
+                        }
+                    }
+                }
 
                 if (!$is_already_imported) {
                     $product_logs[] = "Attempting to attach featured image: $featured_image_url";
@@ -1022,8 +1534,6 @@ class Ecwid_WC_Sync {
                     } else {
                          $product_logs[] = "[WARNING] Failed to attach featured image. Error: " . (is_wp_error($image_id) ? $image_id->get_error_message() : 'Unknown error');
                     }
-                } else {
-                    $product_logs[] = "Featured image already imported and matches source URL. Skipped re-download.";
                 }
             } else {
                 $product_logs[] = "No featured image URL provided in Ecwid data.";
@@ -1070,6 +1580,10 @@ class Ecwid_WC_Sync {
                     foreach ($ecwid_option['choices'] as $choice) {
                         $term_name = sanitize_text_field($choice['text']); // e.g., "Red"
                         $term_slug = sanitize_title($term_name); // e.g., "red"
+                        
+                       
+                        
+                       
                         
                         $existing_term = get_term_by('slug', $term_slug, $taxonomy_name);
                         if ($existing_term && !is_wp_error($existing_term)) {
@@ -1191,21 +1705,37 @@ class Ecwid_WC_Sync {
                     }
                 }
 
-                // 2. Add new gallery images from Ecwid that aren't already processed (i.e., kept or previously added from this payload)
+                // 2. Add new gallery images from Ecwid that aren't already processed
                 foreach ($item['galleryImages'] as $gallery_image_data) {
                     $gallery_image_url = $gallery_image_data['hdThumbnailUrl'] ?? $gallery_image_data['originalImageUrl'] ?? $gallery_image_data['url'] ?? null;
                     if ($gallery_image_url && !in_array($gallery_image_url, $processed_ecwid_gallery_urls)) {
-                        $product_logs[] = "Attempting to attach new gallery image from Ecwid: $gallery_image_url";
-                        $g_image_id = $this->attach_image_to_product_from_url($gallery_image_url, $product_saved_id, ($item['name'] ?? 'Product') . ' gallery image');
+                        // Check if this image URL already exists in the media library
+                        global $wpdb;
+                        $existing_gallery_attachment = $wpdb->get_var($wpdb->prepare(
+                            "SELECT post_id FROM {$wpdb->postmeta} 
+                            WHERE meta_key = '_ecwid_gallery_image_source_url' 
+                            AND meta_value = %s 
+                            LIMIT 1",
+                            $gallery_image_url
+                        ));
                         
-                        if ($g_image_id && !is_wp_error($g_image_id)) {
-                            $new_gallery_ids_to_set[] = $g_image_id;
-                            update_post_meta($g_image_id, '_ecwid_gallery_image_source_url', esc_url_raw($gallery_image_url));
-                            $product_logs[] = "New gallery image attached, WC Attachment ID: $g_image_id.";
-                            $processed_ecwid_gallery_urls[] = $gallery_image_url; // Mark as processed
+                        if ($existing_gallery_attachment) {
+                            $new_gallery_ids_to_set[] = $existing_gallery_attachment;
+                            $product_logs[] = "Found existing gallery attachment (ID: $existing_gallery_attachment) for URL: $gallery_image_url. Reusing.";
+                            $processed_ecwid_gallery_urls[] = $gallery_image_url;
                         } else {
-                            $gallery_error = is_wp_error($g_image_id) ? $g_image_id->get_error_message() : 'Unknown error attaching gallery image';
-                            $product_logs[] = "[WARNING] Failed to attach gallery image ($gallery_image_url). Error: $gallery_error";
+                            $product_logs[] = "Attempting to attach new gallery image from Ecwid: $gallery_image_url";
+                            $g_image_id = $this->attach_image_to_product_from_url($gallery_image_url, $product_saved_id, ($item['name'] ?? 'Product') . ' gallery image');
+                            
+                            if ($g_image_id && !is_wp_error($g_image_id)) {
+                                $new_gallery_ids_to_set[] = $g_image_id;
+                                update_post_meta($g_image_id, '_ecwid_gallery_image_source_url', esc_url_raw($gallery_image_url));
+                                $product_logs[] = "New gallery image attached, WC Attachment ID: $g_image_id.";
+                                $processed_ecwid_gallery_urls[] = $gallery_image_url;
+                            } else {
+                                $gallery_error = is_wp_error($g_image_id) ? $g_image_id->get_error_message() : 'Unknown error attaching gallery image';
+                                $product_logs[] = "[WARNING] Failed to attach gallery image ($gallery_image_url). Error: $gallery_error";
+                            }
                         }
                     }
                 }
@@ -1683,19 +2213,16 @@ class Ecwid_WC_Sync {
 
         $category_count = 0;
         $product_count = 0;
-        $total_variation_count = 0;
         $errors = [];
         $categories_preview = [];
         $products_preview = [];
 
         // Fetch Categories
         $categories_url = add_query_arg([
-            'limit' => 100, // Fetch up to 100 for preview and total count
+            'limit' => 100,
             'offset' => 0,
-            'responseFields' => 'items(id,name),total' // Request specific fields for items and the total count
+            'responseFields' => 'items(id,name),total'
         ], $api_essentials['base_url'] . '/categories');
-        
-        error_log("Ecwid2Woo Debug: Fetching categories for preview from URL: " . $categories_url);
 
         $cat_response = wp_remote_get($categories_url, [
             'headers' => [
@@ -1706,85 +2233,64 @@ class Ecwid_WC_Sync {
         ]);
 
         if (is_wp_error($cat_response)) {
-            error_log("Ecwid2Woo Debug: WP_Error fetching categories: " . $cat_response->get_error_message());
             $errors[] = sprintf(__('Error fetching categories from Ecwid: %s', 'ecwid2woo-product-sync'), $cat_response->get_error_message());
         } else {
             $cat_body = wp_remote_retrieve_body($cat_response);
             $cat_data = json_decode($cat_body, true);
             $cat_http_code = wp_remote_retrieve_response_code($cat_response);
-
-            error_log("Ecwid2Woo Debug: Categories API response code: " . $cat_http_code);
-            error_log("Ecwid2Woo Debug: Categories API response body: " . $cat_body);
             
             if ($cat_http_code === 200 && isset($cat_data['items'])) {
                 $category_count = isset($cat_data['total']) ? $cat_data['total'] : count($cat_data['items']);
                 $categories_preview = $cat_data['items'];
             } else {
-                $errors[] = sprintf(__('Failed to fetch categories. HTTP Status: %s. Response: %s', 'ecwid2woo-product-sync'), $cat_http_code, $cat_body);
+                $errors[] = sprintf(__('Failed to fetch categories. HTTP Status: %s', 'ecwid2woo-product-sync'), $cat_http_code);
             }
         }
 
         // Fetch Products
         $products_url = add_query_arg([
-            'limit' => 100, // Fetch up to 100 for preview and total count
+            'limit' => 100,
             'offset' => 0,
             'enabled' => 'true',
-            'responseFields' => 'items(id,name,enabled),total' // Request specific fields for items and the total count
+            'responseFields' => 'items(id,name,enabled),total'
         ], $api_essentials['base_url'] . '/products');
-        
-        error_log("Ecwid2Woo Debug: Fetching products for preview from URL: " . $products_url);
 
         $prod_response = wp_remote_get($products_url, [
             'headers' => [
-                'Accept' => 'application/json',
                 'Authorization' => 'Bearer ' . $api_essentials['token']
             ],
             'timeout' => 30,
         ]);
 
         if (is_wp_error($prod_response)) {
-            error_log("Ecwid2Woo Debug: WP_Error fetching products: " . $prod_response->get_error_message());
             $errors[] = sprintf(__('Error fetching products from Ecwid: %s', 'ecwid2woo-product-sync'), $prod_response->get_error_message());
         } else {
             $prod_body = wp_remote_retrieve_body($prod_response);
             $prod_data = json_decode($prod_body, true);
             $prod_http_code = wp_remote_retrieve_response_code($prod_response);
-
-            error_log("Ecwid2Woo Debug: Products API response code: " . $prod_http_code);
-            error_log("Ecwid2Woo Debug: Products API response body: " . $prod_body);
             
             if ($prod_http_code === 200 && isset($prod_data['items'])) {
                 $product_count = isset($prod_data['total']) ? $prod_data['total'] : count($prod_data['items']);
                 $products_preview = $prod_data['items'];
-                
-                // Total variation count will be derived from the product data fetched
-                foreach ($prod_data['items'] as $product_item) {
-                    if (isset($product_item['combinations']) && is_array($product_item['combinations'])) {
-                        $total_variation_count += count($product_item['combinations']);
-                    }
-                }
             } else {
-                $errors[] = sprintf(__('Failed to fetch products. HTTP Status: %s. Response: %s', 'ecwid2woo-product-sync'), $prod_http_code, $prod_body);
+                $errors[] = sprintf(__('Failed to fetch products. HTTP Status: %s', 'ecwid2woo-product-sync'), $prod_http_code);
             }
         }
 
         if (!empty($errors)) {
             wp_send_json_error([
-                'message' => __('Failed to fetch all item counts from Ecwid.', 'ecwid2woo-product-sync'), 
-                'details' => $errors, 
-                'categories_count' => $category_count, // Send current counts even if errors occurred
-                'products_count' => $product_count,
-                'variation_count' => $total_variation_count,
+                'message' => implode('; ', $errors),
                 'categories_preview' => $categories_preview,
-                'products_preview' => $products_preview
+                'products_preview' => $products_preview,
+                'categories_count' => $category_count,
+                'products_count' => $product_count
             ]);
         } else {
             wp_send_json_success([
-                'categories_count' => $category_count, 
-                'products_count' => $product_count,
-                'variation_count' => $total_variation_count,
                 'categories_preview' => $categories_preview,
-                'products_preview' => $products_preview
+                'products_preview' => $products_preview,
+                'categories_count' => $category_count,
+                'products_count' => $product_count
             ]);
         }
     }
@@ -1805,14 +2311,13 @@ class Ecwid_WC_Sync {
 
         $all_categories = [];
         $offset = 0;
-        $limit = 100; // Ecwid API limit for categories per request
+        $limit = 100;
 
         do {
             $query_params = [
                 'limit' => $limit,
                 'offset' => $offset,
-                // Fetch relevant fields for display
-                'responseFields' => 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl),total,count,offset' 
+                'responseFields' => 'items(id,name,parentId),total'
             ];
             $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories');
 
@@ -1833,56 +2338,58 @@ class Ecwid_WC_Sync {
                 wp_send_json_error(['message' => sprintf(__('Ecwid API Error (HTTP %s): %s', 'ecwid2woo-product-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error'))]);
                 return;
             }
-            
-            $items_in_response = [];
-            // Handle cases where 'items' might not be present if the response is a direct array of categories (e.g., if total < limit)
-            if (isset($body['items']) && is_array($body['items'])) {
-                $items_in_response = $body['items'];
-            } elseif (is_array($body) && (empty($body) || isset($body[0]['id']))) { // Direct array of categories
-                $items_in_response = $body;
-                 // If it's a direct array, 'total' and 'count' might not be in the top level.
-                 // We'll rely on the count of items received.
-                if (!isset($body['total'])) $body['total'] = count($items_in_response);
-                if (!isset($body['count'])) $body['count'] = count($items_in_response);
-            }
 
+            $items_from_api = $body['items'] ?? [];
+            $all_categories = array_merge($all_categories, $items_from_api);
 
-            if (!empty($items_in_response)) {
-                foreach ($items_in_response as $item) {
-                    $all_categories[] = [
-                        'id' => $item['id'] ?? null,
-                        'name' => $item['name'] ?? 'N/A',
-                        'parentId' => $item['parentId'] ?? 0,
-                        // Add other fields if needed for display, e.g., description snippet
-                        // 'description' => isset($item['description']) ? mb_substr(strip_tags($item['description']), 0, 50) . '...' : '',
-                    ];
-                }
-            }
+            $count_in_response = $body['count'] ?? count($items_from_api);
+            $total_from_api = $body['total'] ?? count($items_from_api);
+            $offset += $count_in_response;
 
-            $count_in_current_api_response = $body['count'] ?? 0;
-            $total_from_api = $body['total'] ?? 0;
-            
-            if ($count_in_current_api_response > 0) {
-                 $offset += $count_in_current_api_response;
-            } else { // No items in response, or count was 0, break loop
-                break;
-            }
-            // Break if we've fetched all items according to the total reported by API
-            if ($offset >= $total_from_api && $total_from_api > 0) {
-                break;
-            }
-            // Safety break if API doesn't report total correctly but stops sending items
-            if ($count_in_current_api_response < $limit && $count_in_current_api_response == 0) {
+            if ($count_in_response === 0 || $offset >= $total_from_api) {
                 break;
             }
 
-
-        } while (true); // Loop will break based on conditions inside
+        } while (true);
 
         wp_send_json_success([
-            'categories' => $all_categories, 
-            'total_count' => count($all_categories) // Send the count of items actually fetched and processed
+            'categories' => $all_categories,
+            'total_count' => count($all_categories)
         ]);
+    }
+
+    // Add this method to handle AJAX connection testing
+    public function ajax_test_api_connection() {
+        check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]);
+            return;
+        }
+
+        $api_essentials = $this->_get_api_essentials();
+        if (is_wp_error($api_essentials)) {
+            wp_send_json_error(['message' => $api_essentials->get_error_message()]);
+            return;
+        }
+
+        // Test the connection by fetching store profile
+        $api_url = $api_essentials['base_url'] . '/profile';
+        $response = wp_remote_get($api_url, [
+            'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
+            'timeout' => 30
+        ]);
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(['message' => __('Connection failed: ', 'ecwid2woo-product-sync') . $response->get_error_message()]);
+            return;
+        }
+
+        $http_code = wp_remote_retrieve_response_code($response);
+        if ($http_code === 200) {
+            wp_send_json_success(['message' => __('Connection successful!', 'ecwid2woo-product-sync')]);
+        } else {
+            wp_send_json_error(['message' => __('API returned error code: ', 'ecwid2woo-product-sync') . $http_code]);
+        }
     }
 }
 

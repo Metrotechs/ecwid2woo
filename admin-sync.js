@@ -25,9 +25,9 @@
             products_to_sync_info: 'Products to sync: {count}',
             // variations_to_sync_info: 'Variations to sync: {count}', // This one is for actual count, keep if used
             syncing_item_of_total: 'Syncing {syncType}: {current} of {total}...',
-            load_products: 'Load Ecwid Products for Selection',
+            load_products: 'Reload Products', // CHANGED from 'Load Ecwid Products for Selection'
             loading_products: 'Loading Products...',
-            load_ecwid_categories: 'Load Ecwid Category List',
+            load_ecwid_categories: 'Reload Ecwid Categories', // CHANGED from 'Load Ecwid Category List'
             loading_ecwid_categories: 'Loading Categories...',
             no_categories_found_display: 'No categories found in your Ecwid store or an error occurred.',
             categories_loaded_for_display: '{count} categories loaded for display.',
@@ -62,6 +62,11 @@
             sync_stopped_by_user_log: 'SYNC HAS BEEN STOPPED BY THE USER.',
             sync_stopped_by_user_status: 'Sync stopped by user.',
             sync_cancelled_log_message: 'Sync cancelled by user, aborting further operations.',
+            // Add the new connection test strings
+            testing_connection: 'Testing...',
+            connection_successful: 'CONNECTION SUCCESSFUL!',
+            connection_failed: 'CONNECTION UNSUCCESSFUL - PLEASE CHECK YOUR API KEY AND STORE ID AND TRY AGAIN',
+            save_settings_failed: 'Failed to save settings. Please try again.',
             // Add any other i18n strings used in the JS with their defaults
         };
         for (const key in i18n_defaults) {
@@ -190,6 +195,7 @@
             totalItems: 0
         };
 
+        let totalCategoriesForCategoryPageSync = 0; // Add this line
 
         // Selective Product Sync State
         let ecwidProductsForSelection = []; // For selective product sync
@@ -335,27 +341,31 @@
 
         // Function to load and display the sync preview
         function loadAndDisplayFullSyncPreview() {
-            if (isSyncCancelledByUser) return; // ADDED: Check cancellation
+            if (isSyncCancelledByUser) return;
             if (!loadFullSyncPreviewButton.length) return;
-
-            // Removed the MAX_PREVIEW_ITEMS limit as we're now showing all items
 
             loadFullSyncPreviewButton.prop('disabled', true).text(i18n.loading_sync_preview || 'Reloading sync data...');
             updateStatus(fullSyncStatusDiv, i18n.loading_sync_preview || 'Reloading sync data...');
-            fullSyncCategoryPreviewList.html('<em>' + (i18n.loading_ecwid_categories || 'Loading Categories...') + '</em>');
-            fullSyncProductPreviewList.html('<em>' + (i18n.loading_products || 'Loading Products...') + '</em>');
+            
+            // Only update these if they exist
+            if (fullSyncCategoryPreviewList.length) {
+                fullSyncCategoryPreviewList.html('<em>' + (i18n.loading_ecwid_categories || 'Loading Categories...') + '</em>');
+            }
+            if (fullSyncProductPreviewList.length) {
+                fullSyncProductPreviewList.html('<em>' + (i18n.loading_products || 'Loading Products...') + '</em>');
+            }
 
             $.ajax({
                 url: ajax_url,
                 type: 'POST',
                 data: {
-                    action: 'ecwid_wc_fetch_full_sync_counts', // This action should return counts AND preview data
+                    action: 'ecwid_wc_fetch_full_sync_counts',
                     nonce: nonce,
                 },
                 dataType: 'json'
             })
             .done(function(response) {
-                console.log('Full sync preview response:', response); // Debug the response
+                console.log('Full sync preview response:', response);
                 
                 if (response.success && response.data) {
                     totalCategoriesToSync = parseInt(response.data.categories_count) || 0;
@@ -367,36 +377,30 @@
                     
                     console.log('Categories preview data available:', categories ? categories.length : 0);
                     console.log('Products preview data available:', products ? products.length : 0);
-                    
-                    // For detailed debugging of the actual data
-                    if (categories && categories.length > 0) {
-                        console.log('First category sample:', categories[0]);
-                    }
-                    if (products && products.length > 0) {
-                        console.log('First product sample:', products[0]);
+
+                    // Only update preview lists if the elements exist
+                    if (fullSyncCategoryPreviewList.length) {
+                        fullSyncCategoryPreviewList.empty();
+                        if (categories && categories.length > 0) {
+                            categories.forEach(cat => {
+                                fullSyncCategoryPreviewList.append(`<div>${sanitizeHTML(cat.name || 'Unnamed Category')}</div>`);
+                            });
+                            fullSyncCategoryPreviewList.append(`<hr><p><strong>Total categories to sync: ${totalCategoriesToSync}</strong></p>`);
+                        } else {
+                            fullSyncCategoryPreviewList.html('<em>' + (i18n.no_categories_found_display || 'No categories found or an error occurred.') + '</em>');
+                        }
                     }
 
-                    fullSyncCategoryPreviewList.empty();
-                    if (categories && categories.length > 0) {
-                        // Show ALL categories instead of limiting to MAX_PREVIEW_ITEMS
-                        categories.forEach(cat => {
-                            fullSyncCategoryPreviewList.append(`<div>${sanitizeHTML(cat.name || 'Unnamed Category')}</div>`);
-                        });
-                        // Removed the "...and X more categories" message since we're showing all categories
-                        fullSyncCategoryPreviewList.append(`<hr><p><strong>Total categories to sync: ${totalCategoriesToSync}</strong></p>`);
-                    } else {
-                        fullSyncCategoryPreviewList.html('<em>' + (i18n.no_categories_found_display || 'No categories found or an error occurred.') + '</em>');
-                    }
-
-                    fullSyncProductPreviewList.empty();
-                    if (products && products.length > 0) {
-                        // Show ALL products
-                        products.forEach(prod => {
-                            fullSyncProductPreviewList.append(`<div>${sanitizeHTML(prod.name || 'Unnamed Product')} (ID: ${prod.id || 'N/A'})</div>`);
-                        });
-                        fullSyncProductPreviewList.append(`<hr><p><strong>Total products to sync: ${totalProductsToSync}</strong></p>`);
-                    } else {
-                        fullSyncProductPreviewList.html('<em>' + (i18n.no_products_found || 'No enabled products found or failed to fetch.') + '</em>');
+                    if (fullSyncProductPreviewList.length) {
+                        fullSyncProductPreviewList.empty();
+                        if (products && products.length > 0) {
+                            products.forEach(prod => {
+                                fullSyncProductPreviewList.append(`<div>${sanitizeHTML(prod.name || 'Unnamed Product')} (ID: ${prod.id || 'N/A'})</div>`);
+                            });
+                            fullSyncProductPreviewList.append(`<hr><p><strong>Total products to sync: ${totalProductsToSync}</strong></p>`);
+                        } else {
+                            fullSyncProductPreviewList.html('<em>' + (i18n.no_products_found || 'No enabled products found or failed to fetch.') + '</em>');
+                        }
                     }
                     
                     let countText = (i18n.categories_to_sync_info || 'Categories to sync: {count}').replace('{count}', totalCategoriesToSync) + ', ' +
@@ -404,8 +408,12 @@
                     fullSyncCountsInfoDiv.text(countText);
 
                     updateStatus(fullSyncStatusDiv, i18n.preview_loaded_ready_to_sync || 'Preview loaded. Ready to start full sync.');
-                    fullSyncPreviewContainer.slideDown();
-                    fullSyncButton.show(); // Show the main sync button
+                    
+                    // Only show preview container if it exists
+                    if (fullSyncPreviewContainer.length) {
+                        fullSyncPreviewContainer.slideDown();
+                    }
+                    fullSyncButton.show();
                 } else {
                     const errorMsg = response.data && response.data.message ? response.data.message : (i18n.preview_load_error || 'Error loading preview data.');
                     updateStatus(fullSyncStatusDiv, errorMsg);
@@ -416,27 +424,21 @@
                         const categories = response.data.categories_preview || [];
                         const products = response.data.products_preview || [];
                         
-                        console.log('Error response categories preview data available:', categories ? categories.length : 0);
-                        console.log('Error response products preview data available:', products ? products.length : 0);
-                        
-                        // Even in error state, try to show preview data if available
-                        if (categories && categories.length > 0) {
+                        if (fullSyncCategoryPreviewList.length && categories && categories.length > 0) {
                             fullSyncCategoryPreviewList.empty();
-                            // Show ALL categories in error case too
                             categories.forEach(cat => {
                                 fullSyncCategoryPreviewList.append(`<div>${sanitizeHTML(cat.name || 'Unnamed Category')}</div>`);
                             });
-                        } else {
+                        } else if (fullSyncCategoryPreviewList.length) {
                             fullSyncCategoryPreviewList.html('<em>' + (i18n.no_categories_found_display || 'No categories found or an error occurred.') + '</em>');
                         }
                         
-                        if (products && products.length > 0) {
+                        if (fullSyncProductPreviewList.length && products && products.length > 0) {
                             fullSyncProductPreviewList.empty();
-                            // Show ALL products in error case too
                             products.forEach(prod => {
                                 fullSyncProductPreviewList.append(`<div>${sanitizeHTML(prod.name || 'Unnamed Product')} (ID: ${prod.id || 'N/A'})</div>`);
                             });
-                        } else {
+                        } else if (fullSyncProductPreviewList.length) {
                             fullSyncProductPreviewList.html('<em>' + (i18n.no_products_found || 'No enabled products found or failed to fetch.') + '</em>');
                         }
                     } else {
@@ -450,8 +452,13 @@
                 updateStatus(fullSyncStatusDiv, errorMsg + ` (${textStatus})`);
                 logMessage(fullSyncLogDiv, `Failed to load sync preview: ${textStatus}, ${errorThrown}`, 'error');
                 console.error('AJAX error details:', jqXHR.responseText);
-                fullSyncCategoryPreviewList.html('<em>AJAX error loading categories.</em>');
-                fullSyncProductPreviewList.html('<em>AJAX error loading products.</em>');
+                
+                if (fullSyncCategoryPreviewList.length) {
+                    fullSyncCategoryPreviewList.html('<em>AJAX error loading categories.</em>');
+                }
+                if (fullSyncProductPreviewList.length) {
+                    fullSyncProductPreviewList.html('<em>AJAX error loading products.</em>');
+                }
             })
             .always(function() {
                 loadFullSyncPreviewButton.prop('disabled', false).text(i18n.load_sync_preview || 'Reload Sync Data');
@@ -751,33 +758,6 @@
             });
         }
 
-        function processNextFullSyncStep() {
-            if (currentFullSyncStepIndex < totalFullSyncSteps) {
-                const syncType = fullSyncSteps[currentFullSyncStepIndex];
-                let currentTotalForStep = 0;
-                if (syncType === 'categories') {
-                    currentTotalForStep = totalCategoriesToSync;
-                } else if (syncType === 'products') {
-                    currentTotalForStep = totalProductsToSync;
-                }
-                // Update status to "Syncing {type}: 0 of {total}..."
-                const initialStepStatus = i18n.syncing_item_of_total
-                    .replace('{syncType}', capitalizeFirstLetter(syncType)) // Use capitalizeFirstLetter
-                    .replace('{current}', 0)
-                    .replace('{total}', currentTotalForStep > 0 ? currentTotalForStep : 'N/A');
-                updateStatus(fullSyncStatusDiv, initialStepStatus);
-                processFullSyncBatch(syncType, 0, currentTotalForStep); // Pass the total for this step
-            } else {
-                stopBatchStatusAnimation();
-                updateStatus(fullSyncStatusDiv, i18n.sync_complete || 'Sync Complete!');
-                logMessage(fullSyncLogDiv, i18n.sync_complete || 'Sync Complete!', 'success');
-                fullSyncButton.text(i18n.start_sync || 'Start Full Sync').prop('disabled', false);
-                stopFullSyncButton.hide(); // Hide STOP button on completion
-                loadFullSyncPreviewButton.prop('disabled', false); // Re-enable reload preview
-                updateOverallFullSyncProgress(100); // Ensure it hits 100%
-            }
-        }
-
         // --- Category Sync Page Logic ---
 
         // New function to load and display categories
@@ -866,7 +846,7 @@
 
                 $(this).addClass('disabled').text(i18n.syncing_categories_page_button);
                 loadCategoriesButton.addClass('disabled').prop('disabled', true); 
-                fixHierarchyButton.addClass('disabled').prop('disabled', true);
+                fixHierarchyButton.add('disabled').prop('disabled', true);
                 
                 categoryPageSyncLogDiv.html('');
                 updateProgressBar(categoryPageSyncProgressBar, 0);
@@ -1333,6 +1313,141 @@
                     }
                 });
             });
+        }
+
+        // Enhanced Settings Page Functionality
+        function initializeSettingsPage() {
+            // Auto-test connection on page load if both credentials exist
+            const storeIdInput = $('input[name="ecwid_wc_sync_options[store_id]"]');
+            const tokenInput = $('input[name="ecwid_wc_sync_options[token]"]');
+            
+            if (storeIdInput.length && tokenInput.length) {
+                const storeId = storeIdInput.val();
+                const token = tokenInput.val();
+                
+                if (storeId && token && storeId.length > 0 && token.length > 0) {
+                    // Delay auto-test to ensure page is fully loaded
+                    setTimeout(function() {
+                        performConnectionTest(true); // true indicates auto-test
+                    }, 800);
+                }
+                
+                // Clear connection status when inputs change
+                storeIdInput.add(tokenInput).on('input', function() {
+                    $('#test-connection-result').hide().removeClass('success error');
+                });
+            }
+            
+            // Enhanced connection test button handler
+            $(document).on('click', '#test-api-connection', function(e) {
+                e.preventDefault();
+                performConnectionTest(false);
+            });
+            
+            // Enhanced form submission with visual feedback
+            $('#ecwid-settings-form').on('submit', function(e) {
+                const saveStatusDiv = $('#save-status');
+                saveStatusDiv.hide().removeClass('success error');
+                
+                // Show immediate feedback
+                setTimeout(function() {
+                    saveStatusDiv.addClass('success')
+                            .html('<strong>✅ ' + (i18n.settings_saved_successfully || 'Settings saved successfully!') + '</strong>')
+                            .show();
+                    
+                    // Auto-test connection after successful save
+                    setTimeout(function() {
+                        performConnectionTest(true);
+                    }, 1200);
+                }, 200);
+            });
+        }
+        
+        function performConnectionTest(isAutoTest = false) {
+            const button = $('#test-api-connection');
+            const originalText = button.text();
+            const resultDiv = $('#test-connection-result');
+            
+            if (!isAutoTest) {
+                button.html('<span class="loading-spinner"></span>' + (i18n.testing_connection || 'Testing...')).prop('disabled', true);
+            }
+            
+            resultDiv.hide().removeClass('success error');
+            
+            $.ajax({
+                url: ajax_url,
+                type: 'POST',
+                data: {
+                    action: 'ecwid_wc_test_connection',
+                    nonce: nonce
+                },
+                success: function(response) {
+                    if (response.success) {
+                        resultDiv.addClass('success')
+                                .html('<strong>✅ ' + (i18n.connection_successful || 'CONNECTION SUCCESSFUL!') + '</strong><br>' + response.data.message)
+                                .show();
+                        
+                        // Add subtle success animation for nav buttons
+                        $('.nav-buttons-grid .nav-button').addClass('connection-success');
+                        setTimeout(function() {
+                            $('.nav-buttons-grid .nav-button').removeClass('connection-success');
+                        }, 2000);
+                    } else {
+                        resultDiv.addClass('error')
+                                .html('<strong>❌ ' + (i18n.connection_failed || 'CONNECTION FAILED') + '</strong><br>' + response.data.message)
+                                .show();
+                    }
+                },
+                error: function() {
+                    resultDiv.addClass('error')
+                            .html('<strong>❌ CONNECTION ERROR</strong><br>' + (i18n.connection_test_failed || 'Connection test failed. Please try again.'))
+                            .show();
+                },
+                complete: function() {
+                    if (!isAutoTest) {
+                        button.text(originalText).prop('disabled', false);
+                    }
+                }
+            });
+        }
+        
+        // Add CSS animations for connection success
+        if (!$('#ecwid-custom-animations').length) {
+            $('head').append(`
+                <style id="ecwid-custom-animations">
+                .nav-button.connection-success {
+                    animation: connectionPulse 0.6s ease-in-out;
+                    border-color: #00a32a !important;
+                }
+                
+                @keyframes connectionPulse {
+                    0% { transform: scale(1); }
+                    50% { transform: scale(1.02); box-shadow: 0 0 20px rgba(0, 163, 42, 0.3); }
+                    100% { transform: scale(1); }
+                }
+                
+                .loading-spinner {
+                    display: inline-block;
+                    width: 16px;
+                    height: 16px;
+                    border: 2px solid #f3f3f3;
+                    border-top: 2px solid #0073aa;
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                    margin-right: 8px;
+                }
+                
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+                </style>
+            `);
+        }
+
+        // Initialize page-specific functionality
+        if (window.location.href.indexOf('ecwid-sync-settings') !== -1) {
+            initializeSettingsPage();
         }
 
     });
