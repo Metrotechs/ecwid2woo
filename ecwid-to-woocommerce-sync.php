@@ -465,7 +465,7 @@ class Ecwid_WC_Sync {
             <div class="sync-progress-wrapper">
                 <label for="full-sync-bar" class="sync-progress-label"><?php esc_html_e('Overall Progress:', 'ecwid2woo-product-sync'); ?></label>
                 <div id="full-sync-progress-container" class="sync-progress-container">
-                    <div id="full-sync_bar" class="sync-progress-bar">0%</div>
+                    <div id="full-sync-bar" class="sync-progress-bar">0%</div>
                 </div>
             </div>
 
