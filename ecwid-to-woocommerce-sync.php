@@ -1,10 +1,10 @@
 <?php
 /*
-Plugin Name: Ecwid2Woo Product Sync
-Description: Easily Sync Ecwid Product Data (products, categories, images, skus, etc.) to WooCommerce.
+Plugin Name: Ecwid2Woo Product Sync™
+Description: Professional Ecwid to WooCommerce synchronization plugin by Metrotechs.
 Plugin URI: https://metrotechs.io/plugins/ecwid2woo/
 Author URI: https://metrotechs.io
-Version: 0.8.1
+Version: 1.0.0
 Author: Metrotechs
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -13,7 +13,9 @@ Domain Path: /languages
 Requires at least: 5.0
 Requires PHP: 7.2
 WC requires at least: 3.0
-WC tested up to: 8.8 
+WC tested up to: 9.2
+
+Ecwid2Woo Product Sync is a trademark of Metrotechs.
 */
 
 // Declare HPOS compatibility
@@ -31,7 +33,7 @@ if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
     define('ECWID2WOO_VARIATION_BATCH_SIZE', 50); // Number of variations to process per batch
 }
 
-define('ECWID2WOO_VERSION', '0.8.1'); // Define version constant
+define('ECWID2WOO_VERSION', '1.0.0'); // Define version constant
 
 class Ecwid_WC_Sync {
     private $options;
@@ -180,7 +182,10 @@ class Ecwid_WC_Sync {
     }
 
     public function options_page_router() {
-        wp_enqueue_script('ecwid-wc-sync-admin', plugin_dir_url(__FILE__) . 'admin-sync.js', ['jquery', 'wp-i18n'], ECWID2WOO_VERSION, true);
+        // Enqueue CSS and JS from assets folders
+        wp_enqueue_style('ecwid-wc-sync-admin-css', plugin_dir_url(__FILE__) . 'assets/css/admin-styles.css', [], ECWID2WOO_VERSION);
+        wp_enqueue_script('ecwid-wc-sync-admin', plugin_dir_url(__FILE__) . 'assets/js/admin-sync.js', ['jquery', 'wp-i18n'], ECWID2WOO_VERSION, true);
+        
         wp_localize_script('ecwid-wc-sync-admin', 'ecwid_sync_params', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce'    => wp_create_nonce('ecwid_wc_sync_nonce'),
@@ -191,26 +196,26 @@ class Ecwid_WC_Sync {
                 'sync_complete' => __('Sync Complete!', 'ecwid2woo-product-sync'),
                 'sync_error'    => __('Error during sync. Check console or log for details.', 'ecwid2woo-product-sync'),
                 'ajax_error'    => __('AJAX Error. Check console or log for details.', 'ecwid2woo-product-sync'),
-                'syncing'       => __('Syncing', 'ecwid2woo-product-sync'), // Generic "Syncing"
+                'syncing'       => __('Syncing', 'ecwid2woo-product-sync'),
                 'start_sync'    => __('Start Full Sync', 'ecwid2woo-product-sync'),
                 'syncing_button'=> __('Syncing...', 'ecwid2woo-product-sync'),
-                'fetching_counts' => __('Fetching item counts...', 'ecwid2woo-product-sync'), 
-                'categories_to_sync_info' => __('Categories to sync: {count}', 'ecwid2woo-product-sync'), 
-                'products_to_sync_info' => __('Products to sync: {count}', 'ecwid2woo-product-sync'), 
-                'variations_to_sync_info' => __('Variations to sync: {count}', 'ecwid2woo-product-sync'), 
-                'syncing_item_of_total' => __('Syncing {syncType}: {current} of {total}...', 'ecwid2woo-product-sync'), 
+                'fetching_counts' => __('Fetching item counts...', 'ecwid2woo-product-sync'),
+                'categories_to_sync_info' => __('Categories to sync: {count}', 'ecwid2woo-product-sync'),
+                'products_to_sync_info' => __('Products to sync: {count}', 'ecwid2woo-product-sync'),
+                'variations_to_sync_info' => __('Variations to sync: {count}', 'ecwid2woo-product-sync'),
+                'syncing_item_of_total' => __('Syncing {syncType}: {current} of {total}...', 'ecwid2woo-product-sync'),
                 'load_products' => __('Reload Products', 'ecwid2woo-product-sync'),
                 'loading_products' => __('Loading Products...', 'ecwid2woo-product-sync'),
-                'load_ecwid_categories' => __('Reload Ecwid Categories', 'ecwid2woo-product-sync'), 
-                'loading_ecwid_categories' => __('Loading Categories...', 'ecwid2woo-product-sync'), 
-                'no_categories_found_display' => __('No categories found in your Ecwid store or an error occurred.', 'ecwid2woo-product-sync'), 
-                'categories_loaded_for_display' => __('{count} categories loaded for display.', 'ecwid2woo-product-sync'), 
+                'load_ecwid_categories' => __('Reload Ecwid Categories', 'ecwid2woo-product-sync'),
+                'loading_ecwid_categories' => __('Loading Categories...', 'ecwid2woo-product-sync'),
+                'no_categories_found_display' => __('No categories found in your Ecwid store or an error occurred.', 'ecwid2woo-product-sync'),
+                'categories_loaded_for_display' => __('{count} categories loaded for display.', 'ecwid2woo-product-sync'),
                 'import_selected' => __('Import Selected Products', 'ecwid2woo-product-sync'),
                 'importing_selected' => __('Importing Selected...', 'ecwid2woo-product-sync'),
                 'no_products_selected' => __('No products selected for import.', 'ecwid2woo-product-sync'),
-                'select_all_none' => __('Select All/None', 'ecwid2woo-product-sync'), 
+                'select_all_none' => __('Select All/None', 'ecwid2woo-product-sync'),
                 'no_products_found' => __('No enabled products found in Ecwid store or failed to fetch.', 'ecwid2woo-product-sync'),
-                'start_category_sync_page' => __('Start Category Sync', 'ecwid2woo-product-sync'), // RESTORED/KEPT
+                'start_category_sync_page' => __('Start Category Sync', 'ecwid2woo-product-sync'),
                 'syncing_categories_page_button' => __('Syncing Categories...', 'ecwid2woo-product-sync'),
                 'category_sync_page_complete' => __('Category Sync Complete!', 'ecwid2woo-product-sync'),
                 'syncing_just_categories_page_status' => __('Syncing categories...', 'ecwid2woo-product-sync'),
@@ -222,28 +227,29 @@ class Ecwid_WC_Sync {
                 'variations_imported_successfully' => __('All variations imported successfully for {productName}.', 'ecwid2woo-product-sync'),
                 'error_importing_variations' => __('Error importing variations for {productName}. See log.', 'ecwid2woo-product-sync'),
                 'parent_product_imported_pending_variations' => __('Parent product {productName} imported. Starting variation import...', 'ecwid2woo-product-sync'),
-                'load_sync_preview' => __('Reload Sync Data', 'ecwid2woo-product-sync'), // MODIFIED
-                'loading_sync_preview' => __('Reloading sync data...', 'ecwid2woo-product-sync'), // MODIFIED
-                'preview_loaded_ready_to_sync' => __('Preview loaded. Ready to start full sync.', 'ecwid2woo-product-sync'), // ADDED
-                'categories_for_preview' => __('Categories to be Synced:', 'ecwid2woo-product-sync'), // ADDED
-                'products_for_preview' => __('Products to be Synced:', 'ecwid2woo-product-sync'), // ADDED
-                'preview_load_error' => __('Error loading preview data. Please try again or proceed with sync.', 'ecwid2woo-product-sync'), // ADDED
-                'variations_count_in_preview' => __('Variation count will be determined when sync starts.', 'ecwid2woo-product-sync'), // ADDED
-                'stop_full_sync_button_text' => __('STOP SYNC', 'ecwid2woo-product-sync'), // ADDED
-                'sync_stopped_by_user_log' => __('SYNC HAS BEEN STOPPED BY THE USER.', 'ecwid2woo-product-sync'), // ADDED
-                'sync_stopped_by_user_status' => __('Sync stopped by user.', 'ecwid2woo-product-sync'), // ADDED
-                'sync_cancelled_log_message' => __('Sync cancelled by user, aborting further operations.', 'ecwid2woo-product-sync'), // ADDED
+                'load_sync_preview' => __('Reload Sync Data', 'ecwid2woo-product-sync'),
+                'loading_sync_preview' => __('Reloading sync data...', 'ecwid2woo-product-sync'),
+                'preview_loaded_ready_to_sync' => __('Preview loaded. Ready to start full sync.', 'ecwid2woo-product-sync'),
+                'categories_for_preview' => __('Categories to be Synced:', 'ecwid2woo-product-sync'),
+                'products_for_preview' => __('Products to be Synced:', 'ecwid2woo-product-sync'),
+                'preview_load_error' => __('Error loading preview data. Please try again or proceed with sync.', 'ecwid2woo-product-sync'),
+                'variations_count_in_preview' => __('Variation count will be determined when sync starts.', 'ecwid2woo-product-sync'),
+                'stop_full_sync_button_text' => __('STOP SYNC', 'ecwid2woo-product-sync'),
+                'sync_stopped_by_user_log' => __('SYNC HAS BEEN STOPPED BY THE USER.', 'ecwid2woo-product-sync'),
+                'sync_stopped_by_user_status' => __('Sync stopped by user.', 'ecwid2woo-product-sync'),
+                'sync_cancelled_log_message' => __('Sync cancelled by user, aborting further operations.', 'ecwid2woo-product-sync'),
                 'testing_connection' => __('Testing...', 'ecwid2woo-product-sync'),
                 'connection_successful' => __('CONNECTION SUCCESSFUL!', 'ecwid2woo-product-sync'),
                 'connection_failed' => __('CONNECTION UNSUCCESSFUL - PLEASE CHECK YOUR API KEY AND STORE ID AND TRY AGAIN', 'ecwid2woo-product-sync'),
+                'connection_test_failed' => __('Connection test failed. Please try again.', 'ecwid2woo-product-sync'),
                 'save_settings_failed' => __('Failed to save settings. Please try again.', 'ecwid2woo-product-sync'),
+                'settings_saved_successfully' => __('Settings saved successfully!', 'ecwid2woo-product-sync'),
             ]
         ]);
 
         $current_page_slug = isset($_GET['page']) ? sanitize_key($_GET['page']) : $this->settings_slug;
 
         echo '<div class="wrap">';
-        // Page title is handled by WordPress or within render methods
 
         switch ($current_page_slug) {
             case $this->settings_slug:
@@ -263,7 +269,9 @@ class Ecwid_WC_Sync {
                 break;
         }
         echo '</div>';
-    }    private function render_settings_page() {
+    }
+
+    private function render_settings_page() {
         ?>
         <div class="ecwid-settings-header">
             <h1><?php esc_html_e('Ecwid2Woo Sync Settings', 'ecwid2woo-product-sync'); ?></h1>
@@ -304,7 +312,7 @@ class Ecwid_WC_Sync {
                         <div class="nav-button-icon">🔄</div>
                         <div class="nav-button-content">
                             <h3><?php esc_html_e('Full Sync', 'ecwid2woo-product-sync'); ?></h3>
-                            <p><?php esc_html_e('Sync all categories and products', 'ecwid2woo-product-sync'); ?></p>
+                            <p><?php esc_html_e('Sync all data', 'ecwid2woo-product-sync'); ?></p>
                         </div>
                     </a>
                     
@@ -312,15 +320,15 @@ class Ecwid_WC_Sync {
                         <div class="nav-button-icon">📁</div>
                         <div class="nav-button-content">
                             <h3><?php esc_html_e('Category Sync', 'ecwid2woo-product-sync'); ?></h3>
-                            <p><?php esc_html_e('Import and organize categories', 'ecwid2woo-product-sync'); ?></p>
+                            <p><?php esc_html_e('Sync categories only', 'ecwid2woo-product-sync'); ?></p>
                         </div>
                     </a>
                     
                     <a href="<?php echo admin_url('admin.php?page=' . $this->partial_sync_slug); ?>" class="nav-button nav-button-tertiary">
                         <div class="nav-button-icon">🎯</div>
                         <div class="nav-button-content">
-                            <h3><?php esc_html_e('Partial Sync', 'ecwid2woo-product-sync'); ?></h3>
-                            <p><?php esc_html_e('Select specific products to import', 'ecwid2woo-product-sync'); ?></p>
+                            <h3><?php esc_html_e('Product Sync', 'ecwid2woo-product-sync'); ?></h3>
+                            <p><?php esc_html_e('Sync selected products', 'ecwid2woo-product-sync'); ?></p>
                         </div>
                     </a>
                     
@@ -328,206 +336,12 @@ class Ecwid_WC_Sync {
                         <div class="nav-button-icon">📋</div>
                         <div class="nav-button-content">
                             <h3><?php esc_html_e('Placeholders', 'ecwid2woo-product-sync'); ?></h3>
-                            <p><?php esc_html_e('Manage import placeholders', 'ecwid2woo-product-sync'); ?></p>
+                            <p><?php esc_html_e('Manage placeholders', 'ecwid2woo-product-sync'); ?></p>
                         </div>
                     </a>
                 </div>
             </div>
         </div>
-
-        <style>
-        .ecwid-settings-header {
-            margin-bottom: 30px;
-        }
-        
-        .ecwid-settings-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            max-width: 1200px;
-        }
-        
-        @media (max-width: 1024px) {
-            .ecwid-settings-container {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        .ecwid-settings-card, .ecwid-navigation-card {
-            background: #fff;
-            border: 1px solid #e1e1e1;
-            border-radius: 8px;
-            padding: 25px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-        
-        .card-header {
-            margin-bottom: 25px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #f0f0f0;
-        }
-        
-        .card-header h2 {
-            margin: 0 0 8px 0;
-            color: #1d2327;
-            font-size: 18px;
-        }
-        
-        .card-header p {
-            margin: 0;
-            color: #646970;
-            font-size: 14px;
-        }
-        
-        .settings-actions {
-            margin-top: 25px;
-            padding-top: 20px;
-            border-top: 1px solid #f0f0f0;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-        }
-        
-        .button-large {
-            padding: 8px 16px !important;
-            font-size: 14px !important;
-            height: auto !important;
-        }
-        
-        .connection-status, .save-status {
-            margin-top: 15px;
-            padding: 12px 16px;
-            border-radius: 4px;
-            display: none;
-            animation: slideDown 0.3s ease-out;
-        }
-        
-        .connection-status.success, .save-status.success {
-            background: #d1eddb;
-            border: 1px solid #00a32a;
-            color: #00a32a;
-        }
-        
-        .connection-status.error, .save-status.error {
-            background: #f9dcdc;
-            border: 1px solid #d63638;
-            color: #d63638;
-        }
-        
-        .nav-buttons-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-        }
-        
-        @media (max-width: 768px) {
-            .nav-buttons-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-        
-        .nav-button {
-            display: flex;
-            align-items: center;
-            padding: 20px;
-            border: 2px solid transparent;
-            border-radius: 8px;
-            text-decoration: none;
-            transition: all 0.3s ease;
-            min-height: 100px;
-        }
-        
-        .nav-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            text-decoration: none;
-        }
-        
-        .nav-button-primary {
-            background: linear-gradient(135deg, #0073aa 0%, #005a87 100%);
-            color: white;
-        }
-        
-        .nav-button-primary:hover {
-            background: linear-gradient(135deg, #005a87 0%, #004a70 100%);
-            color: white;
-        }
-        
-        .nav-button-secondary {
-            background: linear-gradient(135deg, #00a32a 0%, #007c20 100%);
-            color: white;
-        }
-        
-        .nav-button-secondary:hover {
-            background: linear-gradient(135deg, #007c20 0%, #006318 100%);
-            color: white;
-        }
-        
-        .nav-button-tertiary {
-            background: linear-gradient(135deg, #f56e28 0%, #e55100 100%);
-            color: white;
-        }
-        
-        .nav-button-tertiary:hover {
-            background: linear-gradient(135deg, #e55100 0%, #cc4400 100%);
-            color: white;
-        }
-        
-        .nav-button-quaternary {
-            background: linear-gradient(135deg, #8c8f94 0%, #6c7781 100%);
-            color: white;
-        }
-        
-        .nav-button-quaternary:hover {
-            background: linear-gradient(135deg, #6c7781 0%, #50575e 100%);
-            color: white;
-        }
-        
-        .nav-button-icon {
-            font-size: 24px;
-            margin-right: 15px;
-            min-width: 30px;
-        }
-        
-        .nav-button-content h3 {
-            margin: 0 0 5px 0;
-            font-size: 16px;
-            font-weight: 600;
-        }
-        
-        .nav-button-content p {
-            margin: 0;
-            font-size: 13px;
-            opacity: 0.9;
-        }
-        
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .loading-spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #0073aa;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 8px;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        </style>
 
         <script type="text/javascript">
         jQuery(document).ready(function($) {
@@ -604,7 +418,9 @@ class Ecwid_WC_Sync {
         });
         </script>
         <?php
-    }    private function render_full_sync_page() {
+    }
+
+    private function render_full_sync_page() {
         ?>
         <div class="ecwid-page-header">
             <h1><?php esc_html_e('Full Data Sync', 'ecwid2woo-product-sync'); ?></h1>
@@ -628,92 +444,39 @@ class Ecwid_WC_Sync {
         </div>
 
         <div class="ecwid-sync-container">
-            <button id="load-full-sync-preview-button" class="button" style="margin-bottom: 15px;"><?php esc_html_e('Reload Sync Data', 'ecwid2woo-product-sync'); ?></button>
+        <button id="load-full-sync-preview-button" class="button margin-bottom-15"><?php esc_html_e('Reload Sync Data', 'ecwid2woo-product-sync'); ?></button>
 
-            <div id="full-sync-preview-container" style="display:none;">
-                <div style="display:flex; flex-wrap: wrap; gap: 20px; margin-bottom:15px;">
-                    <div style="flex:1; min-width: 300px;">
+        <div id="full-sync-preview-container" class="sync-preview-container">
+                <div class="sync-preview-grid">
+                    <div class="sync-preview-column">
                         <h3><?php esc_html_e('Categories to be Synced:', 'ecwid2woo-product-sync'); ?></h3>
-                        <div id="full-sync-category-preview-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff;">
-                            <?php esc_html_e('Category list will appear here after loading preview...', 'ecwid2woo-product-sync'); ?>
-                        </div>
+                        <div id="full-sync-category-preview-list" class="sync-preview-list"></div>
                     </div>
-                    <div style="flex:1; min-width: 300px;">
+                    <div class="sync-preview-column">
                         <h3><?php esc_html_e('Products to be Synced:', 'ecwid2woo-product-sync'); ?></h3>
-                        <div id="full-sync-product-preview-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff;">
-                            <?php esc_html_e('Product list will appear here after loading preview...', 'ecwid2woo-product-sync'); ?>
-                        </div>
+                        <div id="full-sync-product-preview-list" class="sync-preview-list"></div>
                     </div>
                 </div>
             </div>
             
-            <div id="full-sync-counts-info" style="margin-bottom: 10px; font-style: italic;"><?php esc_html_e('Item counts will be displayed here.', 'ecwid2woo-product-sync'); ?></div>
-            <div id="full-sync-status" style="margin-bottom: 10px; font-weight: bold;"></div>
+            <div id="full-sync-counts-info" class="sync-counts-info"><?php esc_html_e('Item counts will be displayed here.', 'ecwid2woo-product-sync'); ?></div>
+            <div id="full-sync-status" class="sync-status"></div>
             
-            <div style="margin-bottom: 5px;">
-                <label for="full-sync-bar" style="display: block; margin-bottom: 2px; font-size: 0.9em;"><?php esc_html_e('Overall Progress:', 'ecwid2woo-product-sync'); ?></label>
-                <div id="full-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; border: 1px solid #ccc; box-sizing: border-box; display:none;">
-                    <div id="full-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+            <div class="sync-progress-wrapper">
+                <label for="full-sync-bar" class="sync-progress-label"><?php esc_html_e('Overall Progress:', 'ecwid2woo-product-sync'); ?></label>
+                <div id="full-sync-progress-container" class="sync-progress-container">
+                    <div id="full-sync_bar" class="sync-progress-bar">0%</div>
                 </div>
             </div>
 
-            <button id="full-sync-button" class="button button-primary" style="display:none;"><?php esc_html_e('Start Full Sync', 'ecwid2woo-product-sync'); ?></button>
-            <button id="stop-full-sync-button" class="button button-secondary" style="background-color: #dc3545; color: white; border-color: #bd2130; display:none; margin-left: 10px;"><?php esc_html_e('STOP SYNC', 'ecwid2woo-product-sync'); ?></button>
-            <div id="full-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
+            <button id="full-sync-button" class="button button-primary sync-button-primary"><?php esc_html_e('Start Full Sync', 'ecwid2woo-product-sync'); ?></button>
+            <button id="stop-full-sync-button" class="button button-secondary sync-button-stop"><?php esc_html_e('STOP SYNC', 'ecwid2woo-product-sync'); ?></button>
+            <div id="full-sync-log" class="sync-log"></div>
         </div>
-
-        <style>
-        .ecwid-page-header {
-            margin-bottom: 20px;
-        }
-        
-        .ecwid-page-nav {
-            display: flex;
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 8px;
-            margin-bottom: 25px;
-            gap: 4px;
-        }
-        
-        .nav-link {
-            display: flex;
-            align-items: center;
-            padding: 10px 16px;
-            text-decoration: none;
-            color: #495057;
-            border-radius: 6px;
-            transition: all 0.2s ease;
-            font-weight: 500;
-        }
-        
-        .nav-link:hover {
-            background: #e9ecef;
-            color: #212529;
-            text-decoration: none;
-        }
-        
-        .nav-link.current {
-            background: #007cba;
-            color: white;
-        }
-        
-        .nav-icon {
-            margin-right: 8px;
-            font-size: 16px;
-        }
-        
-        .ecwid-sync-container {
-            background: #fff;
-            border: 1px solid #e1e1e1;
-            border-radius: 8px;
-            padding: 25px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-        </style>
         <?php
-    }    private function render_category_sync_page() {
+    }
+
+    private function render_category_sync_page() {
         ?>
         <div class="ecwid-page-header">
             <h1><?php esc_html_e('Ecwid Category Sync', 'ecwid2woo-product-sync'); ?></h1>
@@ -737,77 +500,28 @@ class Ecwid_WC_Sync {
         </div>
 
         <div class="ecwid-sync-container">
-            <div id="category-sync-initial-info" style="margin-bottom: 10px; font-style: italic;">
+            <div id="category-sync-initial-info" class="category-sync-initial-info">
                 <?php esc_html_e('Click "Load Ecwid Category List" to see details.', 'ecwid2woo-product-sync'); ?>
             </div>
-            <button id="load-ecwid-categories-button" class="button" style="margin-bottom: 15px;"><?php esc_html_e('Reload Ecwid Categories', 'ecwid2woo-product-sync'); ?></button>
+            <button id="load-ecwid-categories-button" class="button margin-bottom-15"><?php esc_html_e('Reload Ecwid Categories', 'ecwid2woo-product-sync'); ?></button>
             
-            <div id="category-list-container" style="margin-bottom:15px; max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff; display: none;">
+            <div id="category-list-container" class="category-list-container">
                 <?php esc_html_e('Category list will appear here...', 'ecwid2woo-product-sync'); ?>
             </div>
 
-            <button id="category-page-sync-button" class="button button-primary" style="margin-bottom:15px;"><?php esc_html_e('Start Category Sync', 'ecwid2woo-product-sync'); ?></button>
-            <button id="fix-category-hierarchy-button" class="button" style="margin-left: 10px;"><?php esc_html_e('Fix Category Hierarchy', 'ecwid2woo-product-sync'); ?></button>
+            <button id="category-page-sync-button" class="button button-primary margin-bottom-15"><?php esc_html_e('Start Category Sync', 'ecwid2woo-product-sync'); ?></button>
+            <button id="fix-category-hierarchy-button" class="button margin-left-10"><?php esc_html_e('Fix Category Hierarchy', 'ecwid2woo-product-sync'); ?></button>
             
-            <div id="category-page-sync-status" style="margin-bottom: 10px; font-weight: bold;"></div>
-            <div id="category-page-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box; display:none;">
-                <div id="category-page-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+            <div id="category-page-sync-status" class="sync-status"></div>
+            <div id="category-page-sync-progress-container" class="sync-progress-container">
+                <div id="category-page-sync-bar" class="sync-progress-bar">0%</div>
             </div>
-            <div id="category-page-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
+            <div id="category-page-sync-log" class="sync-log"></div>
         </div>
-
-        <style>
-        .ecwid-page-header {
-            margin-bottom: 20px;
-        }
-        
-        .ecwid-page-nav {
-            display: flex;
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 8px;
-            margin-bottom: 25px;
-            gap: 4px;
-        }
-        
-        .nav-link {
-            display: flex;
-            align-items: center;
-            padding: 10px 16px;
-            text-decoration: none;
-            color: #495057;
-            border-radius: 6px;
-            transition: all 0.2s ease;
-            font-weight: 500;
-        }
-        
-        .nav-link:hover {
-            background: #e9ecef;
-            color: #212529;
-            text-decoration: none;
-        }
-        
-        .nav-link.current {
-            background: #007cba;
-            color: white;
-        }
-        
-        .nav-icon {
-            margin-right: 8px;
-            font-size: 16px;
-        }
-        
-        .ecwid-sync-container {
-            background: #fff;
-            border: 1px solid #e1e1e1;
-            border-radius: 8px;
-            padding: 25px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-        </style>
         <?php
-    }    private function render_partial_sync_page() {
+    }
+
+    private function render_partial_sync_page() {
         ?>
         <div class="ecwid-page-header">
             <h1><?php esc_html_e('Partial Product Sync', 'ecwid2woo-product-sync'); ?></h1>
@@ -831,73 +545,22 @@ class Ecwid_WC_Sync {
         </div>
 
         <div class="ecwid-sync-container">
-            <div id="selective-sync-initial-info" style="margin-bottom: 10px; padding: 5px; border: 1px solid #e0e0e0; background-color: #f9f9f9;">
+            <div id="selective-sync-initial-info" class="selective-sync-initial-info">
                 <!-- This will be populated by JavaScript -->
             </div>
 
             <button id="load-ecwid-products-button" class="button"><?php esc_html_e('Reload Products', 'ecwid2woo-product-sync'); ?></button>
-            <div id="selective-product-list-container" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fff;">
+            <div id="selective-product-list-container" class="selective-product-list-container">
                 <?php esc_html_e('Product list will appear here...', 'ecwid2woo-product-sync'); ?>
             </div>
-            <button id="import-selected-products-button" class="button button-primary" style="margin-top: 10px; display: none;"><?php esc_html_e('Import Selected Products', 'ecwid2woo-product-sync'); ?></button>
+            <button id="import-selected-products-button" class="button button-primary import-selected-button"><?php esc_html_e('Import Selected Products', 'ecwid2woo-product-sync'); ?></button>
 
-            <div id="selective-sync-status" style="margin-top:15px; margin-bottom: 10px; font-weight: bold;"></div>
-            <div id="selective-sync-progress-container" style="background: #f1f1f1; width: 100%; height: 24px; margin-bottom: 10px; border: 1px solid #ccc; box-sizing: border-box; display:none;">
-                <div id="selective-sync-bar" style="background: #007cba; width: 0%; height: 100%; text-align: center; color: #fff; line-height: 22px; font-size: 12px; transition: width 0.2s ease-in-out;">0%</div>
+            <div id="selective-sync-status" class="sync-status margin-top-15"></div>
+            <div id="selective-sync-progress-container" class="sync-progress-container">
+                <div id="selective-sync-bar" class="sync-progress-bar">0%</div>
             </div>
-            <div id="selective-sync-log" style="margin-top: 15px; max-height: 400px; overflow-y: auto; border: 1px solid #eee; padding: 10px; background: #fafafa; font-size: 0.9em; line-height: 1.6; white-space: pre-wrap;"></div>
+            <div id="selective-sync-log" class="sync-log"></div>
         </div>
-
-        <style>
-        .ecwid-page-header {
-            margin-bottom: 20px;
-        }
-        
-        .ecwid-page-nav {
-            display: flex;
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            padding: 8px;
-            margin-bottom: 25px;
-            gap: 4px;
-        }
-        
-        .nav-link {
-            display: flex;
-            align-items: center;
-            padding: 10px 16px;
-            text-decoration: none;
-            color: #495057;
-            border-radius: 6px;
-            transition: all 0.2s ease;
-            font-weight: 500;
-        }
-        
-        .nav-link:hover {
-            background: #e9ecef;
-            color: #212529;
-            text-decoration: none;
-        }
-        
-        .nav-link.current {
-            background: #007cba;
-            color: white;
-        }
-        
-        .nav-icon {
-            margin-right: 8px;
-            font-size: 16px;
-        }
-        
-        .ecwid-sync-container {
-            background: #fff;
-            border: 1px solid #e1e1e1;
-            border-radius: 8px;
-            padding: 25px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-        </style>
         <?php
     }
 
@@ -1518,8 +1181,6 @@ class Ecwid_WC_Sync {
                 $product_logs[] = "Ecwid Category IDs found: " . implode(', ', $item['categoryIds']);
                 $wc_term_ids = [];
                 foreach ($item['categoryIds'] as $ecwid_cat_id) {
-                    if (empty($ecwid_cat_id) || intval($ecwid_cat_id) == 0) continue;
-                    // MODIFICATION: Pass true to bypass cache when looking up term IDs for product assignment
                     $wc_term_id = $this->get_term_id_by_ecwid_id(intval($ecwid_cat_id), 'product_cat', true); 
                     if ($wc_term_id) {
                         $wc_term_ids[] = $wc_term_id;
