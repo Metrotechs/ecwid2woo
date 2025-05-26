@@ -1,30 +1,73 @@
-== License ==
+===============================================================================
+                   Ecwid2Woo Product Sync – Dual License
+===============================================================================
 
-**Dual Licensing: GPLv2+ for Code, Trademark for Brand**
+Copyright © 2025 Metrotechs, Inc.
+All rights reserved.
 
-The Ecwid2Woo Product Sync plugin operates under a dual licensing model to provide both open-source freedom and brand protection:
+This Ecwid2Woo Product Sync plugin is distributed under a dual-licensing model
+to ensure both open-source freedom for developers and brand protection for
+Metrotechs.
 
-**1. Plugin Code (Software): GNU General Public License v2.0 or later (GPLv2+)**
-   - This plugin's PHP, JavaScript, and CSS code is licensed under the GPLv2+.
-   - You are free to use, study, modify, and redistribute the code under the terms of the GPLv2+, the full text of which is included below.
-   - This ensures the plugin remains open-source and community-driven.
+===============================================================================
+1. SOFTWARE CODE – GNU GENERAL PUBLIC LICENSE v2.0 or later (GPLv2+)
+===============================================================================
 
-**2. Brand & Trademark: "Ecwid2Woo Product Sync"™**
-   - The name "Ecwid2Woo" and "Ecwid2Woo Product Sync", the associated logo(s), and other brand assets are trademarks of Metrotechs.
-   - These trademarks are protected to ensure users can identify official versions of the plugin and related services from Metrotechs.
-   - Use of the trademark "Ecwid2Woo" or "Ecwid2Woo Product Sync" in any derivative works or services must comply with Metrotechs' brand guidelines and may require permission.
+The PHP, JavaScript, CSS, and other source code files composing this plugin
+(the “Software”) are licensed under the terms of the GNU General Public
+License, version 2 (GPLv2), or (at your option) any later version published
+by the Free Software Foundation.
 
-**Why this model?**
-This approach allows us to offer the core software freely to the community while building a sustainable business around official services, premium extensions (if any in the future), 
-and support, all under a recognizable and trusted brand.
+You may copy, modify, and redistribute the Software, provided that:
 
-While the plugin software is free, Metrotechs offers professional services such as premium support, custom development, and migration assistance. 
-Please see the "Support" section for more details or visit https://metrotechs.io.
+  • You retain all copyright notices and license texts in source files.  
+  • Any modified versions you distribute also carry this GPLv2+ license.  
+  • You make available the complete Corresponding Source in a manner
+    consistent with GPLv2 Section 3.
 
----
-"Ecwid2Woo" is a trademark of Metrotechs. Ecwid, WordPress, and WooCommerce are trademarks of their respective owners.
+The full text of the GPLv2+ follows this section.
 
----
+===============================================================================
+2. BRAND & TRADEMARK – “Ecwid2Woo”™ and “Ecwid2Woo Product Sync”™
+===============================================================================
+
+Metrotechs Digital Marketing Agency, LLC. is the sole owner of the trademarks “Ecwid2Woo” and
+“Ecwid2Woo Product Sync,” together with all related logos, stylized marks,
+icons, and trade dress (the “Trademarks”).
+
+  • You may refer to the plugin by its name in documentation or
+    screenshots, so long as you do not imply endorsement by Metrotechs.  
+  • Any other usage of Metrotechs’ Trademarks—especially in connection with
+    derivative works, hosted services, or commercial products—must comply
+    with Metrotechs’ Brand Guidelines and requires prior written permission.
+  • To request permission, please contact branding@metrotechs.net.
+
+===============================================================================
+3. DISCLAIMER & WARRANTY
+===============================================================================
+
+This Software is provided “as is,” without warranty of any kind, express or
+implied, including but not limited to warranties of merchantability, fitness
+for a particular purpose, or non-infringement. In no event shall Metrotechs,
+its affiliates, or contributors be liable for any claim, damages, or other
+liability arising from, out of, or in connection with the Software.
+
+===============================================================================
+4. SUPPORT & PROFESSIONAL SERVICES
+===============================================================================
+
+While the Software is freely available under GPLv2+, Metrotechs offers
+commercial services to help you get the most out of Ecwid2Woo:
+
+  • Premium support and priority bug fixes  
+  • Custom development and feature extensions  
+  • Migration and data-sync consulting  
+
+Visit https://metrotechs.io or email support@metrotechs.net for details.
+
+===============================================================================
+                        FULL TEXT: GPL v2.0 or later
+===============================================================================
 
 GNU GENERAL PUBLIC LICENSE
                        Version 2, June 1991
