@@ -1,4 +1,32 @@
-                    GNU GENERAL PUBLIC LICENSE
+== License ==
+
+**Dual Licensing: GPLv2+ for Code, Trademark for Brand**
+
+The Ecwid2Woo Product Sync plugin operates under a dual licensing model to provide both open-source freedom and brand protection:
+
+**1. Plugin Code (Software): GNU General Public License v2.0 or later (GPLv2+)**
+   - This plugin's PHP, JavaScript, and CSS code is licensed under the GPLv2+.
+   - You are free to use, study, modify, and redistribute the code under the terms of the GPLv2+, the full text of which is included below.
+   - This ensures the plugin remains open-source and community-driven.
+
+**2. Brand & Trademark: "Ecwid2Woo Product Sync"™**
+   - The name "Ecwid2Woo" and "Ecwid2Woo Product Sync", the associated logo(s), and other brand assets are trademarks of Metrotechs.
+   - These trademarks are protected to ensure users can identify official versions of the plugin and related services from Metrotechs.
+   - Use of the trademark "Ecwid2Woo" or "Ecwid2Woo Product Sync" in any derivative works or services must comply with Metrotechs' brand guidelines and may require permission.
+
+**Why this model?**
+This approach allows us to offer the core software freely to the community while building a sustainable business around official services, premium extensions (if any in the future), 
+and support, all under a recognizable and trusted brand.
+
+While the plugin software is free, Metrotechs offers professional services such as premium support, custom development, and migration assistance. 
+Please see the "Support" section for more details or visit https://metrotechs.io.
+
+---
+"Ecwid2Woo" is a trademark of Metrotechs. Ecwid, WordPress, and WooCommerce are trademarks of their respective owners.
+
+---
+
+GNU GENERAL PUBLIC LICENSE
                        Version 2, June 1991
 
  Copyright (C) 1989, 1991 Free Software Foundation, Inc.,
@@ -218,7 +246,7 @@ such claims; this section has the sole purpose of protecting the
 integrity of the free software distribution system, which is
 implemented by public license practices.  Many people have made
 generous contributions to the wide range of software distributed
-through that system in reliance on consistent application of that
+Through that system in reliance on consistent application of that
 system; it is up to the author/donor to decide if he or she is willing
 to distribute software through any other system and a licensee cannot
 impose that choice.
