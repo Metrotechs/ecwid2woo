@@ -406,3 +406,98 @@
 .min-width-300 {
     min-width: 300px;
 }
+
+/* Category Selection Styles */
+.category-selection-controls {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 15px;
+    margin: 15px 0;
+}
+
+.category-selection-controls .button {
+    margin-right: 10px;
+}
+
+.category-selection-list {
+    margin: 15px 0;
+}
+
+.category-selection-list ul {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #f9f9f9;
+    padding: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.category-selection-list li {
+    padding: 5px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.category-selection-list li:last-child {
+    border-bottom: none;
+}
+
+.category-selection-list label {
+    cursor: pointer;
+    display: block;
+    padding: 3px 0;
+    transition: background-color 0.2s ease;
+}
+
+.category-selection-list label:hover {
+    background-color: #f0f0f0;
+    border-radius: 3px;
+}
+
+.category-selection-list input[type="checkbox"] {
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+.category-bulk-actions {
+    margin: 15px 0;
+    padding-top: 15px;
+    border-top: 1px solid #ddd;
+}
+
+.category-bulk-actions h3 {
+    margin: 0 0 10px 0;
+    color: #1d2327;
+    font-size: 16px;
+}
+
+/* Enhance checkbox appearance */
+.category-checkbox, #select-all-categories-checkbox {
+    transform: scale(1.1);
+    margin-right: 8px !important;
+}
+
+/* Button state improvements */
+.button.disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Responsive improvements for category selection */
+@media (max-width: 768px) {
+    .category-selection-controls {
+        text-align: center;
+    }
+    
+    .category-selection-controls .button {
+        display: block;
+        width: 100%;
+        margin: 5px 0;
+    }
+    
+    .category-selection-controls .description {
+        display: block;
+        margin: 10px 0 0 0;
+        text-align: center;
+    }
+}

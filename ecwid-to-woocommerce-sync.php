@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin Name: Ecwid2Woo Product Sync™
+Plugin Name: Ecwid2Woo Product Sync
 Description: Professional Ecwid to WooCommerce synchronization plugin by Metrotechs.
 Plugin URI: https://metrotechs.io/plugins/ecwid2woo/
 Author URI: https://metrotechs.io
@@ -14,8 +14,6 @@ Requires at least: 5.0
 Requires PHP: 7.2
 WC requires at least: 3.0
 WC tested up to: 9.2
-
-Ecwid2Woo Product Sync is a trademark of Metrotechs.
 */
 
 // Declare HPOS compatibility
@@ -58,6 +56,7 @@ class Ecwid_WC_Sync {
         add_action('wp_ajax_ecwid_wc_process_variation_batch', [$this, 'ajax_process_variation_batch']);
         add_action('wp_ajax_ecwid_wc_fetch_full_sync_counts', [$this, 'ajax_fetch_full_sync_counts']);
         add_action('wp_ajax_ecwid_wc_fetch_categories_for_display', [$this, 'ajax_fetch_categories_for_display']);
+        add_action('wp_ajax_ecwid_wc_import_selected_categories', [$this, 'ajax_import_selected_categories']);
         add_action('wp_ajax_ecwid_wc_test_connection', [$this, 'ajax_test_api_connection']); // Make sure this line exists
     }
 
@@ -244,6 +243,13 @@ class Ecwid_WC_Sync {
                 'connection_test_failed' => __('Connection test failed. Please try again.', 'ecwid2woo-product-sync'),
                 'save_settings_failed' => __('Failed to save settings. Please try again.', 'ecwid2woo-product-sync'),
                 'settings_saved_successfully' => __('Settings saved successfully!', 'ecwid2woo-product-sync'),
+                'select_all_categories' => __('Select All/None', 'ecwid2woo-product-sync'),
+                'import_selected_categories' => __('Import Selected Categories', 'ecwid2woo-product-sync'),
+                'importing_selected_categories' => __('Importing Selected Categories...', 'ecwid2woo-product-sync'),
+                'no_categories_selected' => __('No categories selected for import.', 'ecwid2woo-product-sync'),
+                'categories_import_complete' => __('Selected categories import complete!', 'ecwid2woo-product-sync'),
+                'load_categories' => __('Load Ecwid Categories', 'ecwid2woo-product-sync'),
+                'loading_categories' => __('Loading Categories...', 'ecwid2woo-product-sync'),
             ]
         ]);
 
@@ -480,7 +486,7 @@ class Ecwid_WC_Sync {
         ?>
         <div class="ecwid-page-header">
             <h1><?php esc_html_e('Ecwid Category Sync', 'ecwid2woo-product-sync'); ?></h1>
-            <p class="description"><?php esc_html_e('This will sync all categories from Ecwid to WooCommerce. You can load the list to see which categories will be imported.', 'ecwid2woo-product-sync'); ?></p>
+            <p class="description"><?php esc_html_e('Load categories from your Ecwid store and select which ones to import or sync all categories at once.', 'ecwid2woo-product-sync'); ?></p>
         </div>
 
         <!-- Navigation Bar -->
@@ -501,16 +507,27 @@ class Ecwid_WC_Sync {
 
         <div class="ecwid-sync-container">
             <div id="category-sync-initial-info" class="category-sync-initial-info">
-                <?php esc_html_e('Click "Load Ecwid Category List" to see details.', 'ecwid2woo-product-sync'); ?>
+                <?php esc_html_e('Click "Load Ecwid Categories" to see details and select categories to import.', 'ecwid2woo-product-sync'); ?>
             </div>
-            <button id="load-ecwid-categories-button" class="button margin-bottom-15"><?php esc_html_e('Reload Ecwid Categories', 'ecwid2woo-product-sync'); ?></button>
+            <button id="load-ecwid-categories-button" class="button margin-bottom-15"><?php esc_html_e('Load Ecwid Categories', 'ecwid2woo-product-sync'); ?></button>
             
             <div id="category-list-container" class="category-list-container">
                 <?php esc_html_e('Category list will appear here...', 'ecwid2woo-product-sync'); ?>
             </div>
 
-            <button id="category-page-sync-button" class="button button-primary margin-bottom-15"><?php esc_html_e('Start Category Sync', 'ecwid2woo-product-sync'); ?></button>
-            <button id="fix-category-hierarchy-button" class="button margin-left-10"><?php esc_html_e('Fix Category Hierarchy', 'ecwid2woo-product-sync'); ?></button>
+            <!-- Selection Controls -->
+            <div id="category-selection-controls" class="category-selection-controls" style="display: none; margin: 15px 0;">
+                <button id="select-all-categories-button" class="button"><?php esc_html_e('Select All/None', 'ecwid2woo-product-sync'); ?></button>
+                <button id="import-selected-categories-button" class="button button-primary"><?php esc_html_e('Import Selected Categories', 'ecwid2woo-product-sync'); ?></button>
+                <span class="description" style="margin-left: 10px;"><?php esc_html_e('Or use the buttons below to sync all categories at once.', 'ecwid2woo-product-sync'); ?></span>
+            </div>
+
+            <!-- Bulk Actions -->
+            <div class="category-bulk-actions" style="margin: 15px 0; padding-top: 15px; border-top: 1px solid #ddd;">
+                <h3><?php esc_html_e('Bulk Actions', 'ecwid2woo-product-sync'); ?></h3>
+                <button id="category-page-sync-button" class="button button-primary margin-bottom-15"><?php esc_html_e('Sync All Categories', 'ecwid2woo-product-sync'); ?></button>
+                <button id="fix-category-hierarchy-button" class="button margin-left-10"><?php esc_html_e('Fix Category Hierarchy', 'ecwid2woo-product-sync'); ?></button>
+            </div>
             
             <div id="category-page-sync-status" class="sync-status"></div>
             <div id="category-page-sync-progress-container" class="sync-progress-container">
@@ -572,6 +589,60 @@ class Ecwid_WC_Sync {
             return new WP_Error('missing_credentials', __('Ecwid Store ID and API Token must be configured in plugin settings.', 'ecwid2woo-product-sync'));
         }
         return ['store_id' => $store_id, 'token' => $token, 'base_url' => "https://app.ecwid.com/api/v3/{$store_id}"];
+    }
+
+    /**
+     * Generate a WooCommerce-compatible attribute slug (max 28 characters)
+     * 
+     * WooCommerce has a 28-character limit for attribute slugs. This function
+     * ensures that long attribute names are properly truncated while maintaining
+     * readability and avoiding issues with WooCommerce attribute creation.
+     * 
+     * @param string $attribute_name The attribute name to convert to slug
+     * @return string The shortened slug (max 28 characters)
+     */
+    private function generate_wc_attribute_slug($attribute_name) {
+        // Start with sanitized title
+        $slug = sanitize_title($attribute_name);
+        
+        // If slug is within limit, return as-is
+        if (strlen($slug) <= 28) {
+            return $slug;
+        }
+        
+        // If too long, use intelligent truncation
+        $slug = substr($slug, 0, 28);
+        
+        // Remove any trailing hyphen that might be created by truncation
+        $slug = rtrim($slug, '-');
+        
+        // Ensure we still have a meaningful slug
+        if (strlen($slug) < 3) {
+            // If too short after trimming, use first 28 chars with fallback
+            $slug = substr(sanitize_title($attribute_name), 0, 28);
+            $slug = rtrim($slug, '-');
+        }
+        
+        return $slug;
+    }
+
+    /**
+     * Get the correct WooCommerce taxonomy name for an attribute, handling both
+     * short and long attribute names by finding the actual created attribute
+     * 
+     * @param string $attribute_name The original attribute name
+     * @return string The correct taxonomy name (pa_xxxx)
+     */
+    private function get_wc_attribute_taxonomy_name($attribute_name) {
+        // First try with the original name in case it's short enough
+        $original_slug = sanitize_title($attribute_name);
+        if (strlen($original_slug) <= 28) {
+            return wc_attribute_taxonomy_name($original_slug);
+        }
+        
+        // If original is too long, generate the shortened slug and use that
+        $shortened_slug = $this->generate_wc_attribute_slug($attribute_name);
+        return wc_attribute_taxonomy_name($shortened_slug);
     }
 
     public function ajax_fetch_products_for_selection() {
@@ -1268,15 +1339,20 @@ class Ecwid_WC_Sync {
                     $attribute_name = sanitize_text_field($ecwid_option['name']); // e.g., "Color"
                     $product_logs[] = "Processing Ecwid Option/Attribute: '$attribute_name'";
                     
-                    // Get or create global WooCommerce attribute
-                    $taxonomy_name = wc_attribute_taxonomy_name($attribute_name); // Generates "pa_color"
-                    $attribute_id = wc_attribute_taxonomy_id_by_name($attribute_name); // Check if global attribute exists
+                    // Generate a WooCommerce-compatible slug first (max 28 characters)
+                    $attribute_slug = $this->generate_wc_attribute_slug($attribute_name);
+                    $product_logs[] = "Generated attribute slug: '$attribute_slug' (length: " . strlen($attribute_slug) . " chars)";
+                    
+                    // Generate taxonomy name using the helper function to ensure consistency
+                    $taxonomy_name = $this->get_wc_attribute_taxonomy_name($attribute_name);
+                    $attribute_id = wc_attribute_taxonomy_id_by_name($attribute_slug); // Check if global attribute exists by slug
 
                     if (!$attribute_id) { // If global attribute doesn't exist, create it
                         $product_logs[] = "WC Attribute '$attribute_name' (taxonomy '$taxonomy_name') not found. Creating...";
+                        
                         $attribute_id = wc_create_attribute([
                             'name'         => $attribute_name, // Human-readable name like "Color"
-                            'slug'         => sanitize_title($attribute_name), // Attribute slug like "color"
+                            'slug'         => $attribute_slug, // Shortened slug respecting 28-char limit
                             'type'         => 'select', // Default type
                             'order_by'     => 'menu_order',
                             'has_archives' => false
@@ -1614,7 +1690,7 @@ class Ecwid_WC_Sync {
                          continue;
                     }
                     $parent_attribute_name = sanitize_text_field($combo_opt_val['name']);
-                    $wc_attr_taxonomy_slug = wc_attribute_taxonomy_name($parent_attribute_name);
+                    $wc_attr_taxonomy_slug = $this->get_wc_attribute_taxonomy_name($parent_attribute_name);
                     $term_value_from_ecwid = sanitize_text_field($combo_opt_val['value']);
 
                     $term_object = get_term_by('name', $term_value_from_ecwid, $wc_attr_taxonomy_slug);
@@ -2070,6 +2146,125 @@ class Ecwid_WC_Sync {
         wp_send_json_success([
             'categories' => $all_categories,
             'total_count' => count($all_categories)
+        ]);
+    }
+
+    public function ajax_import_selected_categories() {
+        check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]);
+            return;
+        }
+        set_time_limit(300);
+
+        $selected_category_ids = isset($_POST['category_ids']) ? array_map('intval', $_POST['category_ids']) : [];
+
+        if (empty($selected_category_ids)) {
+            wp_send_json_error(['message' => __('No categories selected for import.', 'ecwid2woo-product-sync')]);
+            return;
+        }
+
+        $api_essentials = $this->_get_api_essentials();
+        if (is_wp_error($api_essentials)) {
+            wp_send_json_error(['message' => $api_essentials->get_error_message()]);
+            return;
+        }
+
+        $import_results = [];
+        $imported_count = 0;
+        $skipped_count = 0;
+        $failed_count = 0;
+        $detailed_logs = [];
+
+        $detailed_logs[] = "Starting selective category import for " . count($selected_category_ids) . " categories.";
+
+        foreach ($selected_category_ids as $category_id) {
+            $detailed_logs[] = "--- Processing Category ID: $category_id ---";
+            
+            // Fetch individual category data from Ecwid
+            $query_params = ['responseFields' => 'id,name,parentId,description,hdThumbnailUrl,originalImageUrl'];
+            $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories/' . $category_id);
+
+            $response = wp_remote_get($api_url, [
+                'timeout' => 60,
+                'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
+            ]);
+
+            if (is_wp_error($response)) {
+                $detailed_logs[] = "[ERROR] API Request failed for category $category_id: " . $response->get_error_message();
+                $failed_count++;
+                continue;
+            }
+
+            $category_data = json_decode(wp_remote_retrieve_body($response), true);
+            $http_code = wp_remote_retrieve_response_code($response);
+
+            if ($http_code !== 200 || (isset($category_data['errorMessage']) && !empty($category_data['errorMessage']))) {
+                $detailed_logs[] = "[ERROR] Failed to fetch category $category_id (HTTP $http_code): " . ($category_data['errorMessage'] ?? 'Unknown error');
+                $failed_count++;
+                continue;
+            }
+
+            if (empty($category_data) || !isset($category_data['id'])) {
+                $detailed_logs[] = "[ERROR] Invalid category data received for category $category_id";
+                $failed_count++;
+                continue;
+            }
+
+            // Import the category using existing import_category method
+            try {
+                $result_array = $this->import_category($category_data);
+
+                if (isset($result_array['status'])) {
+                    $import_results[] = $result_array;
+                    
+                    if ($result_array['status'] === 'imported') {
+                        $imported_count++;
+                    } elseif ($result_array['status'] === 'skipped') {
+                        $skipped_count++;
+                    } else {
+                        $failed_count++;
+                    }
+
+                    $category_name = esc_html($result_array['item_name'] ?? "Category $category_id");
+                    $detailed_logs[] = "Category: $category_name - Result: " . strtoupper($result_array['status']);
+                    
+                    if (!empty($result_array['logs']) && is_array($result_array['logs'])) {
+                        foreach ($result_array['logs'] as $log_entry) {
+                            $detailed_logs[] = "  " . $log_entry;
+                        }
+                    }
+                } else {
+                    $detailed_logs[] = "[ERROR] Import function returned unexpected result for category $category_id";
+                    $failed_count++;
+                }
+
+            } catch (Exception $e) {
+                $detailed_logs[] = "[EXCEPTION] Error importing category $category_id: " . $e->getMessage();
+                $failed_count++;
+            }
+
+            $detailed_logs[] = "";
+        }
+
+        $summary_message = sprintf(
+            __('Selective category import completed. Imported: %d, Skipped: %d, Failed: %d', 'ecwid2woo-product-sync'),
+            $imported_count,
+            $skipped_count,
+            $failed_count
+        );
+
+        $detailed_logs[] = "=== IMPORT SUMMARY ===";
+        $detailed_logs[] = $summary_message;
+
+        wp_send_json_success([
+            'message' => $summary_message,
+            'imported_count' => $imported_count,
+            'skipped_count' => $skipped_count,
+            'failed_count' => $failed_count,
+            'total_processed' => count($selected_category_ids),
+            'logs' => $detailed_logs,
+            'results' => $import_results
         ]);
     }
 

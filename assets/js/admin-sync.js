@@ -613,7 +613,7 @@
                                         sku: itemResult.sku,
                                         all_combinations: itemResult.all_combinations || [],
                                         total_combinations: itemResult.total_combinations,
-                                        original_options: itemResult.original_options || [],
+                                        original_options: itemResult.original_options || [], // Get options from the initially fetched list
                                         current_variation_offset: 0
                                     });
                                     logMessage(fullSyncLogDiv, `[INFO] Queued product ${itemResult.item_name} (WC ID: ${itemResult.wc_product_id}) for variation processing (${itemResult.total_combinations} variations).`, 'info');
@@ -621,6 +621,26 @@
                             });
                         }
                         
+                        // Check for product import errors and log a recommendation if needed
+                        if (response.data.processed_type === 'products') {
+                            let productImportErrorOccurred = false;
+                            if (response.data.batch_item_results && response.data.batch_item_results.length > 0) {
+                                response.data.batch_item_results.forEach(function(item_result) {
+                                    if (item_result.status === 'failed') {
+                                        productImportErrorOccurred = true;
+                                    }
+                                    // Log individual item results if needed
+                                    // categorizeAndLog(fullSyncLogDiv, item_result);
+                                });
+                            }
+
+                            // Check if this is the first time a product import error is noted in this full sync session
+                            if (productImportErrorOccurred && !window.ecwidFullSyncProductErrorNoted) {
+                                logMessage(ecwid_sync_params.i18n.second_import_recommended_after_product_error, 'error');
+                                window.ecwidFullSyncProductErrorNoted = true; // Set a flag to avoid repeating this message
+                            }
+                        }
+
                         // Store parent continuation data
                         fullSyncParentContinuation.hasMore = response.data.has_more;
                         fullSyncParentContinuation.nextOffset = response.data.next_offset;
@@ -792,28 +812,46 @@
                         const fetchedCategories = response.data.categories || [];
                         categorySyncInitialInfoDiv.text(i18n.categories_to_sync_info.replace('{count}', totalCategoriesForCategoryPageSync));
                         if (fetchedCategories.length > 0) {
-                            let listHtml = '<ul style="list-style: disc; padding-left: 20px; margin:0;">';
+                            // Store categories for selective import
+                            window.ecwidCategoriesForSelection = fetchedCategories;
+                            
+                            let listHtml = '<div class="category-selection-list" style="margin: 10px 0;">';
+                            listHtml += '<div style="margin-bottom: 10px;"><label><input type="checkbox" id="select-all-categories-checkbox" style="margin-right: 5px;">Select All</label></div>';
+                            listHtml += '<ul style="list-style: none; padding-left: 0; margin:0; border: 1px solid #ddd; background: #f9f9f9; padding: 10px; max-height: 300px; overflow-y: auto;">';
                             fetchedCategories.forEach(function(category) {
-                                listHtml += `<li style="padding: 2px 0;">${sanitizeHTML(category.name)} 
-                                                <span style="font-size:0.9em; color:#777;">(ID: ${category.id || 'N/A'}, Parent ID: ${category.parentId || '0'})</span>
+                                listHtml += `<li style="padding: 5px 0; border-bottom: 1px solid #eee;">
+                                                <label style="cursor: pointer; display: block;">
+                                                    <input type="checkbox" class="category-checkbox" value="${category.id}" style="margin-right: 8px;">
+                                                    <strong>${sanitizeHTML(category.name)}</strong>
+                                                    <span style="font-size:0.9em; color:#666; margin-left: 10px;">(ID: ${category.id || 'N/A'}, Parent ID: ${category.parentId || '0'})</span>
+                                                </label>
                                              </li>`;
                             });
-                            listHtml += '</ul>';
+                            listHtml += '</ul></div>';
                             categoryListContainer.html(listHtml);
                             categoryListContainer.append(`<p style="font-size:0.9em; margin-top:5px; font-style:italic;">${i18n.categories_loaded_for_display.replace('{count}', fetchedCategories.length)}</p>`);
+                            
+                            // Show selection controls
+                            $('#category-selection-controls').show();
+                            
+                            // Initialize checkbox functionality
+                            initializeCategorySelectionControls();
                         } else {
                             categoryListContainer.html(`<p>${i18n.no_categories_found_display}</p>`);
+                            $('#category-selection-controls').hide();
                         }
                     } else {
                         const errorMsg = response.data && response.data.message ? response.data.message : i18n.ajax_error;
                         categorySyncInitialInfoDiv.html(`<span style="color:red;">${sanitizeHTML(errorMsg)}</span>`);
                         categoryListContainer.html(`<p style="color:red;">${sanitizeHTML(errorMsg)}</p>`);
+                        $('#category-selection-controls').hide();
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
                     const errorMsg = `${i18n.ajax_error}: ${textStatus} ${errorThrown || ''}`;
                     categorySyncInitialInfoDiv.html(`<span style="color:red;">${sanitizeHTML(errorMsg)}</span>`);
                     categoryListContainer.html(`<p style="color:red;">${sanitizeHTML(errorMsg)}</p>`);
+                    $('#category-selection-controls').hide();
                 },
                 complete: function() {
                     // Only re-enable the button if it was the one that initiated the call (not auto-load)
@@ -832,6 +870,146 @@
                 e.preventDefault();
                 // The disabled check is now inside loadAndDisplayCategories
                 loadAndDisplayCategories(); // Call the main function
+            });
+        }
+
+        // Initialize category selection controls
+        function initializeCategorySelectionControls() {
+            // Select All/None functionality
+            $('#select-all-categories-checkbox').off('change').on('change', function() {
+                const isChecked = $(this).is(':checked');
+                $('.category-checkbox').prop('checked', isChecked);
+                updateSelectedCategoriesCount();
+            });
+
+            // Individual checkbox changes
+            $(document).off('change', '.category-checkbox').on('change', '.category-checkbox', function() {
+                updateSelectedCategoriesCount();
+                
+                // Update select all checkbox state
+                const totalCheckboxes = $('.category-checkbox').length;
+                const checkedCheckboxes = $('.category-checkbox:checked').length;
+                const selectAllCheckbox = $('#select-all-categories-checkbox');
+                
+                if (checkedCheckboxes === 0) {
+                    selectAllCheckbox.prop('indeterminate', false).prop('checked', false);
+                } else if (checkedCheckboxes === totalCheckboxes) {
+                    selectAllCheckbox.prop('indeterminate', false).prop('checked', true);
+                } else {
+                    selectAllCheckbox.prop('indeterminate', true).prop('checked', false);
+                }
+            });
+
+            // Initial count update
+            updateSelectedCategoriesCount();
+        }
+
+        function updateSelectedCategoriesCount() {
+            const selectedCount = $('.category-checkbox:checked').length;
+            const totalCount = $('.category-checkbox').length;
+            const importButton = $('#import-selected-categories-button');
+            
+            if (selectedCount > 0) {
+                importButton.text(`${i18n.import_selected_categories || 'Import Selected Categories'} (${selectedCount})`);
+                importButton.prop('disabled', false).removeClass('disabled');
+            } else {
+                importButton.text(i18n.import_selected_categories || 'Import Selected Categories');
+                importButton.prop('disabled', true).addClass('disabled');
+            }
+        }
+
+        // Handle select all/none button click
+        if ($('#select-all-categories-button').length) {
+            $('#select-all-categories-button').on('click', function(e) {
+                e.preventDefault();
+                const checkboxes = $('.category-checkbox');
+                const checkedCount = checkboxes.filter(':checked').length;
+                const shouldCheck = checkedCount === 0;
+                
+                checkboxes.prop('checked', shouldCheck);
+                $('#select-all-categories-checkbox').prop('checked', shouldCheck).prop('indeterminate', false);
+                updateSelectedCategoriesCount();
+            });
+        }
+
+        // Handle import selected categories button click
+        if ($('#import-selected-categories-button').length) {
+            $('#import-selected-categories-button').on('click', function(e) {
+                e.preventDefault();
+                if ($(this).hasClass('disabled')) return;
+
+                const selectedCategoryIds = [];
+                $('.category-checkbox:checked').each(function() {
+                    selectedCategoryIds.push(parseInt($(this).val()));
+                });
+
+                if (selectedCategoryIds.length === 0) {
+                    alert(i18n.no_categories_selected || 'No categories selected for import.');
+                    return;
+                }
+
+                // Disable buttons during import
+                const importButton = $(this);
+                const originalText = importButton.text();
+                importButton.addClass('disabled').text(i18n.importing_selected_categories || 'Importing Selected Categories...');
+                loadCategoriesButton.addClass('disabled').prop('disabled', true);
+                categoryPageSyncButton.addClass('disabled').prop('disabled', true);
+
+                // Clear previous results
+                categoryPageSyncLogDiv.html('');
+                updateProgressBar(categoryPageSyncProgressBar, 0);
+                categoryPageSyncProgressBarContainer.show();
+                updateStatus(categoryPageSyncStatusDiv, i18n.importing_selected_categories || 'Importing Selected Categories...');
+
+                // Start import
+                importSelectedCategories(selectedCategoryIds, importButton, originalText);
+            });
+        }
+
+        function importSelectedCategories(categoryIds, importButton, originalButtonText) {
+            logMessage(categoryPageSyncLogDiv, `Starting import of ${categoryIds.length} selected categories...`, 'info');
+            
+            $.ajax({
+                url: ajax_url,
+                method: 'POST',
+                data: {
+                    action: 'ecwid_wc_import_selected_categories',
+                    nonce: nonce,
+                    category_ids: categoryIds
+                },
+                success: function(response) {
+                    if (response.success) {
+                        const data = response.data;
+                        updateProgressBar(categoryPageSyncProgressBar, 100);
+                        updateStatus(categoryPageSyncStatusDiv, i18n.categories_import_complete || 'Selected categories import complete!');
+                        
+                        logMessage(categoryPageSyncLogDiv, data.message, 'success');
+                        logMessage(categoryPageSyncLogDiv, `Imported: ${data.imported_count}, Skipped: ${data.skipped_count}, Failed: ${data.failed_count}`, 'info');
+                        
+                        // Display detailed logs
+                        if (data.logs && data.logs.length > 0) {
+                            data.logs.forEach(function(logEntry) {
+                                logMessage(categoryPageSyncLogDiv, logEntry, 'info');
+                            });
+                        }
+                    } else {
+                        const errorMsg = response.data && response.data.message ? response.data.message : i18n.ajax_error;
+                        updateStatus(categoryPageSyncStatusDiv, 'Import failed');
+                        logMessage(categoryPageSyncLogDiv, `Error: ${errorMsg}`, 'error');
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    const errorMsg = `${i18n.ajax_error}: ${textStatus} ${errorThrown || ''}`;
+                    updateStatus(categoryPageSyncStatusDiv, 'Import failed');
+                    logMessage(categoryPageSyncLogDiv, `Error: ${errorMsg}`, 'error');
+                },
+                complete: function() {
+                    // Re-enable buttons
+                    importButton.removeClass('disabled').text(originalButtonText);
+                    loadCategoriesButton.removeClass('disabled').prop('disabled', false);
+                    categoryPageSyncButton.removeClass('disabled').prop('disabled', false);
+                    updateSelectedCategoriesCount(); // Update button text with selection count
+                }
             });
         }
 
