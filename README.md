@@ -16,6 +16,7 @@
 ### 🔄 Multiple Sync Options
 - **Full Sync** - Complete catalog migration with preview capabilities
 - **Category Sync** - Independent category import with hierarchy management
+- **Selective Category Import** - Choose individual categories instead of importing all categories at once
 - **Selective Product Sync** - Choose specific products for targeted import/updates
 - **Batch Processing** - Smart chunking prevents server timeouts on large catalogs
 
@@ -31,6 +32,7 @@
 - **Memory Optimization** - Efficient handling of large product catalogs
 - **Smart Duplicate Prevention** - Uses Ecwid IDs and SKU matching to avoid duplicates
 - **Auto-Recovery Systems** - Handles API timeouts and connection issues gracefully
+- **Intelligent Attribute Handling** - Automatically handles WooCommerce's 28-character attribute slug limits
 - **WordPress Standards Compliant** - Follows all WordPress coding and security best practices
 
 ### 🛡️ Reliability & Safety
@@ -141,6 +143,8 @@
 
 **Features:**
 - **Category Preview** - See all categories before importing
+- **Selective Import** - Choose individual categories to import instead of all at once
+- **Select All/None Controls** - Quickly select or deselect all categories
 - **Hierarchy Preservation** - Maintains parent-child relationships
 - **Hierarchy Fix Tool** - Resolves any structural issues
 - **Independent Operation** - Sync categories without touching products
@@ -148,8 +152,9 @@
 **How to Use:**
 1. Click **Reload Ecwid Categories** to preview
 2. Review the category list and hierarchy
-3. Click **Start Category Sync** to import
-4. Use **Fix Category Hierarchy** if needed after sync
+3. Select individual categories using checkboxes or use **Select All/None** buttons
+4. Click **Import Selected Categories** to sync only chosen categories
+5. Use **Fix Category Hierarchy** if needed after sync
 
 ### 🎯 Selective Product Sync
 **Location:** `Ecwid2Woo Sync → Product Sync`
@@ -182,7 +187,8 @@
 ## 🔧 Advanced Features
 
 ### 🔄 Variation Processing
-- **Automatic Attribute Creation** - Missing WooCommerce attributes auto-generated
+- **Automatic Attribute Creation** - Missing WooCommerce attributes auto-generated with intelligent slug handling
+- **Smart Slug Management** - Automatically truncates long attribute names to comply with WooCommerce's 28-character limit
 - **Smart Combination Mapping** - Ecwid options become WooCommerce variations
 - **Batch Processing** - Large variation sets processed in optimized chunks
 - **Variation-Specific Data** - Individual SKUs, prices, stock, and images
@@ -237,6 +243,11 @@
 - Verify stable internet connection
 - Review WordPress debug logs for specific errors
 - Try syncing smaller batches via Selective Sync
+
+**Attribute Creation Errors**
+- Plugin automatically handles WooCommerce's 28-character attribute slug limit
+- Long attribute names are intelligently truncated while maintaining readability
+- Duplicate slug prevention ensures unique attribute creation
 
 **Images Not Importing**
 - Check server has adequate disk space
@@ -320,10 +331,17 @@ While the plugin is free and open source, professional services are available:
 
 ## 🎯 Version Information
 
-**Current Version:** 1.0.0  
+**Current Version:** 1.0.1  
 **Compatibility:** WordPress 5.0+ | WooCommerce 3.0+ | PHP 7.2+  
-**Release Date:** 5/25/2025  
+**Release Date:** August 26, 2025  
 **Update Policy:** Regular updates for compatibility and feature enhancements
+
+### Recent Updates (v1.0.1)
+- **NEW:** Selective category import - Choose individual categories instead of importing all at once
+- **IMPROVED:** Intelligent attribute slug handling for WooCommerce's 28-character limit
+- **ENHANCED:** Better error handling for attribute creation with long names
+- **ADDED:** Checkbox-based category selection interface with select all/none controls
+- **FIXED:** "Invalid taxonomy" errors for attributes with names exceeding character limits
 
 ---
 
