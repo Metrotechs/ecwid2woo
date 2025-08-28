@@ -25,7 +25,7 @@
             products_to_sync_info: 'Products to sync: {count}',
             // variations_to_sync_info: 'Variations to sync: {count}', // This one is for actual count, keep if used
             syncing_item_of_total: 'Syncing {syncType}: {current} of {total}...',
-            load_products: 'Reload Products', // CHANGED from 'Load Ecwid Products for Selection'
+            load_products: 'Reload Products',
             loading_products: 'Loading Products...',
             load_ecwid_categories: 'Reload Ecwid Categories', // CHANGED from 'Load Ecwid Category List'
             loading_ecwid_categories: 'Loading Categories...',
@@ -33,6 +33,9 @@
             categories_loaded_for_display: '{count} categories loaded for display.',
             import_selected: 'Import Selected Products',
             importing_selected: 'Importing Selected...',
+            import_selected_categories: 'Import Selected Categories',
+            no_categories_selected: 'No categories selected for import.',
+            no_categories_found: 'No categories found in your Ecwid store or an error occurred.',
             no_products_selected: 'No products selected for import.',
             select_all_none: 'Select All/None',
             no_products_found: 'No enabled products found in Ecwid store or failed to fetch.',
@@ -163,6 +166,7 @@
         const categoryListContainer = $('#category-list-container');
         const categorySyncInitialInfoDiv = $('#category-sync-initial-info');
         const fixHierarchyButton = $('#fix-category-hierarchy-button');
+        const importSelectedCategoriesButton = $('#import-selected-categories-button');
 
         // Selective Product Sync UI Elements
         const loadProductsButton = $('#load-ecwid-products-button');
@@ -202,6 +206,9 @@
         let productsToImportSelectedIds = []; // For selective product sync
         let currentSelectiveImportProductIndex = 0; // For selective product sync
         let currentProductVariationData = null; // For selective product variation batching
+
+        // Selective Category Sync State
+        let ecwidCategoriesForSelection = []; // For selective category sync
 
         let animationInterval = null; // For status text animation
 
@@ -289,16 +296,42 @@
         function handleAjaxError(statusDiv, logDiv, buttonElem, buttonText, syncType, responseData, isNetworkError = false) {
             const errorMessage = responseData && responseData.message ? responseData.message : (isNetworkError ? 'Network error' : i18n.sync_error);
             const statusMessage = i18n.sync_error + (syncType ? ` (${syncType})` : '') + (responseData && responseData.message ? `: ${responseData.message}` : '');
-            updateStatus(statusDiv, statusMessage);
+            
+            // Check if this is a server error that should suggest retry
+            let isServerError = false;
+            let retryRecommended = false;
+            
+            if (responseData) {
+                isServerError = responseData.is_server_error || false;
+                retryRecommended = responseData.retry_recommended || false;
+            }
+            
+            // Enhanced status message for server errors
+            let enhancedStatusMessage = statusMessage;
+            if (isServerError && retryRecommended) {
+                enhancedStatusMessage += ' 🔄 You can try again in a few minutes.';
+            }
+            
+            updateStatus(statusDiv, enhancedStatusMessage);
             logMessage(logDiv, (syncType ? `${syncType}: ` : '') + 'Error - ' + errorMessage, 'error');
+            
+            // Special handling for server errors
+            if (isServerError) {
+                logMessage(logDiv, '⚠️ This appears to be a temporary server issue on Ecwid\'s side.', 'warning');
+                if (retryRecommended) {
+                    logMessage(logDiv, '🔄 Recommendation: Wait a few minutes and try again.', 'info');
+                }
+            }
             
             if (responseData && responseData.details) {
                 console.error("Sync Error Details" + (syncType ? ` for ${syncType}` : '') + ":", responseData.details);
                 logMessage(logDiv, "Details: " + JSON.stringify(responseData.details), 'error');
             }
-             if (responseData && responseData.logs && Array.isArray(responseData.logs)) {
+            
+            if (responseData && responseData.logs && Array.isArray(responseData.logs)) {
                 responseData.logs.forEach(logEntry => categorizeAndLog(logDiv, logEntry));
             }
+            
             if (buttonElem && buttonText) {
                 buttonElem.removeClass('disabled').text(buttonText);
             }
@@ -787,17 +820,24 @@
                 if (loadCategoriesButton.length && !categoryListContainer.length) {
                     console.warn("loadCategoriesButton exists, but categoryListContainer does not. Cannot load categories.");
                 }
+                if (categorySyncInitialInfoDiv.length) {
+                    categorySyncInitialInfoDiv.text('');
+                }
                 return;
             }
 
-            const $button = loadCategoriesButton; // Use the existing selector
-            if ($button.hasClass('disabled')) return;
+            if (loadCategoriesButton.hasClass('disabled')) return;
 
-            const originalButtonText = $button.text();
-            $button.text(i18n.loading_ecwid_categories).addClass('disabled').prop('disabled', true);
-            categoryListContainer.html(`<p>${i18n.loading_ecwid_categories}</p>`).show();
-            categorySyncInitialInfoDiv.text(i18n.loading_ecwid_categories);
-            totalCategoriesForCategoryPageSync = 0; // Reset before loading
+            const originalButtonText = loadCategoriesButton.text();
+            loadCategoriesButton.addClass('disabled').text(i18n.loading_ecwid_categories);
+            
+            categoryListContainer.html('<p>' + i18n.loading_ecwid_categories + '</p>').show();
+            if (categorySyncInitialInfoDiv.length) {
+                categorySyncInitialInfoDiv.text(i18n.loading_ecwid_categories);
+            }
+            importSelectedCategoriesButton.hide();
+            ecwidCategoriesForSelection = [];
+            totalCategoriesForCategoryPageSync = 0;
 
             $.ajax({
                 url: ajax_url,
@@ -807,57 +847,68 @@
                     nonce: nonce
                 },
                 success: function(response) {
-                    if (response.success) {
-                        totalCategoriesForCategoryPageSync = parseInt(response.data.total_count) || 0; // STORE TOTAL
-                        const fetchedCategories = response.data.categories || [];
-                        categorySyncInitialInfoDiv.text(i18n.categories_to_sync_info.replace('{count}', totalCategoriesForCategoryPageSync));
-                        if (fetchedCategories.length > 0) {
-                            // Store categories for selective import
-                            window.ecwidCategoriesForSelection = fetchedCategories;
-                            
-                            let listHtml = '<div class="category-selection-list" style="margin: 10px 0;">';
-                            listHtml += '<div style="margin-bottom: 10px;"><label><input type="checkbox" id="select-all-categories-checkbox" style="margin-right: 5px;">Select All</label></div>';
-                            listHtml += '<ul style="list-style: none; padding-left: 0; margin:0; border: 1px solid #ddd; background: #f9f9f9; padding: 10px; max-height: 300px; overflow-y: auto;">';
-                            fetchedCategories.forEach(function(category) {
-                                listHtml += `<li style="padding: 5px 0; border-bottom: 1px solid #eee;">
-                                                <label style="cursor: pointer; display: block;">
-                                                    <input type="checkbox" class="category-checkbox" value="${category.id}" style="margin-right: 8px;">
-                                                    <strong>${sanitizeHTML(category.name)}</strong>
-                                                    <span style="font-size:0.9em; color:#666; margin-left: 10px;">(ID: ${category.id || 'N/A'}, Parent ID: ${category.parentId || '0'})</span>
-                                                </label>
-                                             </li>`;
-                            });
-                            listHtml += '</ul></div>';
-                            categoryListContainer.html(listHtml);
-                            categoryListContainer.append(`<p style="font-size:0.9em; margin-top:5px; font-style:italic;">${i18n.categories_loaded_for_display.replace('{count}', fetchedCategories.length)}</p>`);
-                            
-                            // Show selection controls
-                            $('#category-selection-controls').show();
-                            
-                            // Initialize checkbox functionality
-                            initializeCategorySelectionControls();
+                    if (response.success && response.data.categories) {
+                        ecwidCategoriesForSelection = response.data.categories;
+                        const totalFound = parseInt(response.data.total_found) || 0;
+                        const apiCalls = parseInt(response.data.api_calls_made) || 1;
+                        const totalAvailable = parseInt(response.data.total_available) || totalFound;
+                        totalCategoriesForCategoryPageSync = totalFound;
+
+                        // Enhanced status message with debugging info
+                        let statusMessage = `All ${totalFound} categories loaded`;
+                        if (apiCalls > 1) {
+                            statusMessage += ` (${apiCalls} API calls)`;
+                        }
+                        if (totalAvailable && totalAvailable !== totalFound) {
+                            statusMessage += ` out of ${totalAvailable} available`;
+                        }
+                        statusMessage += '. Select individual categories or multiple categories to import.';
+
+                        if (categorySyncInitialInfoDiv.length) {
+                            // Create styled info box matching the Product Sync page
+                            const styledStatusHtml = `
+                                <div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                                    <p style="margin: 0 0 5px 0; font-weight: bold;">📁 Category Loading Complete:</p>
+                                    <p style="margin: 0; font-size: 12px; color: #666; font-style: normal;">${statusMessage}</p>
+                                </div>
+                            `;
+                            categorySyncInitialInfoDiv.html(styledStatusHtml);
+                        }
+
+                        // Console debug info
+                        console.log('Category loading debug:', {
+                            categoriesReceived: totalFound,
+                            apiCallsMade: apiCalls,
+                            totalAvailable: totalAvailable,
+                            actualArrayLength: ecwidCategoriesForSelection.length
+                        });
+
+                        renderCategorySelectionList(ecwidCategoriesForSelection);
+                        if (ecwidCategoriesForSelection.length > 0) {
+                            importSelectedCategoriesButton.show();
                         } else {
-                            categoryListContainer.html(`<p>${i18n.no_categories_found_display}</p>`);
-                            $('#category-selection-controls').hide();
+                            categoryListContainer.html('<p>' + i18n.no_categories_found + '</p>');
+                            if (categorySyncInitialInfoDiv.length && totalFound === 0) {
+                                categorySyncInitialInfoDiv.text(i18n.no_categories_found);
+                            }
                         }
                     } else {
-                        const errorMsg = response.data && response.data.message ? response.data.message : i18n.ajax_error;
-                        categorySyncInitialInfoDiv.html(`<span style="color:red;">${sanitizeHTML(errorMsg)}</span>`);
-                        categoryListContainer.html(`<p style="color:red;">${sanitizeHTML(errorMsg)}</p>`);
-                        $('#category-selection-controls').hide();
+                        const errorMsg = response.data && response.data.message ? response.data.message : i18n.no_categories_found;
+                        categoryListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
+                        if (categorySyncInitialInfoDiv.length) {
+                            categorySyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
+                        }
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
-                    const errorMsg = `${i18n.ajax_error}: ${textStatus} ${errorThrown || ''}`;
-                    categorySyncInitialInfoDiv.html(`<span style="color:red;">${sanitizeHTML(errorMsg)}</span>`);
-                    categoryListContainer.html(`<p style="color:red;">${sanitizeHTML(errorMsg)}</p>`);
-                    $('#category-selection-controls').hide();
+                    const errorText = 'AJAX Error: ' + sanitizeHTML(textStatus) + (errorThrown ? ' - ' + sanitizeHTML(errorThrown) : '');
+                    categoryListContainer.html('<p style="color:red;">' + errorText + '</p>');
+                    if (categorySyncInitialInfoDiv.length) {
+                         categorySyncInitialInfoDiv.html('<span style="color:red;">' + errorText + '</span>');
+                    }
                 },
                 complete: function() {
-                    // Only re-enable the button if it was the one that initiated the call (not auto-load)
-                    // For auto-load, the button might not be the direct trigger.
-                    // However, it's safe to always try to reset it.
-                    $button.text(originalButtonText).removeClass('disabled').prop('disabled', false);
+                    loadCategoriesButton.removeClass('disabled').text(originalButtonText);
                 }
             });
         }
@@ -1122,16 +1173,15 @@
 
         // --- Selective Product Sync Logic ---
 
-        // New function to load and display products for selection
+        // New function to load and display all products for selection
         function loadAndDisplayProductsForSelection() {
             // Ensure the button and container exist before proceeding
             if (!loadProductsButton.length || !productListContainer.length) {
                 if (loadProductsButton.length && !productListContainer.length) {
                     console.warn("loadProductsButton exists, but productListContainer does not. Cannot load products for selection.");
                 }
-                // Also check for the new info div
                 if (selectiveSyncInitialInfoDiv.length) {
-                    selectiveSyncInitialInfoDiv.text(''); // Clear it if we can't proceed
+                    selectiveSyncInitialInfoDiv.text('');
                 }
                 return;
             }
@@ -1140,39 +1190,68 @@
 
             const originalButtonText = loadProductsButton.text();
             loadProductsButton.addClass('disabled').text(i18n.loading_products);
-            productListContainer.html('<p>' + i18n.loading_products + '</p>').show(); // Ensure it's visible
-            if (selectiveSyncInitialInfoDiv.length) { // Update initial info div
+            
+            productListContainer.html('<p>' + i18n.loading_products + '</p>').show();
+            if (selectiveSyncInitialInfoDiv.length) {
                 selectiveSyncInitialInfoDiv.text(i18n.loading_products);
             }
             importSelectedButton.hide();
-            ecwidProductsForSelection = []; // Clear previous list
+            ecwidProductsForSelection = [];
 
             $.ajax({
                 url: ajax_url,
                 method: 'POST',
-                data: { action: 'ecwid_wc_fetch_products_for_selection', nonce: nonce },
+                data: { 
+                    action: 'ecwid_wc_fetch_products_for_selection', 
+                    nonce: nonce
+                },
                 success: function(response) {
                     if (response.success && response.data.products) {
-                        ecwidProductsForSelection = response.data.products; // Store full product data
-                        const totalFound = parseInt(response.data.total_found) || 0; // Get total found from response
+                        ecwidProductsForSelection = response.data.products;
+                        const totalFound = parseInt(response.data.total_found) || 0;
+                        const apiCalls = parseInt(response.data.api_calls_made) || 1;
+                        const totalAvailable = parseInt(response.data.total_available) || totalFound;
 
-                        if (selectiveSyncInitialInfoDiv.length) { // Update initial info div with count
-                            selectiveSyncInitialInfoDiv.text(i18n.products_available_info.replace('{count}', totalFound));
+                        // Enhanced status message with debugging info
+                        let statusMessage = `All ${totalFound} products loaded`;
+                        if (apiCalls > 1) {
+                            statusMessage += ` (${apiCalls} API calls)`;
                         }
+                        if (totalAvailable && totalAvailable !== totalFound) {
+                            statusMessage += ` out of ${totalAvailable} available`;
+                        }
+                        statusMessage += '. Select individual products or multiple products to import.';
+
+                        if (selectiveSyncInitialInfoDiv.length) {
+                            // Create clean status message without border
+                            const styledStatusHtml = `
+                                <p style="margin: 0 0 5px 0; font-weight: bold;">🎯 Product Loading Complete:</p>
+                                <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-style: normal;">${statusMessage}</p>
+                            `;
+                            selectiveSyncInitialInfoDiv.html(styledStatusHtml);
+                        }
+
+                        // Console debug info
+                        console.log('Product loading debug:', {
+                            productsReceived: totalFound,
+                            apiCallsMade: apiCalls,
+                            totalAvailable: totalAvailable,
+                            actualArrayLength: ecwidProductsForSelection.length
+                        });
 
                         renderProductSelectionList(ecwidProductsForSelection);
                         if (ecwidProductsForSelection.length > 0) {
                             importSelectedButton.show();
                         } else {
                             productListContainer.html('<p>' + i18n.no_products_found + '</p>');
-                             if (selectiveSyncInitialInfoDiv.length && totalFound === 0) { // If no products found, reflect in info
+                            if (selectiveSyncInitialInfoDiv.length && totalFound === 0) {
                                 selectiveSyncInitialInfoDiv.text(i18n.no_products_found);
                             }
                         }
                     } else {
                         const errorMsg = response.data && response.data.message ? response.data.message : i18n.no_products_found;
                         productListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
-                        if (selectiveSyncInitialInfoDiv.length) { // Show error in initial info div
+                        if (selectiveSyncInitialInfoDiv.length) {
                             selectiveSyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
                         }
                     }
@@ -1180,7 +1259,7 @@
                 error: function(jqXHR, textStatus, errorThrown) {
                     const errorText = 'AJAX Error: ' + sanitizeHTML(textStatus) + (errorThrown ? ' - ' + sanitizeHTML(errorThrown) : '');
                     productListContainer.html('<p style="color:red;">' + errorText + '</p>');
-                    if (selectiveSyncInitialInfoDiv.length) { // Show AJAX error in initial info div
+                    if (selectiveSyncInitialInfoDiv.length) {
                          selectiveSyncInitialInfoDiv.html('<span style="color:red;">' + errorText + '</span>');
                     }
                 },
@@ -1191,34 +1270,165 @@
         }
 
         if (loadProductsButton.length) {
-            // Automatically load products if the button exists on page load
+            // Automatically load all products when page loads
             loadAndDisplayProductsForSelection();
 
             loadProductsButton.on('click', function(e) {
                 e.preventDefault();
-                // The disabled check is now inside loadAndDisplayProductsForSelection
-                loadAndDisplayProductsForSelection(); // Call the main function
+                loadAndDisplayProductsForSelection();
             });
         }
 
         function renderProductSelectionList(products) {
-            let html = '<ul style="list-style:none; margin:0; padding:0;">';
-            html += `<li style="padding-bottom: 5px; margin-bottom: 5px; border-bottom: 1px solid #ccc;"><label><input type="checkbox" id="select-all-ecwid-products" /> <strong>${i18n.select_all_none}</strong></label></li>`;
-            products.forEach(function(product) {
-                html += `<li style="padding: 5px 0; border-bottom: 1px solid #eee;">
-                            <label>
-                                <input type="checkbox" class="ecwid-product-select" value="${product.id}" />
-                                ${product.name} (SKU: ${product.sku || 'N/A'}, ID: ${product.id}, Enabled: ${product.enabled})
-                                ${product.combinations && product.combinations.length > 0 ? ` - ${product.combinations.length} Variations` : ''}
+            let html = '<div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">';
+            html += '<p style="margin: 0 0 5px 0; font-weight: bold;">📦 Select Products to Import:</p>';
+            html += '<p style="margin: 0; font-size: 12px; color: #666;">✓ Check individual products to import them one by one, or select multiple products for batch import.</p>';
+            html += '</div>';
+            
+            html += '<ul style="list-style:none; margin:0; padding:0;">';
+            html += `<li style="padding-bottom: 8px; margin-bottom: 8px; border-bottom: 2px solid #0073aa; background: #f0f8ff; padding: 8px;">
+                        <label style="font-weight: bold; color: #0073aa;">
+                            <input type="checkbox" id="select-all-ecwid-products" style="margin-right: 8px;" /> 
+                            ${i18n.select_all_none} (${products.length} products)
+                        </label>
+                     </li>`;
+            
+            products.forEach(function(product, index) {
+                const bgColor = index % 2 === 0 ? '#fff' : '#f9f9f9';
+                html += `<li style="padding: 8px; border-bottom: 1px solid #eee; background: ${bgColor};">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" class="ecwid-product-select" value="${product.id}" style="margin-right: 8px;" />
+                                <div>
+                                    <strong>${product.name}</strong><br>
+                                    <small style="color: #666;">
+                                        SKU: ${product.sku || 'N/A'} | ID: ${product.id} | 
+                                        Status: ${product.enabled ? '✅ Enabled' : '❌ Disabled'}
+                                        ${product.combinations && product.combinations.length > 0 ? ` | 🔄 ${product.combinations.length} Variations` : ' | 📦 Simple Product'}
+                                    </small>
+                                </div>
                             </label>
                          </li>`;
             });
             html += '</ul>';
+            
             productListContainer.html(html);
 
+            // Enhanced Select All/None functionality
             $('#select-all-ecwid-products').on('change', function() {
-                $('.ecwid-product-select').prop('checked', $(this).prop('checked'));
+                const isChecked = $(this).prop('checked');
+                $('.ecwid-product-select').prop('checked', isChecked);
+                updateImportButtonText();
             });
+            
+            // Update button text when individual checkboxes change
+            $('.ecwid-product-select').on('change', function() {
+                updateImportButtonText();
+                
+                // Update "Select All" checkbox state
+                const totalCheckboxes = $('.ecwid-product-select').length;
+                const checkedCheckboxes = $('.ecwid-product-select:checked').length;
+                
+                if (checkedCheckboxes === 0) {
+                    $('#select-all-ecwid-products').prop('indeterminate', false).prop('checked', false);
+                } else if (checkedCheckboxes === totalCheckboxes) {
+                    $('#select-all-ecwid-products').prop('indeterminate', false).prop('checked', true);
+                } else {
+                    $('#select-all-ecwid-products').prop('indeterminate', true);
+                }
+            });
+            
+            // Initialize button text
+            updateImportButtonText();
+        }
+        
+        // Function to render category selection list with enhanced UI
+        function renderCategorySelectionList(categories) {
+            let html = '<div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">';
+            html += '<p style="margin: 0 0 5px 0; font-weight: bold;">📁 Select Categories to Import:</p>';
+            html += '<p style="margin: 0; font-size: 12px; color: #666;">✓ Check individual categories to import them one by one, or select multiple categories for batch import.</p>';
+            html += '</div>';
+            
+            html += '<ul style="list-style:none; margin:0; padding:0;">';
+            html += `<li style="padding-bottom: 8px; margin-bottom: 8px; border-bottom: 2px solid #0073aa; background: #f0f8ff; padding: 8px;">
+                        <label style="font-weight: bold; color: #0073aa;">
+                            <input type="checkbox" id="select-all-ecwid-categories" style="margin-right: 8px;" /> 
+                            ${i18n.select_all_none} (${categories.length} categories)
+                        </label>
+                     </li>`;
+            
+            categories.forEach(function(category, index) {
+                const bgColor = index % 2 === 0 ? '#fff' : '#f9f9f9';
+                html += `<li style="padding: 8px; border-bottom: 1px solid #eee; background: ${bgColor};">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" class="ecwid-category-select" value="${category.id}" style="margin-right: 8px;" />
+                                <div>
+                                    <strong>${category.name}</strong><br>
+                                    <small style="color: #666;">
+                                        ID: ${category.id} | Parent ID: ${category.parentId || '0 (Root)'}
+                                        ${category.parentId ? ' | 📂 Subcategory' : ' | 🏠 Root Category'}
+                                    </small>
+                                </div>
+                            </label>
+                         </li>`;
+            });
+            html += '</ul>';
+            
+            categoryListContainer.html(html);
+
+            // Enhanced Select All/None functionality
+            $('#select-all-ecwid-categories').on('change', function() {
+                const isChecked = $(this).prop('checked');
+                $('.ecwid-category-select').prop('checked', isChecked);
+                updateCategoryImportButtonText();
+            });
+            
+            // Update button text when individual checkboxes change
+            $('.ecwid-category-select').on('change', function() {
+                updateCategoryImportButtonText();
+                
+                // Update "Select All" checkbox state
+                const totalCheckboxes = $('.ecwid-category-select').length;
+                const checkedCheckboxes = $('.ecwid-category-select:checked').length;
+                
+                if (checkedCheckboxes === 0) {
+                    $('#select-all-ecwid-categories').prop('indeterminate', false).prop('checked', false);
+                } else if (checkedCheckboxes === totalCheckboxes) {
+                    $('#select-all-ecwid-categories').prop('indeterminate', false).prop('checked', true);
+                } else {
+                    $('#select-all-ecwid-categories').prop('indeterminate', true);
+                }
+            });
+            
+            // Initialize button text
+            updateCategoryImportButtonText();
+        }
+        
+        // Function to update category import button text based on selection
+        function updateCategoryImportButtonText() {
+            if (!importSelectedCategoriesButton.length) return;
+            
+            const selectedCount = $('.ecwid-category-select:checked').length;
+            if (selectedCount === 0) {
+                importSelectedCategoriesButton.text(i18n.import_selected_categories || 'Import Selected Categories');
+            } else if (selectedCount === 1) {
+                importSelectedCategoriesButton.text(`Import 1 Category`);
+            } else {
+                importSelectedCategoriesButton.text(`Import ${selectedCount} Categories`);
+            }
+        }
+        
+        // Function to update import button text based on selection
+        function updateImportButtonText() {
+            if (!importSelectedButton.length) return;
+            
+            const selectedCount = $('.ecwid-product-select:checked').length;
+            if (selectedCount === 0) {
+                importSelectedButton.text(i18n.import_selected || 'Import Selected Products');
+            } else if (selectedCount === 1) {
+                importSelectedButton.text(`Import 1 Product`);
+            } else {
+                importSelectedButton.text(`Import ${selectedCount} Products`);
+            }
         }
 
         importSelectedButton.on('click', function(e) {
@@ -1458,6 +1668,80 @@
             overallProgress = Math.min(overallProgress, 100); 
             updateProgressBar(selectiveSyncProgressBar, overallProgress); 
         }
+
+        // Category Import Button Handler
+        importSelectedCategoriesButton.on('click', function(e) {
+            e.preventDefault();
+            if (importSelectedCategoriesButton.hasClass('disabled')) return;
+
+            const categoriesToImportIds = $('.ecwid-category-select:checked').map(function() {
+                return $(this).val();
+            }).get();
+
+            if (categoriesToImportIds.length === 0) {
+                alert(i18n.no_categories_selected);
+                return;
+            }
+
+            importSelectedCategoriesButton.addClass('disabled').text('Importing Categories...');
+            loadCategoriesButton.addClass('disabled');
+            categorySyncInitialInfoDiv.text('Importing selected categories...');
+            categoryListContainer.hide();
+
+            // Create a simple status message
+            const statusMessage = `Importing ${categoriesToImportIds.length} selected categories...`;
+            if (categoryPageSyncStatusDiv.length) {
+                categoryPageSyncStatusDiv.text(statusMessage);
+            }
+
+            $.ajax({
+                url: ajax_url,
+                method: 'POST',
+                data: {
+                    action: 'ecwid_wc_import_selected_categories',
+                    nonce: nonce,
+                    category_ids: categoriesToImportIds
+                },
+                success: function(response) {
+                    if (response.success) {
+                        const resultMessage = `Successfully imported ${categoriesToImportIds.length} categories!`;
+                        if (categoryPageSyncStatusDiv.length) {
+                            categoryPageSyncStatusDiv.text(resultMessage);
+                        }
+                        if (categorySyncInitialInfoDiv.length) {
+                            categorySyncInitialInfoDiv.text(resultMessage + ' You can select more categories or use bulk actions below.');
+                        }
+                        
+                        // Log details if available
+                        if (categoryPageSyncLogDiv.length) {
+                            (response.data.logs || []).forEach(log => categorizeAndLog(categoryPageSyncLogDiv, log));
+                        }
+                    } else {
+                        const errorMsg = response.data && response.data.message ? response.data.message : 'Unknown error occurred.';
+                        if (categoryPageSyncStatusDiv.length) {
+                            categoryPageSyncStatusDiv.text('Error: ' + errorMsg);
+                        }
+                        if (categorySyncInitialInfoDiv.length) {
+                            categorySyncInitialInfoDiv.html('<span style="color:red;">Error: ' + sanitizeHTML(errorMsg) + '</span>');
+                        }
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    const errorText = 'AJAX Error: ' + textStatus + (errorThrown ? ' - ' + errorThrown : '');
+                    if (categoryPageSyncStatusDiv.length) {
+                        categoryPageSyncStatusDiv.text(errorText);
+                    }
+                    if (categorySyncInitialInfoDiv.length) {
+                        categorySyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorText) + '</span>');
+                    }
+                },
+                complete: function() {
+                    importSelectedCategoriesButton.removeClass('disabled').text(i18n.import_selected_categories || 'Import Selected Categories');
+                    loadCategoriesButton.removeClass('disabled');
+                    categoryListContainer.show();
+                }
+            });
+        });
 
 
         // --- Fix Category Hierarchy Logic ---

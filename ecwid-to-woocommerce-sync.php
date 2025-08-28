@@ -36,6 +36,8 @@ define('ECWID2WOO_VERSION', '1.0.0'); // Define version constant
 class Ecwid_WC_Sync {
     private $options;
     private $sync_steps = ['categories', 'products']; // Define order of sync for full sync
+    private $ecwid_currency = null; // Cache for Ecwid store currency
+    private $wc_currency = null; // Cache for WooCommerce base currency
 
     // Define slugs for the admin pages
     private $settings_slug = 'ecwid-sync-settings';
@@ -507,29 +509,23 @@ class Ecwid_WC_Sync {
 
         <div class="ecwid-sync-container">
             <div id="category-sync-initial-info" class="category-sync-initial-info">
-                <?php esc_html_e('Click "Load Ecwid Categories" to see details and select categories to import.', 'ecwid2woo-product-sync'); ?>
+                <!-- This will be populated by JavaScript -->
             </div>
-            <button id="load-ecwid-categories-button" class="button margin-bottom-15"><?php esc_html_e('Load Ecwid Categories', 'ecwid2woo-product-sync'); ?></button>
-            
+
+            <button id="load-ecwid-categories-button" class="button button-primary"><?php esc_html_e('Reload Categories', 'ecwid2woo-product-sync'); ?></button>
             <div id="category-list-container" class="category-list-container">
                 <?php esc_html_e('Category list will appear here...', 'ecwid2woo-product-sync'); ?>
             </div>
-
-            <!-- Selection Controls -->
-            <div id="category-selection-controls" class="category-selection-controls" style="display: none; margin: 15px 0;">
-                <button id="select-all-categories-button" class="button"><?php esc_html_e('Select All/None', 'ecwid2woo-product-sync'); ?></button>
-                <button id="import-selected-categories-button" class="button button-primary"><?php esc_html_e('Import Selected Categories', 'ecwid2woo-product-sync'); ?></button>
-                <span class="description" style="margin-left: 10px;"><?php esc_html_e('Or use the buttons below to sync all categories at once.', 'ecwid2woo-product-sync'); ?></span>
-            </div>
+            <button id="import-selected-categories-button" class="button button-primary import-selected-button"><?php esc_html_e('Import Selected Categories', 'ecwid2woo-product-sync'); ?></button>
 
             <!-- Bulk Actions -->
-            <div class="category-bulk-actions" style="margin: 15px 0; padding-top: 15px; border-top: 1px solid #ddd;">
+            <div class="category-bulk-actions" style="margin: 25px 0 15px 0; padding-top: 15px; border-top: 1px solid #ddd;">
                 <h3><?php esc_html_e('Bulk Actions', 'ecwid2woo-product-sync'); ?></h3>
                 <button id="category-page-sync-button" class="button button-primary margin-bottom-15"><?php esc_html_e('Sync All Categories', 'ecwid2woo-product-sync'); ?></button>
                 <button id="fix-category-hierarchy-button" class="button margin-left-10"><?php esc_html_e('Fix Category Hierarchy', 'ecwid2woo-product-sync'); ?></button>
             </div>
             
-            <div id="category-page-sync-status" class="sync-status"></div>
+            <div id="category-page-sync-status" class="sync-status margin-top-15"></div>
             <div id="category-page-sync-progress-container" class="sync-progress-container">
                 <div id="category-page-sync-bar" class="sync-progress-bar">0%</div>
             </div>
@@ -566,7 +562,7 @@ class Ecwid_WC_Sync {
                 <!-- This will be populated by JavaScript -->
             </div>
 
-            <button id="load-ecwid-products-button" class="button"><?php esc_html_e('Reload Products', 'ecwid2woo-product-sync'); ?></button>
+            <button id="load-ecwid-products-button" class="button button-primary"><?php esc_html_e('Reload Products', 'ecwid2woo-product-sync'); ?></button>
             <div id="selective-product-list-container" class="selective-product-list-container">
                 <?php esc_html_e('Product list will appear here...', 'ecwid2woo-product-sync'); ?>
             </div>
@@ -589,6 +585,93 @@ class Ecwid_WC_Sync {
             return new WP_Error('missing_credentials', __('Ecwid Store ID and API Token must be configured in plugin settings.', 'ecwid2woo-product-sync'));
         }
         return ['store_id' => $store_id, 'token' => $token, 'base_url' => "https://app.ecwid.com/api/v3/{$store_id}"];
+    }
+
+    /**
+     * Enhanced API error handling helper
+     * Detects HTML error pages and provides user-friendly error messages
+     */
+    private function handle_api_error_response($response, $raw_response_body, $http_code, $sync_type = '') {
+        // Check if response contains HTML error page (like Ecwid's 500 error page)
+        if (strpos($raw_response_body, '<!DOCTYPE HTML>') !== false || 
+            strpos($raw_response_body, '<html>') !== false ||
+            strpos($raw_response_body, 'technical difficulties') !== false) {
+            
+            $user_friendly_message = __('Ecwid servers are temporarily experiencing technical difficulties. Please try again in a few minutes.', 'ecwid2woo-product-sync');
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: Detected HTML error page from Ecwid API. HTTP Code: $http_code. Sync Type: $sync_type");
+                error_log("Ecwid Sync: Raw HTML Response: " . substr($raw_response_body, 0, 500) . '...');
+            }
+            
+            return [
+                'is_server_error' => true,
+                'user_message' => $user_friendly_message,
+                'technical_message' => sprintf(__('Ecwid API returned HTML error page (HTTP %s)', 'ecwid2woo-product-sync'), $http_code),
+                'retry_recommended' => true
+            ];
+        }
+        
+        // Try to decode JSON response
+        $body = json_decode($raw_response_body, true);
+        
+        // Check for JSON decode errors
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $user_friendly_message = __('Ecwid API returned an invalid response format. This usually indicates server issues on Ecwid\'s side.', 'ecwid2woo-product-sync');
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: JSON decode error. Error: " . json_last_error_msg() . ". Raw response: " . substr($raw_response_body, 0, 500));
+            }
+            
+            return [
+                'is_server_error' => true,
+                'user_message' => $user_friendly_message,
+                'technical_message' => sprintf(__('JSON decode error: %s (HTTP %s)', 'ecwid2woo-product-sync'), json_last_error_msg(), $http_code),
+                'retry_recommended' => true
+            ];
+        }
+        
+        // Handle specific HTTP error codes
+        switch ($http_code) {
+            case 500:
+                $user_message = __('Ecwid servers are experiencing internal errors. Please try again in a few minutes.', 'ecwid2woo-product-sync');
+                $retry = true;
+                break;
+            case 502:
+            case 503:
+            case 504:
+                $user_message = __('Ecwid servers are temporarily unavailable. Please try again in a few minutes.', 'ecwid2woo-product-sync');
+                $retry = true;
+                break;
+            case 429:
+                $user_message = __('API rate limit exceeded. Please wait a moment and try again.', 'ecwid2woo-product-sync');
+                $retry = true;
+                break;
+            case 401:
+                $user_message = __('API authentication failed. Please check your Store ID and API Token in Settings.', 'ecwid2woo-product-sync');
+                $retry = false;
+                break;
+            case 403:
+                $user_message = __('API access forbidden. Please check your API token permissions.', 'ecwid2woo-product-sync');
+                $retry = false;
+                break;
+            case 404:
+                $user_message = __('Requested resource not found on Ecwid servers.', 'ecwid2woo-product-sync');
+                $retry = false;
+                break;
+            default:
+                $error_message = $body['errorMessage'] ?? 'Unknown error or invalid response format';
+                $user_message = sprintf(__('Ecwid API Error: %s', 'ecwid2woo-product-sync'), $error_message);
+                $retry = ($http_code >= 500); // Retry server errors, not client errors
+        }
+        
+        return [
+            'is_server_error' => ($http_code >= 500),
+            'user_message' => $user_message,
+            'technical_message' => sprintf(__('Ecwid API Error (HTTP %s): %s', 'ecwid2woo-product-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error')),
+            'retry_recommended' => $retry,
+            'error_data' => is_array($body) ? $body : ['raw_response' => substr($raw_response_body, 0, 1000)]
+        ];
     }
 
     /**
@@ -659,22 +742,28 @@ class Ecwid_WC_Sync {
             return;
         }
 
+        // Load all products at once
         $all_products = [];
         $offset = 0;
         $limit = 100;
+        $api_calls_made = 0;
 
         do {
+            $api_calls_made++;
             $query_params = [
                 'limit' => $limit,
                 'offset' => $offset,
                 'enabled' => 'true',
-                // MODIFIED: Fetch options and combination IDs
                 'responseFields' => 'items(id,sku,name,enabled,options,combinations(id))' 
             ];
             $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/products');
 
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Product Sync: API call #$api_calls_made - Fetching products with offset: $offset, limit: $limit");
+            }
+
             $response = wp_remote_get($api_url, [
-                'timeout' => 60,
+                'timeout' => 120, // Increased timeout for large stores
                 'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
             ]);
 
@@ -683,37 +772,61 @@ class Ecwid_WC_Sync {
                 return;
             }
 
-            $body = json_decode(wp_remote_retrieve_body($response), true);
+            $raw_response_body = wp_remote_retrieve_body($response);
+            $body = json_decode($raw_response_body, true);
             $http_code = wp_remote_retrieve_response_code($response);
 
             if ($http_code !== 200 || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
-                wp_send_json_error(['message' => sprintf(__('Ecwid API Error (HTTP %s): %s', 'ecwid2woo-product-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error'))]);
+                $error_info = $this->handle_api_error_response($response, $raw_response_body, $http_code, 'products');
+                
+                $error_message = $error_info['user_message'];
+                if ($error_info['retry_recommended']) {
+                    $error_message .= ' ' . __('This appears to be a temporary issue. You can try again in a few minutes.', 'ecwid2woo-product-sync');
+                }
+                
+                wp_send_json_error([
+                    'message' => $error_message,
+                    'details' => $error_info['error_data'],
+                    'is_server_error' => $error_info['is_server_error'],
+                    'retry_recommended' => $error_info['retry_recommended']
+                ]);
                 return;
             }
 
             if (isset($body['items']) && is_array($body['items'])) {
                 foreach ($body['items'] as $item) {
-                    // Ensure 'enabled' check is still relevant if API guarantees it
-                    // if (isset($item['enabled']) && $item['enabled']) { 
-                        $all_products[] = [
-                            'id' => $item['id'] ?? null,
-                            'name' => $item['name'] ?? 'N/A',
-                            'sku' => $item['sku'] ?? 'N/A',
-                            'enabled' => $item['enabled'] ?? false, // Ensure default
-                            'options' => $item['options'] ?? [], // Add options
-                            'combinations' => $item['combinations'] ?? [] // Add combinations (array of {id:val})
-                        ];
-                    // }
+                    $all_products[] = [
+                        'id' => $item['id'] ?? null,
+                        'name' => $item['name'] ?? 'N/A',
+                        'sku' => $item['sku'] ?? 'N/A',
+                        'enabled' => $item['enabled'] ?? false,
+                        'options' => $item['options'] ?? [],
+                        'combinations' => $item['combinations'] ?? []
+                    ];
                 }
             }
 
             $count_in_response = $body['count'] ?? 0;
             $total_from_api = $body['total'] ?? 0;
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Product Sync: API call #$api_calls_made - Got $count_in_response products, total available: $total_from_api, current offset: $offset");
+            }
+            
             $offset += $count_in_response;
 
         } while ($count_in_response > 0 && $offset < $total_from_api);
 
-        wp_send_json_success(['products' => $all_products, 'total_found' => count($all_products)]);
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("Ecwid Product Sync: Complete! Made $api_calls_made API calls, loaded " . count($all_products) . " total products");
+        }
+
+        wp_send_json_success([
+            'products' => $all_products, 
+            'total_found' => count($all_products),
+            'api_calls_made' => $api_calls_made,
+            'total_available' => $total_from_api
+        ]);
     }
 
     public function ajax_import_selected_products() {
@@ -728,6 +841,12 @@ class Ecwid_WC_Sync {
         if (is_wp_error($api_essentials)) {
             wp_send_json_error(['message' => $api_essentials->get_error_message()]);
             return;
+        }
+
+        // Sync currency before importing products
+        $currency_sync_result = $this->sync_currency_settings($api_essentials);
+        if (defined('WP_DEBUG') && WP_DEBUG && !empty($currency_sync_result)) {
+            error_log("Ecwid Sync: Currency sync result for selected products import: " . print_r($currency_sync_result, true));
         }
 
         $ecwid_product_id = isset($_POST['ecwid_product_id']) ? intval($_POST['ecwid_product_id']) : 0;
@@ -810,6 +929,12 @@ class Ecwid_WC_Sync {
             wp_send_json_error(['message' => $api_essentials->get_error_message()]); return;
         }
 
+        // Sync currency at the start of batch operations
+        $currency_sync_result = $this->sync_currency_settings($api_essentials);
+        if (defined('WP_DEBUG') && WP_DEBUG && !empty($currency_sync_result)) {
+            error_log("Ecwid Sync: Currency sync result for batch sync: " . print_r($currency_sync_result, true));
+        }
+
         // MODIFICATION: Change the default batch size from 10 to a smaller number, e.g., 5.
         // This will fetch and process fewer items per AJAX call, leading to more frequent updates.
         $limit_per_api_call = apply_filters('ecwid_wc_sync_batch_api_limit', 5); // Changed from 10 to 5
@@ -854,11 +979,26 @@ class Ecwid_WC_Sync {
         $http_code = wp_remote_retrieve_response_code($response);
 
         if ($http_code !== 200 || !is_array($body) || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
-            $error_message = sprintf(__('Ecwid API Error (HTTP %s): %s', 'ecwid2woo-product-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error or invalid response format'));
+            // Use enhanced error handling
+            $error_info = $this->handle_api_error_response($response, $raw_response_body, $http_code, $sync_type);
+            
             if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("Ecwid Sync: API Error for $sync_type. HTTP Code: $http_code. Raw Body: " . $raw_response_body);
+                error_log("Ecwid Sync: API Error for $sync_type. HTTP Code: $http_code. Raw Body: " . substr($raw_response_body, 0, 500));
             }
-            wp_send_json_error(['message' => $error_message, 'details' => is_array($body) ? $body : ['raw_response' => $raw_response_body]]); return;
+            
+            // Provide user-friendly error message with retry suggestion for server errors
+            $error_message = $error_info['user_message'];
+            if ($error_info['retry_recommended']) {
+                $error_message .= ' ' . __('This appears to be a temporary issue. You can try again in a few minutes.', 'ecwid2woo-product-sync');
+            }
+            
+            wp_send_json_error([
+                'message' => $error_message, 
+                'details' => $error_info['error_data'],
+                'is_server_error' => $error_info['is_server_error'],
+                'retry_recommended' => $error_info['retry_recommended']
+            ]); 
+            return;
         }
 
         $items_from_api = [];
@@ -965,10 +1105,122 @@ class Ecwid_WC_Sync {
         ]);
     }
 
+    /**
+     * Sanitize and prepare category name for WordPress
+     * Handles special characters, encoding issues, and length limits
+     */
+    private function prepare_category_name($name) {
+        if (empty($name)) {
+            return '';
+        }
+        
+        // Remove HTML entities that might have been double-encoded
+        $name = html_entity_decode($name, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        
+        // Normalize Unicode characters to prevent encoding issues
+        if (class_exists('Normalizer')) {
+            $name = Normalizer::normalize($name, Normalizer::FORM_C);
+        }
+        
+        // Trim whitespace
+        $name = trim($name);
+        
+        // WordPress has a practical limit around 200 characters for term names
+        if (strlen($name) > 200) {
+            // Try to truncate at word boundary
+            $truncated = substr($name, 0, 197);
+            $last_space = strrpos($truncated, ' ');
+            if ($last_space !== false && $last_space > 150) {
+                $name = substr($truncated, 0, $last_space) . '...';
+            } else {
+                $name = $truncated . '...';
+            }
+        }
+        
+        return $name;
+    }
+
+    /**
+     * Generate a robust, multilingual-safe slug for terms.
+     * - Transliterates from any script to Latin when possible.
+     * - Ensures ASCII-only, lowercase, hyphen-separated slug.
+     * - Appends Ecwid ID to guarantee uniqueness.
+     * - Truncates to <= 190 chars to avoid utf8mb4 index issues.
+     */
+    private function generate_term_slug($name, $ecwid_id = null, $max_len = 190) {
+        if (!is_string($name) || $name === '') {
+            $base = 'category';
+        } else {
+            $base = html_entity_decode($name, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            if (class_exists('Normalizer')) {
+                $base = Normalizer::normalize($base, Normalizer::FORM_C);
+            }
+
+            // Prefer intl transliterator if available for broad language coverage
+            if (class_exists('Transliterator')) {
+                $trans = \Transliterator::create('Any-Latin; Latin-ASCII');
+                if ($trans) {
+                    $base = $trans->transliterate($base);
+                }
+            } else if (function_exists('iconv')) {
+                $converted = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $base);
+                if ($converted !== false) {
+                    $base = $converted;
+                }
+            }
+
+            // WP helper to remove accents if available (covers many languages)
+            if (function_exists('remove_accents')) {
+                $base = remove_accents($base);
+            }
+
+            // Lowercase and replace non-alphanumeric with hyphens
+            $base = strtolower($base);
+            $base = preg_replace('/[^a-z0-9]+/i', '-', $base);
+            $base = trim($base, '-');
+
+            if ($base === '' || $base === null) {
+                $base = 'category';
+            }
+        }
+
+        $suffix = '';
+        if (!empty($ecwid_id)) {
+            $suffix = '-' . preg_replace('/[^0-9]/', '', (string)$ecwid_id);
+        }
+
+        // Ensure total length <= $max_len
+        $allowed_base_len = $max_len - strlen($suffix);
+        if ($allowed_base_len < 1) {
+            // Edge case: suffix too long; fallback to a fixed slug with tail of ID
+            $suffix = '-' . substr((string)$ecwid_id, -10);
+            $allowed_base_len = max(1, $max_len - strlen($suffix));
+        }
+        if (strlen($base) > $allowed_base_len) {
+            $base = substr($base, 0, $allowed_base_len);
+            $base = rtrim($base, '-');
+        }
+
+        $slug = $base . $suffix;
+        if ($slug === '') {
+            $slug = 'category' . $suffix;
+        }
+        return $slug;
+    }
+
     private function import_category($item) {
         $category_logs = [];
         $ecwid_cat_id = $item['id'] ?? null;
         $ecwid_cat_name = isset($item['name']) ? sanitize_text_field($item['name']) : null;
+
+        // Use the enhanced name preparation
+        if ($ecwid_cat_name) {
+            $original_name = $ecwid_cat_name;
+            $ecwid_cat_name = $this->prepare_category_name($ecwid_cat_name);
+            if ($original_name !== $ecwid_cat_name) {
+                $category_logs[] = "Category name adjusted: '$original_name' → '$ecwid_cat_name'";
+            }
+        }
 
         $item_name_for_return = $ecwid_cat_name ?? '[No Name]';
         $ecwid_id_for_return = $ecwid_cat_id ?? 'N/A';
@@ -982,6 +1234,9 @@ class Ecwid_WC_Sync {
 
             $args = [];
             if (isset($item['description'])) $args['description'] = wp_kses_post($item['description']);
+
+            // Proactively provide a robust slug to avoid DB errors on non-Latin/long names
+            $args['slug'] = $this->generate_term_slug($ecwid_cat_name, $ecwid_cat_id);
 
             $parent_wc_term_id = 0; // Default to 0 (no parent)
             if (isset($item['parentId']) && intval($item['parentId']) > 0) {
@@ -1054,6 +1309,13 @@ class Ecwid_WC_Sync {
                 }
                 clean_term_cache($existing_wc_term_id_by_ecwid_meta, 'product_cat');
                 $category_logs[] = "Updated successfully (WC Term ID: $existing_wc_term_id_by_ecwid_meta). Cache cleaned.";
+                
+                // Reconcile any children that were attached to a placeholder for this parent
+                $this->reconcile_children_after_parent_import($ecwid_cat_id, $existing_wc_term_id_by_ecwid_meta, $category_logs);
+                
+                // Handle category image import for existing category
+                $this->handle_category_image_import($item, $existing_wc_term_id_by_ecwid_meta, $category_logs);
+                
                 return ['status' => 'imported', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
             }
 
@@ -1083,6 +1345,13 @@ class Ecwid_WC_Sync {
                     if ($meta_update_result) {
                         clean_term_cache($wc_term_id_found_by_name, 'product_cat');
                         $category_logs[] = "Successfully linked and updated WC term (ID: $wc_term_id_found_by_name) to Ecwid ID $ecwid_cat_id. Meta update successful. Cache cleaned.";
+                        
+                        // Reconcile any children that were attached to a placeholder for this parent
+                        $this->reconcile_children_after_parent_import($ecwid_cat_id, $wc_term_id_found_by_name, $category_logs);
+                        
+                        // Handle category image import for found category
+                        $this->handle_category_image_import($item, $wc_term_id_found_by_name, $category_logs);
+                        
                     } else {
                         $category_logs[] = "[ERROR] FAILED to link WC term (ID: $wc_term_id_found_by_name) to Ecwid ID $ecwid_cat_id (update_term_meta failed).";
                         return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
@@ -1093,20 +1362,127 @@ class Ecwid_WC_Sync {
                  return ['status' => 'skipped', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
             }
 
-            $new_term_result = wp_insert_term(wp_slash($ecwid_cat_name), 'product_cat', $args);
+            // Enhanced category name validation and preparation
+            $sanitized_name = wp_slash($ecwid_cat_name);
+            $category_logs[] = "Preparing to create new category. Original name: '$ecwid_cat_name', Sanitized: '$sanitized_name'";
+            
+            // Check name length (WordPress typically handles up to 200 characters but let's be safe)
+            if (strlen($sanitized_name) > 200) {
+                $truncated_name = substr($sanitized_name, 0, 197) . '...';
+                $category_logs[] = "[WARNING] Category name too long (" . strlen($sanitized_name) . " chars). Truncating to: '$truncated_name'";
+                $sanitized_name = $truncated_name;
+            }
+            
+            // Log the arguments being passed to wp_insert_term
+            $category_logs[] = "Insert term arguments: " . wp_json_encode(['name' => $sanitized_name, 'args' => $args]);
+            
+            $new_term_result = wp_insert_term($sanitized_name, 'product_cat', $args);
 
             if (is_wp_error($new_term_result)) {
-                $category_logs[] = '[ERROR] Failed to insert new WC category: ' . $new_term_result->get_error_message();
-                return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
+                $error_code = $new_term_result->get_error_code();
+                $error_message = $new_term_result->get_error_message();
+                $error_data = $new_term_result->get_error_data();
+                
+                $category_logs[] = '[ERROR] Failed to insert new WC category: ' . $error_message;
+                $category_logs[] = '[ERROR] Error code: ' . $error_code;
+                
+                if ($error_data) {
+                    $category_logs[] = '[ERROR] Error data: ' . wp_json_encode($error_data);
+                }
+                
+                // Try to provide specific guidance based on error type
+                switch ($error_code) {
+                    case 'term_exists':
+                        $category_logs[] = '[ERROR] Term already exists. This might be a slug collision.';
+                        // Try with a modified slug
+                        $modified_args = $args;
+                        $modified_args['slug'] = sanitize_title($sanitized_name . '-' . $ecwid_cat_id);
+                        $category_logs[] = '[RETRY] Attempting with custom slug: ' . $modified_args['slug'];
+                        
+                        $retry_result = wp_insert_term($sanitized_name, 'product_cat', $modified_args);
+                        if (!is_wp_error($retry_result)) {
+                            $category_logs[] = '[SUCCESS] Retry with custom slug succeeded.';
+                            $new_term_result = $retry_result;
+                            // Success, so we can continue with the normal processing
+                        } else {
+                            $category_logs[] = '[ERROR] Retry also failed: ' . $retry_result->get_error_message();
+                        }
+                        break;
+                        
+                    case 'invalid_taxonomy':
+                        $category_logs[] = '[ERROR] Invalid taxonomy. This is a critical error.';
+                        break;
+                        
+                    case 'empty_term_name':
+                        $category_logs[] = '[ERROR] Empty term name after sanitization.';
+                        break;
+                        
+                    default:
+                        $category_logs[] = '[ERROR] Unknown error type. Check database constraints and character encoding.';
+                        
+                        // Additional debugging for unknown errors
+                        global $wpdb;
+                        if (isset($wpdb)) {
+                            $category_logs[] = '[DEBUG] WordPress DB charset: ' . ($wpdb->charset ?? 'unknown');
+                            $category_logs[] = '[DEBUG] WordPress DB collate: ' . ($wpdb->collate ?? 'unknown');
+                        }
+                        $category_logs[] = '[DEBUG] Name character encoding: ' . mb_detect_encoding($sanitized_name);
+                        $category_logs[] = '[DEBUG] Name byte length: ' . strlen($sanitized_name);
+                        $category_logs[] = '[DEBUG] Name character length: ' . mb_strlen($sanitized_name);
+                        
+                        // Try with a completely safe ASCII slug as last resort
+                        $ascii_safe_args = $args;
+                        $ascii_safe_name = 'Category-' . $ecwid_cat_id;
+                        $ascii_safe_args['slug'] = 'category-' . $ecwid_cat_id;
+                        
+                        // Check if ASCII fallback name already exists
+                        $existing_ascii_term = term_exists($ascii_safe_name, 'product_cat', $args['parent'] ?? 0);
+                        if ($existing_ascii_term) {
+                            $category_logs[] = '[FOUND] ASCII-safe fallback already exists (Term ID: ' . $existing_ascii_term['term_id'] . '). Using existing category.';
+                            $new_term_result = ['term_id' => $existing_ascii_term['term_id']];
+                            // Success, so we can continue with the normal processing
+                        } else {
+                            $category_logs[] = '[LAST_RESORT] Attempting with ASCII-safe name: ' . $ascii_safe_name;
+                            
+                            $ascii_retry_result = wp_insert_term($ascii_safe_name, 'product_cat', $ascii_safe_args);
+                            if (!is_wp_error($ascii_retry_result)) {
+                                $category_logs[] = '[SUCCESS] ASCII-safe retry succeeded. Original name will be stored in description.';
+                                
+                                // Store original name in description if not already set
+                                if (!isset($args['description']) || empty($args['description'])) {
+                                    $desc_update = wp_update_term($ascii_retry_result['term_id'], 'product_cat', [
+                                        'description' => sprintf('Original name: %s', $ecwid_cat_name)
+                                    ]);
+                                    if (!is_wp_error($desc_update)) {
+                                        $category_logs[] = '[INFO] Original name stored in category description.';
+                                    }
+                                }
+                                
+                                $new_term_result = $ascii_retry_result;
+                                // Success, so we can continue with the normal processing
+                            } else {
+                                $category_logs[] = '[ERROR] Even ASCII-safe retry failed: ' . $ascii_retry_result->get_error_message();
+                                return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
+                            }
+                        }
+                }
             }
 
             if (isset($new_term_result['term_id'])) {
-                $meta_update_result = update_term_meta($new_term_result['term_id'], '_ecwid_category_id', $ecwid_cat_id);
+                $new_term_id = $new_term_result['term_id'];
+                $meta_update_result = update_term_meta($new_term_id, '_ecwid_category_id', $ecwid_cat_id);
                 if ($meta_update_result) {
-                    clean_term_cache($new_term_result['term_id'], 'product_cat');
-                    $category_logs[] = "Imported successfully (New WC Term ID: {$new_term_result['term_id']}). Meta update successful. Cache cleaned.";
+                    clean_term_cache($new_term_id, 'product_cat');
+                    $category_logs[] = "Imported successfully (New WC Term ID: $new_term_id). Meta update successful. Cache cleaned.";
+                    
+                    // Reconcile any children that were attached to a placeholder for this parent
+                    $this->reconcile_children_after_parent_import($ecwid_cat_id, $new_term_id, $category_logs);
+
+                    // Handle category image import
+                    $this->handle_category_image_import($item, $new_term_id, $category_logs);
+                    
                 } else {
-                     $category_logs[] = "[ERROR] Imported successfully (New WC Term ID: {$new_term_result['term_id']}). BUT FAILED to set _ecwid_category_id meta (update_term_meta failed).";
+                     $category_logs[] = "[ERROR] Imported successfully (New WC Term ID: $new_term_id). BUT FAILED to set _ecwid_category_id meta (update_term_meta failed).";
                      return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
                 }
                 return ['status' => 'imported', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
@@ -1876,6 +2252,100 @@ class Ecwid_WC_Sync {
         ];
     }
 
+    /**
+     * After creating/updating a real parent category, move any children from the
+     * placeholder term ("Missing Category {EcwidID}") to the real parent and clean up.
+     *
+     * @param int|string $parent_ecwid_id Ecwid parent category ID
+     * @param int $real_parent_term_id WooCommerce term ID of the real parent
+     * @param array &$logs Log array to append messages
+     */
+    private function reconcile_children_after_parent_import($parent_ecwid_id, $real_parent_term_id, &$logs) {
+        // Find placeholder post by Ecwid parent ID
+        $q = new WP_Query([
+            'post_type'      => 'ecwid_placeholder',
+            'posts_per_page' => 1,
+            'fields'         => 'ids',
+            'meta_key'       => '_ecwid_placeholder_parent_id',
+            'meta_value'     => $parent_ecwid_id,
+        ]);
+
+        if (empty($q->posts)) {
+            // No placeholder recorded for this parent; nothing to reconcile
+            return;
+        }
+
+        $placeholder_post_id = $q->posts[0];
+        $placeholder_term_id = (int) get_post_meta($placeholder_post_id, '_ecwid_placeholder_term_id', true);
+
+        if (!$placeholder_term_id) {
+            $logs[] = "[PLACEHOLDER] Found placeholder post {$placeholder_post_id} but no term ID stored.";
+            return;
+        }
+
+        // Verify placeholder term still exists
+        $term_check = term_exists($placeholder_term_id, 'product_cat');
+        if (!$term_check) {
+            // Clean up stale placeholder post
+            wp_delete_post($placeholder_post_id, true);
+            $logs[] = "[PLACEHOLDER] Stale placeholder (post {$placeholder_post_id}) removed; term no longer exists.";
+            return;
+        }
+
+        // Move children of the placeholder to the real parent
+        $children = get_terms([
+            'taxonomy'   => 'product_cat',
+            'hide_empty' => false,
+            'parent'     => $placeholder_term_id,
+            'fields'     => 'ids',
+        ]);
+
+        if (!is_wp_error($children) && !empty($children)) {
+            foreach ($children as $child_term_id) {
+                $upd = wp_update_term($child_term_id, 'product_cat', ['parent' => $real_parent_term_id]);
+                if (is_wp_error($upd)) {
+                    $logs[] = sprintf('[PLACEHOLDER] Failed moving child term %1$s under real parent %2$s: %3$s', $child_term_id, $real_parent_term_id, $upd->get_error_message());
+                } else {
+                    $logs[] = sprintf('[PLACEHOLDER] Moved child term %1$s under real parent %2$s', $child_term_id, $real_parent_term_id);
+                }
+            }
+        }
+
+        // Attempt to delete the placeholder term if it has no children and no product assignments
+        // First, detach any meta marking it as placeholder (not strictly necessary but tidy)
+        delete_term_meta($placeholder_term_id, '_ecwid_placeholder_category');
+
+        // Double-check if term still has children after moves
+        $remaining_children = get_terms([
+            'taxonomy'   => 'product_cat',
+            'hide_empty' => false,
+            'parent'     => $placeholder_term_id,
+            'fields'     => 'ids',
+        ]);
+        if (is_wp_error($remaining_children) || empty($remaining_children)) {
+            // Try deleting the placeholder term (will fail if products still assigned)
+            $del = wp_delete_term($placeholder_term_id, 'product_cat');
+            if (is_wp_error($del)) {
+                $logs[] = sprintf('[PLACEHOLDER] Could not delete placeholder term %1$s: %2$s', $placeholder_term_id, $del->get_error_message());
+            } else {
+                $logs[] = sprintf('[PLACEHOLDER] Deleted placeholder term %1$s after reconciliation', $placeholder_term_id);
+            }
+        } else {
+            $logs[] = sprintf('[PLACEHOLDER] Placeholder term %1$s kept (still has children or assignments).', $placeholder_term_id);
+        }
+
+        // Remove the placeholder post record
+        wp_delete_post($placeholder_post_id, true);
+        $logs[] = sprintf('[PLACEHOLDER] Removed placeholder record post %1$s for Ecwid parent %2$s', $placeholder_post_id, $parent_ecwid_id);
+
+        // Update missing parents registry
+        $missing_parents = get_option('ecwid_wc_sync_missing_parents', []);
+        if (isset($missing_parents[$parent_ecwid_id])) {
+            unset($missing_parents[$parent_ecwid_id]);
+            update_option('ecwid_wc_sync_missing_parents', $missing_parents);
+        }
+    }
+
     private function get_term_id_by_ecwid_id($ecwid_id, $taxonomy, $bypass_cache = false) {
         global $wpdb;
         static $term_cache = []; // Renamed cache variable to avoid conflict
@@ -1941,6 +2411,91 @@ class Ecwid_WC_Sync {
         return $attachment_id;
     }
 
+    /**
+     * Attach image to WooCommerce category from URL
+     * Uses the WooCommerce category thumbnail system
+     */
+    private function attach_image_to_category_from_url($image_url, $term_id, $desc = null) {
+        if (empty($image_url) || empty($term_id)) {
+            return new WP_Error('missing_params', __('Image URL or term ID is missing.', 'ecwid2woo-product-sync'));
+        }
+        
+        // Use the existing image attachment function to download and create the attachment
+        $attachment_id = $this->attach_image_to_product_from_url($image_url, 0, $desc);
+        
+        if (is_wp_error($attachment_id)) {
+            return $attachment_id; // Return the error
+        }
+        
+        // Set as category thumbnail using WooCommerce's meta system
+        $meta_update_result = update_term_meta($term_id, 'thumbnail_id', $attachment_id);
+        
+        if ($meta_update_result === false) {
+            // If meta update failed, clean up the attachment
+            wp_delete_attachment($attachment_id, true);
+            return new WP_Error('meta_update_failed', __('Failed to set category thumbnail.', 'ecwid2woo-product-sync'));
+        }
+        
+        return $attachment_id;
+    }
+
+    /**
+     * Handle category image import from Ecwid category data
+     * 
+     * @param array $category_data Ecwid category data containing image URLs
+     * @param int $term_id WooCommerce category term ID
+     * @param array &$logs Reference to logs array for adding import messages
+     */
+    private function handle_category_image_import($category_data, $term_id, &$logs) {
+        // Check for category image URLs (prioritize hdThumbnailUrl, fallback to originalImageUrl)
+        $image_url = null;
+        if (isset($category_data['hdThumbnailUrl']) && !empty($category_data['hdThumbnailUrl'])) {
+            $image_url = $category_data['hdThumbnailUrl'];
+        } elseif (isset($category_data['originalImageUrl']) && !empty($category_data['originalImageUrl'])) {
+            $image_url = $category_data['originalImageUrl'];
+        }
+        
+        if (empty($image_url)) {
+            $logs[] = "No category image found in Ecwid data.";
+            return;
+        }
+        
+        $logs[] = "Found category image URL: " . esc_url_raw($image_url);
+        
+        // Check if category already has a thumbnail
+        $existing_thumbnail_id = get_term_meta($term_id, 'thumbnail_id', true);
+        if (!empty($existing_thumbnail_id)) {
+            // Check if the existing thumbnail is from a different URL by comparing Ecwid meta
+            $existing_ecwid_url = get_post_meta($existing_thumbnail_id, '_ecwid_source_url', true);
+            if ($existing_ecwid_url === $image_url) {
+                $logs[] = "Category already has this image as thumbnail. Skipping download.";
+                return;
+            } else {
+                $logs[] = "Category has different thumbnail. Updating with new Ecwid image.";
+            }
+        }
+        
+        // Download and attach the image
+        $attachment_id = $this->attach_image_to_category_from_url(
+            $image_url, 
+            $term_id, 
+            sprintf('Category thumbnail for %s (Ecwid ID: %s)', 
+                    $category_data['name'] ?? 'Unknown', 
+                    $category_data['id'] ?? 'Unknown')
+        );
+        
+        if (is_wp_error($attachment_id)) {
+            $logs[] = "[WARNING] Failed to import category image: " . $attachment_id->get_error_message();
+            return;
+        }
+        
+        // Store the source URL in attachment meta for future reference
+        update_post_meta($attachment_id, '_ecwid_source_url', $image_url);
+        update_post_meta($attachment_id, '_ecwid_category_id', $category_data['id'] ?? '');
+        
+        $logs[] = "Successfully imported category image (Attachment ID: $attachment_id) and set as thumbnail.";
+    }
+
     public function fix_category_hierarchy() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
@@ -1988,6 +2543,122 @@ class Ecwid_WC_Sync {
         ]);
     }
 
+    /**
+     * Get Ecwid store currency from API response
+     * Caches the result to avoid repeated API calls
+     * 
+     * @return string|null Currency code (e.g., 'EUR', 'USD', 'GBP') or null if unavailable
+     */
+    private function get_ecwid_store_currency() {
+        static $ecwid_currency = null;
+        
+        if ($ecwid_currency !== null) {
+            return $ecwid_currency;
+        }
+
+        $store_id = $this->options['store_id'] ?? '';
+        $api_token = $this->options['api_token'] ?? '';
+
+        if (empty($store_id) || empty($api_token)) {
+            return null;
+        }
+
+        // Get store profile to extract currency
+        $profile_url = "https://app.ecwid.com/api/v3/{$store_id}/profile?token={$api_token}";
+        
+        $response = wp_remote_get($profile_url, [
+            'timeout' => 30,
+            'headers' => [
+                'Accept' => 'application/json',
+                'User-Agent' => 'Ecwid2Woo-Product-Sync/' . ECWID2WOO_VERSION
+            ]
+        ]);
+
+        if (is_wp_error($response)) {
+            error_log('Ecwid2Woo: Failed to get store profile for currency: ' . $response->get_error_message());
+            return null;
+        }
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        if ($status_code !== 200) {
+            error_log('Ecwid2Woo: Store profile API returned status ' . $status_code);
+            return null;
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if (isset($data['settings']['defaultDisplayedCurrency'])) {
+            $ecwid_currency = $data['settings']['defaultDisplayedCurrency'];
+        } elseif (isset($data['currency'])) {
+            $ecwid_currency = $data['currency'];
+        }
+
+        return $ecwid_currency;
+    }
+
+    /**
+     * Get current WooCommerce base currency
+     * 
+     * @return string Current WooCommerce currency code
+     */
+    private function get_woocommerce_currency() {
+        return get_woocommerce_currency();
+    }
+
+    /**
+     * Update WooCommerce currency settings to match Ecwid store currency
+     * 
+     * @param array &$logs Log array to append currency change messages
+     * @return bool True if currency was updated, false if no change needed
+     */
+    private function sync_currency_settings(&$logs) {
+        $ecwid_currency = $this->get_ecwid_store_currency();
+        $wc_currency = $this->get_woocommerce_currency();
+
+        if (!$ecwid_currency) {
+            $logs[] = '[CURRENCY] Could not detect Ecwid store currency. WooCommerce currency unchanged.';
+            return false;
+        }
+
+        $logs[] = "[CURRENCY] Ecwid store currency: {$ecwid_currency}, WooCommerce currency: {$wc_currency}";
+
+        if ($ecwid_currency === $wc_currency) {
+            $logs[] = '[CURRENCY] Currencies already match. No change needed.';
+            return false;
+        }
+
+        // Update WooCommerce currency
+        update_option('woocommerce_currency', $ecwid_currency);
+        
+        // Clear any WooCommerce caches that might be affected
+        if (function_exists('wc_clear_notices')) {
+            wc_clear_notices();
+        }
+        
+        // Clear object cache if available
+        if (function_exists('wp_cache_flush')) {
+            wp_cache_flush();
+        }
+
+        $logs[] = "[CURRENCY] ✅ Updated WooCommerce currency from {$wc_currency} to {$ecwid_currency}";
+        
+        // Log the currency symbols for clarity
+        $currency_symbols = [
+            'USD' => '$', 'EUR' => '€', 'GBP' => '£', 'JPY' => '¥', 
+            'CNY' => '¥', 'CAD' => 'C$', 'AUD' => 'A$', 'CHF' => 'CHF',
+            'SEK' => 'kr', 'NOK' => 'kr', 'DKK' => 'kr', 'PLN' => 'zł',
+            'CZK' => 'Kč', 'HUF' => 'Ft', 'RUB' => '₽', 'BRL' => 'R$',
+            'MXN' => '$', 'INR' => '₹', 'KRW' => '₩', 'SGD' => 'S$',
+            'HKD' => 'HK$', 'NZD' => 'NZ$', 'ZAR' => 'R', 'TRY' => '₺'
+        ];
+        
+        $symbol = $currency_symbols[$ecwid_currency] ?? $ecwid_currency;
+        $logs[] = "[CURRENCY] Products will now display prices with {$symbol} symbol";
+
+        return true;
+    }
+
     public function ajax_fetch_full_sync_counts() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
@@ -2007,6 +2678,10 @@ class Ecwid_WC_Sync {
         $errors = [];
         $categories_preview = [];
         $products_preview = [];
+        
+        // Sync currency settings first and add to response
+        $currency_logs = [];
+        $currency_updated = $this->sync_currency_settings($currency_logs);
 
         // Fetch Categories
         $categories_url = add_query_arg([
@@ -2034,7 +2709,9 @@ class Ecwid_WC_Sync {
                 $category_count = isset($cat_data['total']) ? $cat_data['total'] : count($cat_data['items']);
                 $categories_preview = $cat_data['items'];
             } else {
-                $errors[] = sprintf(__('Failed to fetch categories. HTTP Status: %s', 'ecwid2woo-product-sync'), $cat_http_code);
+                // Use enhanced error handling for categories
+                $error_info = $this->handle_api_error_response($cat_response, $cat_body, $cat_http_code, 'categories');
+                $errors[] = $error_info['user_message'];
             }
         }
 
@@ -2064,7 +2741,9 @@ class Ecwid_WC_Sync {
                 $product_count = isset($prod_data['total']) ? $prod_data['total'] : count($prod_data['items']);
                 $products_preview = $prod_data['items'];
             } else {
-                $errors[] = sprintf(__('Failed to fetch products. HTTP Status: %s', 'ecwid2woo-product-sync'), $prod_http_code);
+                // Use enhanced error handling for products
+                $error_info = $this->handle_api_error_response($prod_response, $prod_body, $prod_http_code, 'products');
+                $errors[] = $error_info['user_message'];
             }
         }
 
@@ -2081,7 +2760,9 @@ class Ecwid_WC_Sync {
                 'categories_preview' => $categories_preview,
                 'products_preview' => $products_preview,
                 'categories_count' => $category_count,
-                'products_count' => $product_count
+                'products_count' => $product_count,
+                'currency_logs' => $currency_logs,
+                'currency_updated' => $currency_updated
             ]);
         }
     }
@@ -2100,11 +2781,14 @@ class Ecwid_WC_Sync {
             return;
         }
 
+        // Load all categories at once
         $all_categories = [];
         $offset = 0;
         $limit = 100;
+        $api_calls_made = 0;
 
         do {
+            $api_calls_made++;
             $query_params = [
                 'limit' => $limit,
                 'offset' => $offset,
@@ -2112,8 +2796,12 @@ class Ecwid_WC_Sync {
             ];
             $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories');
 
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Category Sync: API call #$api_calls_made - Fetching categories with offset: $offset, limit: $limit");
+            }
+
             $response = wp_remote_get($api_url, [
-                'timeout' => 60,
+                'timeout' => 120, // Increased timeout for large stores
                 'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
             ]);
 
@@ -2122,11 +2810,26 @@ class Ecwid_WC_Sync {
                 return;
             }
 
-            $body = json_decode(wp_remote_retrieve_body($response), true);
+            $raw_response_body = wp_remote_retrieve_body($response);
+            $body = json_decode($raw_response_body, true);
             $http_code = wp_remote_retrieve_response_code($response);
 
             if ($http_code !== 200 || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
-                wp_send_json_error(['message' => sprintf(__('Ecwid API Error (HTTP %s): %s', 'ecwid2woo-product-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error'))]);
+                // Use enhanced error handling
+                $error_info = $this->handle_api_error_response($response, $raw_response_body, $http_code, 'categories');
+                
+                // Provide user-friendly error message with retry suggestion for server errors
+                $error_message = $error_info['user_message'];
+                if ($error_info['retry_recommended']) {
+                    $error_message .= ' ' . __('This appears to be a temporary issue. You can try again in a few minutes.', 'ecwid2woo-product-sync');
+                }
+                
+                wp_send_json_error([
+                    'message' => $error_message,
+                    'details' => $error_info['error_data'],
+                    'is_server_error' => $error_info['is_server_error'],
+                    'retry_recommended' => $error_info['retry_recommended']
+                ]);
                 return;
             }
 
@@ -2135,17 +2838,24 @@ class Ecwid_WC_Sync {
 
             $count_in_response = $body['count'] ?? count($items_from_api);
             $total_from_api = $body['total'] ?? count($items_from_api);
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Category Sync: API call #$api_calls_made - Got $count_in_response categories, total available: $total_from_api, current offset: $offset");
+            }
+            
             $offset += $count_in_response;
 
-            if ($count_in_response === 0 || $offset >= $total_from_api) {
-                break;
-            }
+        } while ($count_in_response > 0 && $offset < $total_from_api);
 
-        } while (true);
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("Ecwid Category Sync: Complete! Made $api_calls_made API calls, loaded " . count($all_categories) . " total categories");
+        }
 
         wp_send_json_success([
             'categories' => $all_categories,
-            'total_count' => count($all_categories)
+            'total_found' => count($all_categories),
+            'api_calls_made' => $api_calls_made,
+            'total_available' => $total_from_api
         ]);
     }
 
@@ -2168,6 +2878,12 @@ class Ecwid_WC_Sync {
         if (is_wp_error($api_essentials)) {
             wp_send_json_error(['message' => $api_essentials->get_error_message()]);
             return;
+        }
+
+        // Sync currency before importing categories
+        $currency_sync_result = $this->sync_currency_settings($api_essentials);
+        if (defined('WP_DEBUG') && WP_DEBUG && !empty($currency_sync_result)) {
+            error_log("Ecwid Sync: Currency sync result for selected categories import: " . print_r($currency_sync_result, true));
         }
 
         $import_results = [];

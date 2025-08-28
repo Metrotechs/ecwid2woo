@@ -1,0 +1,8 @@
+# Exclude tools from source exports (GitHub release source zips)
+/tools export-ignore
+
+# Common metadata not needed in exports
+/.gitignore export-ignore
+/.gitattributes export-ignore
+/README.md export-ignore
+/UI_ENHANCEMENT_SUMMARY.md export-ignore

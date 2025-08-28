@@ -17,7 +17,7 @@
 - **Full Sync** - Complete catalog migration with preview capabilities
 - **Category Sync** - Independent category import with hierarchy management
 - **Selective Category Import** - Choose individual categories instead of importing all categories at once
-- **Selective Product Sync** - Choose specific products for targeted import/updates
+- **Selective Product Sync** - Automatically displays all products with ability to import single or multiple products
 - **Batch Processing** - Smart chunking prevents server timeouts on large catalogs
 
 ### 📊 Complete Data Synchronization
@@ -26,6 +26,8 @@
 - **Product Variations** - Complete support for variable products with all option combinations
 - **Image Management** - Featured images, galleries, and variation-specific images
 - **Inventory Data** - Stock status, quantities, and unlimited stock settings
+- **Category Thumbnails** - Imports category images and attaches them to WooCommerce terms
+- **Currency Synchronization** - Automatically updates WooCommerce to match your Ecwid store currency (EUR→EUR, GBP→GBP, USD→USD, etc.)
 
 ### ⚡ Advanced Technical Features
 - **AJAX-Powered Processing** - Non-blocking operations with real-time feedback
@@ -34,6 +36,7 @@
 - **Auto-Recovery Systems** - Handles API timeouts and connection issues gracefully
 - **Intelligent Attribute Handling** - Automatically handles WooCommerce's 28-character attribute slug limits
 - **WordPress Standards Compliant** - Follows all WordPress coding and security best practices
+- **Multilingual-Safe Slugs** - Robust transliteration and length-limited slug generation for non‑Latin/long names while preserving original display names
 
 ### 🛡️ Reliability & Safety
 - **Stop Sync Control** - Immediate cancellation capability for all operations
@@ -142,19 +145,28 @@
 **Perfect for:** Setting up category structure before product import
 
 **Features:**
-- **Category Preview** - See all categories before importing
+- **Enhanced UI Design** - Professional interface with bordered information panels and status messages
+- **Automatic Category Loading** - Categories load immediately when page opens with "📁 Category Loading Complete" confirmation
+- **Enhanced Debug Information** - Shows API call count, total categories loaded, and detailed performance metrics
 - **Selective Import** - Choose individual categories to import instead of all at once
-- **Select All/None Controls** - Quickly select or deselect all categories
+- **Visual Selection Interface** - Enhanced checkbox design with alternating row colors and clear visual hierarchy
+- **Smart Selection Controls** - "Select All/None" with indeterminate state and dynamic button text
+- **Category Information Display** - Shows ID, Parent ID, and visual indicators for root vs subcategories
+- **Increased Timeout Handling** - 120-second timeout for large category lists
+- **Comprehensive Logging** - Debug logging shows each API call and category loading progress
 - **Hierarchy Preservation** - Maintains parent-child relationships
 - **Hierarchy Fix Tool** - Resolves any structural issues
 - **Independent Operation** - Sync categories without touching products
 
 **How to Use:**
-1. Click **Reload Ecwid Categories** to preview
-2. Review the category list and hierarchy
-3. Select individual categories using checkboxes or use **Select All/None** buttons
-4. Click **Import Selected Categories** to sync only chosen categories
-5. Use **Fix Category Hierarchy** if needed after sync
+1. Categories automatically load when visiting the page with enhanced status display
+2. Click **Reload Categories** to refresh if needed
+3. Review the enhanced category list with visual indicators
+4. Select individual categories using the improved checkbox interface
+5. Use **Select All/None** for bulk selection with smart state indication
+6. Click **Import Selected Categories** (text dynamically updates based on selection count)
+7. Monitor progress with enhanced status messages and logging
+8. Use **Fix Category Hierarchy** if needed after sync
 
 ### 🎯 Selective Product Sync
 **Location:** `Ecwid2Woo Sync → Product Sync`
@@ -162,16 +174,27 @@
 **Perfect for:** Targeted imports, testing, or specific product updates
 
 **Features:**
-- **Product Selection Interface** - Choose exactly which products to sync
-- **Bulk Selection Tools** - Select all or none with one click
-- **Variation Support** - Handles complex variable products
-- **Individual Progress Tracking** - Monitor each selected product
+- **Enhanced UI Design** - Professional interface with "🎯 Product Loading Complete" status panel
+- **Automatic Product Loading** - Products load immediately when page opens with comprehensive status feedback
+- **Advanced Debug Information** - Shows API call count, total products loaded, and performance metrics with console logging
+- **Complete Product Loading** - Enhanced do-while loop ensures ALL products are loaded (not just first 100)
+- **Visual Selection Interface** - Enhanced checkbox design with alternating row colors and detailed product information
+- **Smart Selection Controls** - "Select All/None" with indeterminate state and dynamic import button text
+- **Detailed Product Information** - Shows SKU, ID, enabled status, and variation count with visual indicators
+- **Enhanced Status Messages** - Shows API calls made and loading performance for transparency
+- **Increased Timeout Handling** - 120-second timeout for large product catalogs
+- **Comprehensive Debug Logging** - Console and server-side logging for troubleshooting
+- **Variation Support** - Handles complex variable products with batch processing
+- **Individual Progress Tracking** - Monitor each selected product with enhanced feedback
 
 **How to Use:**
-1. Click **Reload Products** to load available products
-2. Select individual products or use **Select All/None**
-3. Click **Import Selected Products** to begin
-4. Monitor individual product progress
+1. Products automatically load when visiting the page with enhanced status display
+2. Click **Reload Products** to refresh if needed (enhanced with debug information)
+3. Review the complete product list with visual selection interface
+4. Select individual products using the improved checkbox system
+5. Use **Select All/None** for bulk selection with smart state management
+6. Click **Import Selected Products** (text dynamically updates: "Import 1 Product" vs "Import 5 Products")
+7. Monitor individual product progress with enhanced logging and status feedback
 
 ### 📋 Placeholders Management
 **Location:** `Ecwid2Woo Sync → Placeholders`
@@ -330,11 +353,34 @@ While the plugin is free and open source, professional services are available:
 ---
 
 ## 🎯 Version Information
-
-**Current Version:** 1.0.1  
+**Current Version:** 1.0.3  
 **Compatibility:** WordPress 5.0+ | WooCommerce 3.0+ | PHP 7.2+  
-**Release Date:** August 26, 2025  
+**Release Date:** August 28, 2025  
 **Update Policy:** Regular updates for compatibility and feature enhancements
+
+### Recent Updates (v1.0.3)
+- **NEW:** Enhanced Product and Category Sync UI with professional status panels and visual feedback
+- **IMPROVED:** Complete product loading functionality - now loads ALL products instead of limiting to first 100
+- **ENHANCED:** Product Sync page with "🎯 Product Loading Complete" status panel and detailed loading information
+- **ENHANCED:** Category Sync page with "📁 Category Loading Complete" status panel matching product page design
+- **ADDED:** Comprehensive debug logging showing API call counts, performance metrics, and loading progress
+- **IMPROVED:** Visual selection interfaces with alternating row colors and enhanced checkbox design
+- **ENHANCED:** Smart selection controls with indeterminate states and dynamic button text updates
+- **ADDED:** Automatic page loading - products and categories load immediately when visiting their respective pages
+- **IMPROVED:** Increased API timeout to 120 seconds for handling large stores efficiently
+- **ENHANCED:** Console and server-side debug logging for better troubleshooting and transparency
+- **ADDED:** Detailed product information display showing SKU, ID, status, and variation counts
+- **IMPROVED:** Category information display with parent/child relationship indicators
+- **ENHANCED:** Status messages show API performance data and loading completion details
+
+### Recent Updates (v1.0.2)
+- NEW: Robust multilingual support for category slugs with transliteration and safe, unique, length-limited generation (keeps full original names)
+- FIX: Category import status now correctly reports success after ASCII-safe retry (no false FAILED statuses)
+- IMPROVED: Duplicate handling for ASCII fallback names (e.g., Category-{EcwidID})—reuses existing terms instead of failing
+- ADDED: Category image import—downloads and attaches thumbnails to WooCommerce categories
+- ENHANCED: Error diagnostics for DB insert issues—including DB charset/collation and byte/char lengths in logs
+- FIX: Activation error caused by invalid "break 2" usage removed
+- STABILITY: Better handling of Ecwid HTTP 500 and server-side errors with clearer user feedback
 
 ### Recent Updates (v1.0.1)
 - **NEW:** Selective category import - Choose individual categories instead of importing all at once

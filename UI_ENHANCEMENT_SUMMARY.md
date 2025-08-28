@@ -96,6 +96,64 @@ The enhanced UI is fully responsive:
 4. **Modern Interface**: Professional, WordPress-admin-matching design
 5. **Responsive Layout**: Works perfectly on desktop, tablet, and mobile
 6. **Enhanced User Flow**: Streamlined experience from setup to sync operations
+7. **Currency Synchronization**: Automatically updates WooCommerce to match Ecwid store currency during sync operations
+8. **Smart Product Selection**: Automatically loads all products with enhanced UI for single or multiple product imports
+
+## 💰 NEW: Currency Synchronization Feature
+
+### ✅ What Was Added
+
+**Automatic Currency Matching**
+- **Detects Ecwid Store Currency**: Fetches currency from Ecwid store profile API
+- **Updates WooCommerce Settings**: Automatically sets WooCommerce base currency to match
+- **No Price Conversion**: Preserves original prices, only changes currency display
+- **Seamless Integration**: Works with all sync operations (full sync, category sync, product sync)
+
+**Technical Implementation:**
+- **Currency Detection Function**: `get_ecwid_store_currency()` retrieves currency from Ecwid profile
+- **Synchronization Function**: `sync_currency_settings()` updates WooCommerce currency option
+- **Integrated into All Syncs**: Currency sync happens automatically at the start of all sync operations
+- **Debug Logging**: Currency changes are logged when WordPress debug mode is enabled
+
+**Supported Currency Flows:**
+- EUR (Ecwid) → EUR (WooCommerce)
+- GBP (Ecwid) → GBP (WooCommerce) 
+- USD (Ecwid) → USD (WooCommerce)
+- Any Ecwid currency → Same currency in WooCommerce
+
+**User Benefits:**
+- **Automatic Setup**: No manual currency configuration needed
+- **Consistent Display**: Customers see correct currency symbols (€, £, $, etc.)
+- **International Ready**: Perfect for stores serving multiple markets
+- **Price Preservation**: Original Ecwid prices maintained exactly as intended
+
+## 🎯 NEW: Enhanced Product Selection Interface
+
+### ✅ What Was Added
+
+**Automatic Product Loading**
+- **Load All Products by Default**: Automatically displays all products when page loads
+- **Enhanced Visual Design**: Modern card-based interface with clear product information
+- **Smart Selection Interface**: Visual indicators for product types (simple vs. variable)
+- **Dynamic Import Button**: Shows "Import 1 Product" or "Import X Products" based on selection
+
+**Improved User Experience:**
+- **Visual Product Cards**: Each product shows name, SKU, ID, status, and variation count
+- **Enhanced Select All/None**: Indeterminate state when partially selected
+- **Single Button Interface**: Simple "Load All Products" button - no complex options
+- **Clear Instructions**: Built-in guidance for single and multiple product selection
+
+**Technical Implementation:**
+- **Streamlined Loading**: Single function loads all products automatically
+- **Real-time Button Updates**: Import button text updates dynamically based on selection
+- **Improved Checkbox Behavior**: Select All/None with proper indeterminate states
+- **Enhanced Product Display**: Color-coded rows and clear product status indicators
+
+**User Benefits:**
+- **Immediate Access**: See all products right away without additional clicks
+- **Flexible Selection**: Import one product or select multiple for batch import
+- **Clear Visual Feedback**: Always know how many products are selected
+- **Simple Interface**: Clean, no-nonsense design focused on the task at hand
 
 ### 🎉 Result
 

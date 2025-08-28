@@ -5,7 +5,7 @@ Tags: ecwid, woocommerce, sync, products, categories, import, migration, ecwid s
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.0.0
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
@@ -31,6 +31,7 @@ Whether you're transitioning from Ecwid to WooCommerce or maintaining dual platf
 - Preserve complex category hierarchies and parent-child relationships
 - Handle both simple and variable products with full option support
 - Auto-create missing WooCommerce attributes and terms
+- Import category thumbnails and attach them to WooCommerce categories
 
 **🎯 Multiple Sync Options**
 - **Full Sync:** Complete catalog migration with preview capabilities
@@ -48,6 +49,8 @@ Whether you're transitioning from Ecwid to WooCommerce or maintaining dual platf
 - Idempotent operations prevent duplicate entries
 - Memory-optimized for large catalogs
 - Smart matching system using Ecwid IDs and SKU fallbacks
+- Multilingual-safe category slugs with robust transliteration and safe, length-limited generation while preserving original names
+- Enhanced diagnostics for DB insert/slug issues in logs
 
 **🛡️ Reliable & Safe**
 - Stop sync functionality for user control
@@ -187,6 +190,20 @@ The plugin provides comprehensive debugging tools:
 
 == Changelog ==
 
+= 1.0.2 =
+**Stability, Multilingual Support, and Category Images**
+
+**New & Improved:**
+* Robust multilingual-safe slug generation for categories (transliteration + unique, length-limited slugs); original names are preserved
+* Category thumbnail import—downloads and attaches images to WooCommerce category terms
+* Better diagnostics for DB insert errors (logs charset/collation and name byte/char lengths)
+
+**Fixes:**
+* Correctly mark category imports as success after ASCII-safe retry (no false FAILED status)
+* Reuse existing ASCII fallback categories (e.g., Category-{EcwidID}) instead of failing on duplicates
+* Resolved activation fatal error caused by invalid "break 2" usage
+* Improved handling of Ecwid HTTP 500 with clearer feedback and resilience
+
 = 1.0.0 =
 **Initial Official Release - Complete Rewrite**
 
@@ -217,6 +234,9 @@ The plugin provides comprehensive debugging tools:
 * Responsive design for all screen sizes
 
 == Upgrade Notice ==
+
+= 1.0.2 =
+Recommended update. Adds multilingual-safe category slugs, category thumbnail import, improved error diagnostics, and multiple stability fixes including activation error resolution and correct success reporting after fallbacks.
 
 = 1.0.0 =
 This is the first official release featuring a complete rewrite with professional UI, enhanced performance, better error handling, and improved WordPress standards compliance. If you've been using a previous version, please backup your database before upgrading and test the connection after activation.
