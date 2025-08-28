@@ -501,3 +501,93 @@
         text-align: center;
     }
 }
+
+/* Upload Diagnostics Styles */
+.diagnostic-status {
+    background: #fff;
+    border: 1px solid #e1e1e1;
+    border-radius: 4px;
+    padding: 15px;
+    margin: 15px 0;
+}
+
+.diagnostic-status.success {
+    border-left: 4px solid #00a32a;
+    background-color: #f0f9ff;
+}
+
+.diagnostic-status.error {
+    border-left: 4px solid #d63638;
+    background-color: #fcf0f1;
+}
+
+.diagnostic-section {
+    margin: 15px 0;
+    padding: 10px;
+    background: #f9f9f9;
+    border-radius: 4px;
+}
+
+.diagnostic-section h5 {
+    margin: 0 0 10px 0;
+    color: #1d2327;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.diagnostic-section ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.diagnostic-section li {
+    margin: 5px 0;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.diagnostic-issues {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 4px;
+    padding: 15px;
+    margin: 15px 0;
+}
+
+.diagnostic-issues h5 {
+    color: #dc2626 !important;
+    margin-top: 0;
+}
+
+.diagnostic-issues ul {
+    color: #dc2626;
+}
+
+/* Product Type Toggle Buttons */
+#show-enabled-products,
+#show-disabled-products {
+    transition: all 0.2s ease;
+    font-weight: 600;
+}
+
+#show-enabled-products:hover {
+    background-color: #005a87;
+    border-color: #005a87;
+}
+
+#show-disabled-products:hover {
+    background-color: #b91c1c;
+    border-color: #b91c1c;
+    color: white;
+}
+
+#show-disabled-products.button-primary {
+    background-color: #d63638;
+    border-color: #d63638;
+    color: white;
+}
+
+#show-disabled-products.button-primary:hover {
+    background-color: #b91c1c;
+    border-color: #b91c1c;
+}

@@ -1191,9 +1191,38 @@
             const originalButtonText = loadProductsButton.text();
             loadProductsButton.addClass('disabled').text(i18n.loading_products);
             
-            productListContainer.html('<p>' + i18n.loading_products + '</p>').show();
+            // Create enhanced loading interface
+            const loadingHtml = `
+                <div class="ecwid-loading-container" style="text-align: center; padding: 40px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 5px; margin: 20px 0;">
+                    <div class="ecwid-loading-spinner" style="font-size: 48px; color: #0073aa; margin-bottom: 20px;">
+                        <span class="dashicons dashicons-update" style="animation: ecwid-spin 1s linear infinite;"></span>
+                    </div>
+                    <div class="ecwid-loading-title" style="font-size: 18px; font-weight: bold; color: #23282d; margin-bottom: 10px;">
+                        🔄 Loading Products from Ecwid
+                    </div>
+                    <div class="ecwid-loading-status" style="font-size: 14px; color: #666; margin-bottom: 15px;">
+                        Making API calls to fetch all products...
+                    </div>
+                    <div class="ecwid-loading-progress" style="font-size: 12px; color: #999;">
+                        This may take a moment for large stores (6000+ products require ~70 API calls)
+                    </div>
+                </div>
+                <style>
+                    @keyframes ecwid-spin {
+                        from { transform: rotate(0deg); }
+                        to { transform: rotate(360deg); }
+                    }
+                </style>
+            `;
+            
+            productListContainer.html(loadingHtml).show();
             if (selectiveSyncInitialInfoDiv.length) {
-                selectiveSyncInitialInfoDiv.text(i18n.loading_products);
+                selectiveSyncInitialInfoDiv.html(`
+                    <div style="padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; margin: 10px 0;">
+                        <strong>⏳ Loading Products...</strong><br>
+                        <span style="font-size: 12px; color: #856404;">Fetching complete product catalog from Ecwid API</span>
+                    </div>
+                `);
             }
             importSelectedButton.hide();
             ecwidProductsForSelection = [];
@@ -1201,47 +1230,125 @@
             $.ajax({
                 url: ajax_url,
                 method: 'POST',
+                cache: false,
                 data: { 
                     action: 'ecwid_wc_fetch_products_for_selection', 
-                    nonce: nonce
+                    nonce: nonce,
+                    cache_bust: Date.now()
                 },
                 success: function(response) {
+                    // Show completion animation
+                    $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-yes-alt');
+                    $('.ecwid-loading-title').html('✅ Products Loaded Successfully!');
+                    $('.ecwid-loading-status').html('Processing product data...');
+                    
                     if (response.success && response.data.products) {
                         ecwidProductsForSelection = response.data.products;
                         const totalFound = parseInt(response.data.total_found) || 0;
                         const apiCalls = parseInt(response.data.api_calls_made) || 1;
                         const totalAvailable = parseInt(response.data.total_available) || totalFound;
+                        
+                        // Get enabled and disabled products from response
+                        const enabledProducts = response.data.enabled_products || [];
+                        const disabledProducts = response.data.disabled_products || [];
+                        const enabledCount = parseInt(response.data.enabled_count) || 0;
+                        const disabledCount = parseInt(response.data.disabled_count) || 0;
 
-                        // Enhanced status message with debugging info
-                        let statusMessage = `All ${totalFound} products loaded`;
+                        // Console logging for debugging
+                        console.log('=== PRODUCT LOADING DEBUG ===');
+                        console.log('Total products found:', totalFound);
+                        console.log('Enabled products:', enabledCount);
+                        console.log('Disabled products:', disabledCount);
+                        console.log('API calls made:', apiCalls);
+                        console.log('Total available in Ecwid:', totalAvailable);
+                        console.log('Actual array length:', ecwidProductsForSelection.length);
+                        console.log('Response data:', response.data);
+                        
+                        // Show server debug info if available
+                        if (response.data.debug_info) {
+                            console.log('🔧 Server Debug Info:', response.data.debug_info);
+                        }
+                        
+                        // Show raw API response if available  
+                        if (response.data.raw_first_response && response.data.raw_first_response !== 'N/A') {
+                            console.log('📄 Raw First API Response:', response.data.raw_first_response);
+                        }
+                        
+                        console.log('==============================');
+
+                        // Enhanced status message with enabled/disabled breakdown
+                        let statusMessage = `Loaded ${enabledCount} enabled products`;
+                        if (disabledCount > 0) {
+                            statusMessage += ` and ${disabledCount} disabled products`;
+                        }
                         if (apiCalls > 1) {
                             statusMessage += ` (${apiCalls} API calls)`;
                         }
-                        if (totalAvailable && totalAvailable !== totalFound) {
-                            statusMessage += ` out of ${totalAvailable} available`;
-                        }
-                        statusMessage += '. Select individual products or multiple products to import.';
+                        statusMessage += '. Select individual products to import.';
 
                         if (selectiveSyncInitialInfoDiv.length) {
-                            // Create clean status message without border
+                            // Create clean status message with enabled/disabled button
+                            const disabledButtonStyle = disabledCount > 0 ? '' : 'display: none;';
                             const styledStatusHtml = `
                                 <p style="margin: 0 0 5px 0; font-weight: bold;">🎯 Product Loading Complete:</p>
                                 <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-style: normal;">${statusMessage}</p>
+                                <div style="margin: 10px 0;">
+                                    <button id="show-enabled-products" class="button button-primary" style="margin-right: 10px;">📦 Enabled Products (${enabledCount})</button>
+                                    <button id="show-disabled-products" class="button button-secondary" style="${disabledButtonStyle}">❌ Disabled Products (${disabledCount})</button>
+                                </div>
+                                <details style="margin-top: 10px; font-size: 11px; color: #999;">
+                                    <summary style="cursor: pointer;">🔍 Debug Info (click to expand)</summary>
+                                    <div style="margin-top: 5px; padding: 5px; background: #f9f9f9; border-radius: 3px;">
+                                        <strong>Total Found:</strong> ${totalFound}<br>
+                                        <strong>Enabled:</strong> ${enabledCount}<br>
+                                        <strong>Disabled:</strong> ${disabledCount}<br>
+                                        <strong>API Calls:</strong> ${apiCalls}<br>
+                                        <strong>Available in Store:</strong> ${totalAvailable}<br>
+                                        <strong>Array Length:</strong> ${ecwidProductsForSelection.length}
+                                    </div>
+                                </details>
                             `;
                             selectiveSyncInitialInfoDiv.html(styledStatusHtml);
                         }
 
-                        // Console debug info
-                        console.log('Product loading debug:', {
-                            productsReceived: totalFound,
-                            apiCallsMade: apiCalls,
-                            totalAvailable: totalAvailable,
-                            actualArrayLength: ecwidProductsForSelection.length
+                        // Store the product arrays for later use
+                        window.ecwidEnabledProducts = enabledProducts;
+                        window.ecwidDisabledProducts = disabledProducts;
+
+                        // Show enabled products by default
+                        renderProductSelectionList(enabledProducts);
+                        
+                        // Show final success message with fade out
+                        $('.ecwid-loading-status').html(`✅ ${totalFound} products ready for sync!`);
+                        setTimeout(function() {
+                            $('.ecwid-loading-container').fadeOut(800);
+                        }, 2000);
+                        
+                        // Set up button click handlers for switching between enabled/disabled
+                        $('#show-enabled-products').click(function() {
+                            $(this).removeClass('button-secondary').addClass('button-primary');
+                            $('#show-disabled-products').removeClass('button-primary').addClass('button-secondary');
+                            renderProductSelectionList(enabledProducts);
+                            if (enabledProducts.length > 0) {
+                                importSelectedButton.show();
+                            }
+                        });
+                        
+                        $('#show-disabled-products').click(function() {
+                            $(this).removeClass('button-secondary').addClass('button-primary');
+                            $('#show-enabled-products').removeClass('button-primary').addClass('button-secondary');
+                            renderProductSelectionList(disabledProducts);
+                            if (disabledProducts.length > 0) {
+                                importSelectedButton.show();
+                            }
                         });
 
-                        renderProductSelectionList(ecwidProductsForSelection);
-                        if (ecwidProductsForSelection.length > 0) {
+                        if (enabledProducts.length > 0) {
                             importSelectedButton.show();
+                        } else if (disabledProducts.length > 0) {
+                            // If no enabled products but there are disabled ones, show message
+                            productListContainer.html('<p style="color: orange;">No enabled products found. Click "Disabled Products" to view disabled products.</p>');
+                            importSelectedButton.hide();
                         } else {
                             productListContainer.html('<p>' + i18n.no_products_found + '</p>');
                             if (selectiveSyncInitialInfoDiv.length && totalFound === 0) {
@@ -1249,19 +1356,48 @@
                             }
                         }
                     } else {
+                        $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
+                        $('.ecwid-loading-title').html('❌ Loading Failed');
+                        $('.ecwid-loading-status').html('Error: ' + (response.data && response.data.message ? response.data.message : 'Unknown error occurred'));
+                        
+                        console.log('=== PRODUCT LOADING ERROR ===');
+                        console.log('Response success:', response.success);
+                        console.log('Response data:', response.data);
+                        console.log('==============================');
+                        
                         const errorMsg = response.data && response.data.message ? response.data.message : i18n.no_products_found;
                         productListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
                         if (selectiveSyncInitialInfoDiv.length) {
                             selectiveSyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
                         }
+                        
+                        // Auto-hide error after 5 seconds
+                        setTimeout(function() {
+                            $('.ecwid-loading-container').fadeOut(800);
+                        }, 5000);
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
+                    $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
+                    $('.ecwid-loading-title').html('❌ Connection Error');
+                    $('.ecwid-loading-status').html('Failed to connect to Ecwid API');
+                    
+                    console.log('=== AJAX ERROR ===');
+                    console.log('Status:', textStatus);
+                    console.log('Error:', errorThrown);
+                    console.log('Response:', jqXHR.responseText);
+                    console.log('==================');
+                    
                     const errorText = 'AJAX Error: ' + sanitizeHTML(textStatus) + (errorThrown ? ' - ' + sanitizeHTML(errorThrown) : '');
                     productListContainer.html('<p style="color:red;">' + errorText + '</p>');
                     if (selectiveSyncInitialInfoDiv.length) {
                          selectiveSyncInitialInfoDiv.html('<span style="color:red;">' + errorText + '</span>');
                     }
+                    
+                    // Auto-hide error after 5 seconds
+                    setTimeout(function() {
+                        $('.ecwid-loading-container').fadeOut(800);
+                    }, 5000);
                 },
                 complete: function() {
                     loadProductsButton.removeClass('disabled').text(originalButtonText);
@@ -1280,16 +1416,23 @@
         }
 
         function renderProductSelectionList(products) {
-            let html = '<div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">';
-            html += '<p style="margin: 0 0 5px 0; font-weight: bold;">📦 Select Products to Import:</p>';
+            // Determine if we're showing enabled or disabled products
+            const isEnabledList = products.length > 0 && products[0].enabled !== false;
+            const listType = isEnabledList ? 'Enabled' : 'Disabled';
+            const listIcon = isEnabledList ? '📦' : '❌';
+            const headerColor = isEnabledList ? '#0073aa' : '#d63638';
+            const headerBg = isEnabledList ? '#f0f8ff' : '#fef2f2';
+            
+            let html = `<div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">`;
+            html += `<p style="margin: 0 0 5px 0; font-weight: bold;">${listIcon} Select ${listType} Products to Import:</p>`;
             html += '<p style="margin: 0; font-size: 12px; color: #666;">✓ Check individual products to import them one by one, or select multiple products for batch import.</p>';
             html += '</div>';
             
             html += '<ul style="list-style:none; margin:0; padding:0;">';
-            html += `<li style="padding-bottom: 8px; margin-bottom: 8px; border-bottom: 2px solid #0073aa; background: #f0f8ff; padding: 8px;">
-                        <label style="font-weight: bold; color: #0073aa;">
+            html += `<li style="padding-bottom: 8px; margin-bottom: 8px; border-bottom: 2px solid ${headerColor}; background: ${headerBg}; padding: 8px;">
+                        <label style="font-weight: bold; color: ${headerColor};">
                             <input type="checkbox" id="select-all-ecwid-products" style="margin-right: 8px;" /> 
-                            ${i18n.select_all_none} (${products.length} products)
+                            ${i18n.select_all_none} (${products.length} ${listType.toLowerCase()} products)
                         </label>
                      </li>`;
             
@@ -1872,6 +2015,116 @@
                 }
             });
         }
+
+        // Add upload diagnostics function
+        function runUploadDiagnostics() {
+            const diagButton = $('#upload-diagnostics-button');
+            const resultDiv = $('#upload-diagnostics-result');
+            
+            if (!diagButton.length || !resultDiv.length) return;
+
+            const originalText = diagButton.text();
+            diagButton.text('Running Diagnostics...').prop('disabled', true);
+            resultDiv.removeClass('success error').hide();
+
+            $.ajax({
+                url: ajax_url,
+                type: 'POST',
+                data: {
+                    action: 'ecwid_wc_diagnose_uploads',
+                    nonce: nonce
+                },
+                success: function(response) {
+                    if (response.success) {
+                        const diag = response.data.diagnostics;
+                        let html = '<h4>Upload Directory Diagnostics</h4>';
+                        
+                        // Basic directory info
+                        html += '<div class="diagnostic-section">';
+                        html += '<h5>Directory Information:</h5>';
+                        html += '<ul>';
+                        html += '<li><strong>Upload Directory:</strong> ' + diag.upload_dir_info.path + '</li>';
+                        html += '<li><strong>Base Directory:</strong> ' + diag.upload_dir_info.basedir + '</li>';
+                        html += '<li><strong>URL:</strong> ' + diag.upload_dir_info.url + '</li>';
+                        html += '</ul>';
+                        html += '</div>';
+
+                        // Permission checks
+                        html += '<div class="diagnostic-section">';
+                        html += '<h5>Permission Checks:</h5>';
+                        html += '<ul>';
+                        html += '<li><strong>Base directory exists:</strong> ' + (diag.basedir_exists ? '✅ Yes' : '❌ No') + '</li>';
+                        html += '<li><strong>Base directory writable:</strong> ' + (diag.basedir_writable ? '✅ Yes' : '❌ No') + '</li>';
+                        html += '<li><strong>Upload path exists:</strong> ' + (diag.path_exists ? '✅ Yes' : '❌ No') + '</li>';
+                        html += '<li><strong>Upload path writable:</strong> ' + (diag.path_writable ? '✅ Yes' : '❌ No') + '</li>';
+                        html += '<li><strong>Test file write:</strong> ' + (diag.test_write_success ? '✅ Success' : '❌ Failed') + '</li>';
+                        html += '</ul>';
+                        html += '</div>';
+
+                        // Server info
+                        html += '<div class="diagnostic-section">';
+                        html += '<h5>Server Information:</h5>';
+                        html += '<ul>';
+                        html += '<li><strong>Free disk space:</strong> ' + (diag.disk_free_space ? Math.round(diag.disk_free_space / 1024 / 1024) + ' MB' : 'Unknown') + '</li>';
+                        html += '<li><strong>PHP upload limit:</strong> ' + diag.php_upload_max_filesize + '</li>';
+                        html += '<li><strong>PHP post limit:</strong> ' + diag.php_post_max_size + '</li>';
+                        html += '<li><strong>WP max upload:</strong> ' + Math.round(diag.wp_max_upload_size / 1024 / 1024) + ' MB</li>';
+                        html += '<li><strong>PHP memory limit:</strong> ' + diag.php_memory_limit + '</li>';
+                        html += '</ul>';
+                        html += '</div>';
+
+                        // User info
+                        html += '<div class="diagnostic-section">';
+                        html += '<h5>User Information:</h5>';
+                        html += '<ul>';
+                        html += '<li><strong>WordPress user:</strong> ' + diag.current_user + '</li>';
+                        html += '<li><strong>PHP/System user:</strong> ' + diag.php_user + '</li>';
+                        html += '<li><strong>Server software:</strong> ' + diag.server_software + '</li>';
+                        html += '</ul>';
+                        html += '</div>';
+
+                        // Issues detection
+                        const issues = [];
+                        if (!diag.basedir_exists) issues.push('Upload base directory does not exist');
+                        if (!diag.basedir_writable) issues.push('Upload base directory is not writable');
+                        if (!diag.path_exists) issues.push('Upload path does not exist');
+                        if (!diag.path_writable) issues.push('Upload path is not writable');
+                        if (!diag.test_write_success) issues.push('Cannot write test files');
+                        if (diag.disk_free_space && diag.disk_free_space < 100 * 1024 * 1024) issues.push('Low disk space (less than 100MB)');
+
+                        if (issues.length > 0) {
+                            html += '<div class="diagnostic-issues">';
+                            html += '<h5 style="color: red;">⚠️ Issues Detected:</h5>';
+                            html += '<ul style="color: red;">';
+                            issues.forEach(issue => {
+                                html += '<li>' + issue + '</li>';
+                            });
+                            html += '</ul>';
+                            html += '</div>';
+                        } else {
+                            html += '<div style="color: green;"><h5>✅ No obvious issues detected</h5></div>';
+                        }
+
+                        resultDiv.addClass('success').html(html).show();
+                    } else {
+                        resultDiv.addClass('error')
+                                .html('<strong>❌ Diagnostics Failed</strong><br>' + response.data.message)
+                                .show();
+                    }
+                },
+                error: function() {
+                    resultDiv.addClass('error')
+                            .html('<strong>❌ Diagnostics Error</strong><br>Failed to run diagnostics. Please try again.')
+                            .show();
+                },
+                complete: function() {
+                    diagButton.text(originalText).prop('disabled', false);
+                }
+            });
+        }
+
+        // Bind diagnostics button if it exists
+        $(document).on('click', '#upload-diagnostics-button', runUploadDiagnostics);
 
         // Initialize page-specific functionality
         if (window.location.href.indexOf('ecwid-sync-settings') !== -1) {

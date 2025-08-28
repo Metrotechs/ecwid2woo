@@ -4,7 +4,7 @@ Plugin Name: Ecwid2Woo Product Sync
 Description: Professional Ecwid to WooCommerce synchronization plugin by Metrotechs.
 Plugin URI: https://metrotechs.io/plugins/ecwid2woo/
 Author URI: https://metrotechs.io
-Version: 1.0.2
+Version: 1.0.3
 Author: Metrotechs
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -14,9 +14,7 @@ Requires at least: 5.0
 Requires PHP: 7.2
 WC requires at least: 3.0
 WC tested up to: 9.2
-*/
-
-// Declare HPOS compatibility
+*/// Declare HPOS compatibility
 add_action( 'before_woocommerce_init', function() {
     if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
         \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
@@ -31,7 +29,7 @@ if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
     define('ECWID2WOO_VARIATION_BATCH_SIZE', 50); // Number of variations to process per batch
 }
 
-define('ECWID2WOO_VERSION', '1.0.0'); // Define version constant
+define('ECWID2WOO_VERSION', '1.0.3'); // Define version constant
 
 class Ecwid_WC_Sync {
     private $options;
@@ -60,6 +58,7 @@ class Ecwid_WC_Sync {
         add_action('wp_ajax_ecwid_wc_fetch_categories_for_display', [$this, 'ajax_fetch_categories_for_display']);
         add_action('wp_ajax_ecwid_wc_import_selected_categories', [$this, 'ajax_import_selected_categories']);
         add_action('wp_ajax_ecwid_wc_test_connection', [$this, 'ajax_test_api_connection']); // Make sure this line exists
+        add_action('wp_ajax_ecwid_wc_diagnose_uploads', [$this, 'ajax_diagnose_uploads']);
     }
 
     public function load_textdomain() {
@@ -302,11 +301,13 @@ class Ecwid_WC_Sync {
                     <div class="settings-actions">
                         <button type="submit" class="button button-primary button-large"><?php esc_html_e('Save Settings', 'ecwid2woo-product-sync'); ?></button>
                         <button type="button" id="test-api-connection" class="button button-secondary button-large"><?php esc_html_e('Test Connection', 'ecwid2woo-product-sync'); ?></button>
+                        <button type="button" id="upload-diagnostics-button" class="button button-secondary button-large" style="margin-left: 10px;"><?php esc_html_e('Upload Diagnostics', 'ecwid2woo-product-sync'); ?></button>
                     </div>
                 </form>
                 
                 <div id="test-connection-result" class="connection-status"></div>
                 <div id="save-status" class="save-status"></div>
+                <div id="upload-diagnostics-result" class="diagnostic-status" style="margin-top: 15px;"></div>
             </div>
 
             <div class="ecwid-navigation-card">
@@ -747,19 +748,39 @@ class Ecwid_WC_Sync {
         $offset = 0;
         $limit = 100;
         $api_calls_made = 0;
+        $max_api_calls = 100; // Safety limit to prevent infinite loops
+        
+        // Variables to capture first API response for debugging
+        $first_count = null;
+        $first_total = null;
+        $first_http_code = null;
+
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("=== Ecwid Product Sync: STARTING NEW PAGINATION LOGIC (v1.0.3) ===");
+        }
 
         do {
             $api_calls_made++;
+            
+            // Safety check to prevent infinite loops
+            if ($api_calls_made > $max_api_calls) {
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log("Ecwid Product Sync: WARNING - Reached maximum API calls limit ($max_api_calls). Stopping to prevent infinite loop.");
+                }
+                break;
+            }
+            
             $query_params = [
                 'limit' => $limit,
                 'offset' => $offset,
-                'enabled' => 'true',
-                'responseFields' => 'items(id,sku,name,enabled,options,combinations(id))' 
+                // Remove 'enabled' => 'true' to load ALL products (enabled + disabled)
+                'responseFields' => 'items(id,sku,name,enabled,options,combinations(id)),total' 
             ];
             $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/products');
 
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log("Ecwid Product Sync: API call #$api_calls_made - Fetching products with offset: $offset, limit: $limit");
+                error_log("Ecwid Product Sync: API URL: " . $api_url);
             }
 
             $response = wp_remote_get($api_url, [
@@ -775,6 +796,15 @@ class Ecwid_WC_Sync {
             $raw_response_body = wp_remote_retrieve_body($response);
             $body = json_decode($raw_response_body, true);
             $http_code = wp_remote_retrieve_response_code($response);
+
+            // Debug the raw API response
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Product Sync: API call #$api_calls_made - HTTP Code: $http_code");
+                error_log("Ecwid Product Sync: API call #$api_calls_made - Raw response: " . substr($raw_response_body, 0, 500) . "...");
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    error_log("Ecwid Product Sync: JSON parsing error: " . json_last_error_msg());
+                }
+            }
 
             if ($http_code !== 200 || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
                 $error_info = $this->handle_api_error_response($response, $raw_response_body, $http_code, 'products');
@@ -793,24 +823,40 @@ class Ecwid_WC_Sync {
                 return;
             }
 
-            if (isset($body['items']) && is_array($body['items'])) {
-                foreach ($body['items'] as $item) {
-                    $all_products[] = [
-                        'id' => $item['id'] ?? null,
-                        'name' => $item['name'] ?? 'N/A',
-                        'sku' => $item['sku'] ?? 'N/A',
-                        'enabled' => $item['enabled'] ?? false,
-                        'options' => $item['options'] ?? [],
-                        'combinations' => $item['combinations'] ?? []
-                    ];
-                }
+            $items_from_api = $body['items'] ?? [];
+            
+            // Process and transform the items
+            foreach ($items_from_api as $item) {
+                $all_products[] = [
+                    'id' => $item['id'] ?? null,
+                    'name' => $item['name'] ?? 'N/A',
+                    'sku' => $item['sku'] ?? 'N/A',
+                    'enabled' => $item['enabled'] ?? false,
+                    'options' => $item['options'] ?? [],
+                    'combinations' => $item['combinations'] ?? []
+                ];
             }
 
-            $count_in_response = $body['count'] ?? 0;
+            // Get count from actual items returned, not API count field (which may not exist with custom responseFields)
+            $count_in_response = count($items_from_api);
             $total_from_api = $body['total'] ?? 0;
+            
+            // Capture first API response values for debugging
+            if ($api_calls_made === 1) {
+                $first_count = $count_in_response;
+                $first_total = $total_from_api;
+                $first_http_code = $http_code;
+            }
             
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log("Ecwid Product Sync: API call #$api_calls_made - Got $count_in_response products, total available: $total_from_api, current offset: $offset");
+                error_log("Ecwid Product Sync: API response keys: " . implode(', ', array_keys($body)));
+                if (isset($body['items'])) {
+                    error_log("Ecwid Product Sync: Actual items in response: " . count($body['items']));
+                }
+                error_log("Ecwid Product Sync: Loop will continue? " . ($count_in_response > 0 && $offset < $total_from_api ? 'YES' : 'NO'));
+                error_log("Ecwid Product Sync: - count_in_response > 0: " . ($count_in_response > 0 ? 'true' : 'false') . " ($count_in_response)");
+                error_log("Ecwid Product Sync: - offset < total_from_api: " . ($offset < $total_from_api ? 'true' : 'false') . " ($offset < $total_from_api)");
             }
             
             $offset += $count_in_response;
@@ -821,11 +867,34 @@ class Ecwid_WC_Sync {
             error_log("Ecwid Product Sync: Complete! Made $api_calls_made API calls, loaded " . count($all_products) . " total products");
         }
 
+        // Separate enabled and disabled products
+        $enabled_products = [];
+        $disabled_products = [];
+        
+        foreach ($all_products as $product) {
+            if ($product['enabled']) {
+                $enabled_products[] = $product;
+            } else {
+                $disabled_products[] = $product;
+            }
+        }
+
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("Ecwid Product Sync: Separated products - Enabled: " . count($enabled_products) . ", Disabled: " . count($disabled_products));
+        }
+
         wp_send_json_success([
-            'products' => $all_products, 
+            'products' => $all_products, // Keep full list for backward compatibility
+            'enabled_products' => $enabled_products,
+            'disabled_products' => $disabled_products,
             'total_found' => count($all_products),
+            'enabled_count' => count($enabled_products),
+            'disabled_count' => count($disabled_products),
             'api_calls_made' => $api_calls_made,
-            'total_available' => $total_from_api
+            'total_available' => $total_from_api,
+            'debug_info' => "New pagination logic v1.0.3 - Made $api_calls_made API calls, Loop condition: count>0 && offset<total - " . date('Y-m-d H:i:s') . 
+                             " | First API response: count=$first_count, total=$first_total, offset=0, HTTP=$first_http_code | Products array: " . count($all_products),
+            'raw_first_response' => $api_calls_made === 1 ? substr($raw_response_body ?? '', 0, 500) : 'N/A'
         ]);
     }
 
@@ -2375,6 +2444,31 @@ class Ecwid_WC_Sync {
         return $term_id ? (int)$term_id : null;
     }
 
+    /**
+     * Diagnostic function to check upload directory status
+     */
+    private function diagnose_upload_directory() {
+        $upload_dir = wp_upload_dir();
+        $debug_info = [
+            'upload_dir_info' => $upload_dir,
+            'basedir_exists' => is_dir($upload_dir['basedir']),
+            'basedir_writable' => is_writable($upload_dir['basedir']),
+            'path_exists' => is_dir($upload_dir['path']),
+            'path_writable' => is_writable($upload_dir['path']),
+            'disk_free_space' => disk_free_space($upload_dir['basedir']),
+            'php_upload_max_filesize' => ini_get('upload_max_filesize'),
+            'php_post_max_size' => ini_get('post_max_size'),
+            'php_memory_limit' => ini_get('memory_limit'),
+            'wp_max_upload_size' => wp_max_upload_size(),
+        ];
+
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('[Ecwid2Woo] Upload Directory Diagnostics: ' . json_encode($debug_info, JSON_PRETTY_PRINT));
+        }
+
+        return $debug_info;
+    }
+
     private function attach_image_to_product_from_url($image_url, $post_id = 0, $desc = null) {
         if (empty($image_url)) {
             return new WP_Error('missing_url', __('Image URL is empty.', 'ecwid2woo-product-sync'));
@@ -2406,7 +2500,17 @@ class Ecwid_WC_Sync {
         }
 
         if (is_wp_error($attachment_id)) {
-            return new WP_Error('sideload_failed', sprintf(__('Image sideload failed for %s: %s', 'ecwid2woo-product-sync'), esc_url_raw($image_url), $attachment_id->get_error_message()));
+            // When image sideload fails, run diagnostics to help troubleshoot
+            $diagnostic_info = $this->diagnose_upload_directory();
+            
+            $error_message = sprintf(__('Image sideload failed for %s: %s', 'ecwid2woo-product-sync'), esc_url_raw($image_url), $attachment_id->get_error_message());
+            
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[Ecwid2Woo] Image Upload Error Details: ' . $error_message);
+                error_log('[Ecwid2Woo] Upload Diagnostics: ' . json_encode($diagnostic_info, JSON_PRETTY_PRINT));
+            }
+            
+            return new WP_Error('sideload_failed', $error_message);
         }
         return $attachment_id;
     }
@@ -2981,6 +3085,36 @@ class Ecwid_WC_Sync {
             'total_processed' => count($selected_category_ids),
             'logs' => $detailed_logs,
             'results' => $import_results
+        ]);
+    }
+
+    // Add this method to handle upload directory diagnostics
+    public function ajax_diagnose_uploads() {
+        check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]);
+            return;
+        }
+
+        $diagnostic_info = $this->diagnose_upload_directory();
+        
+        // Add additional checks
+        $diagnostic_info['current_user'] = wp_get_current_user()->user_login;
+        $diagnostic_info['php_user'] = function_exists('posix_getpwuid') && function_exists('posix_geteuid') ? posix_getpwuid(posix_geteuid())['name'] : 'unknown';
+        $diagnostic_info['server_software'] = $_SERVER['SERVER_SOFTWARE'] ?? 'unknown';
+        
+        // Test creating a simple file in uploads directory
+        $test_file = $diagnostic_info['upload_dir_info']['path'] . '/ecwid_test_' . time() . '.txt';
+        $test_write_success = file_put_contents($test_file, 'test') !== false;
+        $diagnostic_info['test_write_success'] = $test_write_success;
+        
+        if ($test_write_success && file_exists($test_file)) {
+            @unlink($test_file);
+        }
+
+        wp_send_json_success([
+            'message' => __('Upload directory diagnostics completed', 'ecwid2woo-product-sync'),
+            'diagnostics' => $diagnostic_info
         ]);
     }
 
