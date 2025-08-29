@@ -5,4 +5,8 @@
 /.gitignore export-ignore
 /.gitattributes export-ignore
 /README.md export-ignore
+
+# Development documentation - keep in repo but exclude from user downloads
 /UI_ENHANCEMENT_SUMMARY.md export-ignore
+/SYNC_ERROR_FIXES.md export-ignore
+/SKU_CONFLICT_FIX.md export-ignore
