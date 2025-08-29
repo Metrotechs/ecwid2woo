@@ -171,6 +171,14 @@
         // Selective Product Sync UI Elements
         const loadProductsButton = $('#load-ecwid-products-button');
         const productListContainer = $('#selective-product-list-container');
+        
+        // Create or get pagination container (place it right after the load button)
+        let paginationContainer = $('#product-pagination-container');
+        if (!paginationContainer.length) {
+            // Create pagination container and insert it after the load button
+            loadProductsButton.after('<div id="product-pagination-container" style="margin-top: 10px;"></div>');
+            paginationContainer = $('#product-pagination-container');
+        }
         const importSelectedButton = $('#import-selected-products-button');
         const selectiveSyncStatusDiv = $('#selective-sync-status');
         const selectiveSyncProgressBar = $('#selective-sync-bar');
@@ -206,6 +214,12 @@
         let productsToImportSelectedIds = []; // For selective product sync
         let currentSelectiveImportProductIndex = 0; // For selective product sync
         let currentProductVariationData = null; // For selective product variation batching
+        
+        // Product Pagination State
+        let currentProductPage = 1;
+        let productsPerPage = 50; // Show 50 products per page to prevent browser freeze
+        let currentlyDisplayedProducts = []; // Currently displayed product subset
+        let selectedProductIds = new Set(); // Track selected products across all pages
 
         // Selective Category Sync State
         let ecwidCategoriesForSelection = []; // For selective category sync
@@ -1191,6 +1205,12 @@
             const originalButtonText = loadProductsButton.text();
             loadProductsButton.addClass('disabled').text(i18n.loading_products);
             
+            // Clear any existing pagination before showing loading
+            const paginationContainer = $('#product-pagination-container');
+            if (paginationContainer.length) {
+                paginationContainer.html('');
+            }
+            
             // Create enhanced loading interface
             const loadingHtml = `
                 <div class="ecwid-loading-container" style="text-align: center; padding: 40px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 5px; margin: 20px 0;">
@@ -1315,6 +1335,10 @@
                         window.ecwidEnabledProducts = enabledProducts;
                         window.ecwidDisabledProducts = disabledProducts;
 
+                        // Reset pagination and selection state
+                        currentProductPage = 1;
+                        selectedProductIds.clear();
+
                         // Show enabled products by default
                         renderProductSelectionList(enabledProducts);
                         
@@ -1328,6 +1352,8 @@
                         $('#show-enabled-products').click(function() {
                             $(this).removeClass('button-secondary').addClass('button-primary');
                             $('#show-disabled-products').removeClass('button-primary').addClass('button-secondary');
+                            currentProductPage = 1; // Reset to first page
+                            selectedProductIds.clear(); // Clear selections when switching
                             renderProductSelectionList(enabledProducts);
                             if (enabledProducts.length > 0) {
                                 importSelectedButton.show();
@@ -1337,6 +1363,8 @@
                         $('#show-disabled-products').click(function() {
                             $(this).removeClass('button-secondary').addClass('button-primary');
                             $('#show-enabled-products').removeClass('button-primary').addClass('button-secondary');
+                            currentProductPage = 1; // Reset to first page
+                            selectedProductIds.clear(); // Clear selections when switching
                             renderProductSelectionList(disabledProducts);
                             if (disabledProducts.length > 0) {
                                 importSelectedButton.show();
@@ -1360,6 +1388,12 @@
                         $('.ecwid-loading-title').html('❌ Loading Failed');
                         $('.ecwid-loading-status').html('Error: ' + (response.data && response.data.message ? response.data.message : 'Unknown error occurred'));
                         
+                        // Clear pagination on error
+                        const paginationContainer = $('#product-pagination-container');
+                        if (paginationContainer.length) {
+                            paginationContainer.html('');
+                        }
+                        
                         console.log('=== PRODUCT LOADING ERROR ===');
                         console.log('Response success:', response.success);
                         console.log('Response data:', response.data);
@@ -1381,6 +1415,12 @@
                     $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
                     $('.ecwid-loading-title').html('❌ Connection Error');
                     $('.ecwid-loading-status').html('Failed to connect to Ecwid API');
+                    
+                    // Clear pagination on error
+                    const paginationContainer = $('#product-pagination-container');
+                    if (paginationContainer.length) {
+                        paginationContainer.html('');
+                    }
                     
                     console.log('=== AJAX ERROR ===');
                     console.log('Status:', textStatus);
@@ -1415,32 +1455,63 @@
             });
         }
 
-        function renderProductSelectionList(products) {
+        function renderProductSelectionList(products, page = 1) {
+            // Store the full product list for pagination
+            currentlyDisplayedProducts = products;
+            currentProductPage = page;
+            
+            // Calculate pagination
+            const totalProducts = products.length;
+            const totalPages = Math.ceil(totalProducts / productsPerPage);
+            const startIndex = (page - 1) * productsPerPage;
+            const endIndex = Math.min(startIndex + productsPerPage, totalProducts);
+            const productsForPage = products.slice(startIndex, endIndex);
+            
             // Determine if we're showing enabled or disabled products
-            const isEnabledList = products.length > 0 && products[0].enabled !== false;
+            const isEnabledList = totalProducts > 0 && products[0].enabled !== false;
             const listType = isEnabledList ? 'Enabled' : 'Disabled';
             const listIcon = isEnabledList ? '📦' : '❌';
             const headerColor = isEnabledList ? '#0073aa' : '#d63638';
             const headerBg = isEnabledList ? '#f0f8ff' : '#fef2f2';
             
+            // First, render pagination controls in the separate container above the product list
+            const paginationContainer = $('#product-pagination-container');
+            if (totalPages > 1) {
+                const paginationHtml = `
+                    <div class="product-pagination" style="text-align: center; margin-bottom: 15px; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 4px;">
+                        <button id="prev-page-btn" class="button button-secondary" ${page <= 1 ? 'disabled' : ''} style="margin-right: 10px;">← Previous</button>
+                        <span style="margin: 0 15px; font-weight: bold;">Page ${page} of ${totalPages}</span>
+                        <button id="next-page-btn" class="button button-secondary" ${page >= totalPages ? 'disabled' : ''} style="margin-left: 10px;">Next →</button>
+                        ${selectedProductIds.size > 0 ? `<div style="margin-top: 8px; font-size: 12px; color: #0073aa;">📋 ${selectedProductIds.size} products selected across all pages</div>` : ''}
+                    </div>
+                `;
+                paginationContainer.html(paginationHtml);
+            } else {
+                paginationContainer.html('');
+            }
+            
             let html = `<div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">`;
             html += `<p style="margin: 0 0 5px 0; font-weight: bold;">${listIcon} Select ${listType} Products to Import:</p>`;
             html += '<p style="margin: 0; font-size: 12px; color: #666;">✓ Check individual products to import them one by one, or select multiple products for batch import.</p>';
+            if (totalPages > 1) {
+                html += `<p style="margin: 5px 0 0 0; font-size: 12px; color: #0073aa; font-weight: bold;">📄 Showing ${startIndex + 1}-${endIndex} of ${totalProducts} products (Page ${page} of ${totalPages})</p>`;
+            }
             html += '</div>';
             
             html += '<ul style="list-style:none; margin:0; padding:0;">';
             html += `<li style="padding-bottom: 8px; margin-bottom: 8px; border-bottom: 2px solid ${headerColor}; background: ${headerBg}; padding: 8px;">
                         <label style="font-weight: bold; color: ${headerColor};">
                             <input type="checkbox" id="select-all-ecwid-products" style="margin-right: 8px;" /> 
-                            ${i18n.select_all_none} (${products.length} ${listType.toLowerCase()} products)
+                            ${i18n.select_all_none} (${productsForPage.length} on this page${totalPages > 1 ? ` / ${totalProducts} total` : ''})
                         </label>
                      </li>`;
             
-            products.forEach(function(product, index) {
+            productsForPage.forEach(function(product, index) {
                 const bgColor = index % 2 === 0 ? '#fff' : '#f9f9f9';
+                const isSelected = selectedProductIds.has(product.id.toString());
                 html += `<li style="padding: 8px; border-bottom: 1px solid #eee; background: ${bgColor};">
                             <label style="display: flex; align-items: center; cursor: pointer;">
-                                <input type="checkbox" class="ecwid-product-select" value="${product.id}" style="margin-right: 8px;" />
+                                <input type="checkbox" class="ecwid-product-select" value="${product.id}" ${isSelected ? 'checked' : ''} style="margin-right: 8px;" />
                                 <div>
                                     <strong>${product.name}</strong><br>
                                     <small style="color: #666;">
@@ -1454,20 +1525,38 @@
             });
             html += '</ul>';
             
+            // Render the product list in its own container (pagination is separate)
             productListContainer.html(html);
 
             // Enhanced Select All/None functionality
             $('#select-all-ecwid-products').on('change', function() {
                 const isChecked = $(this).prop('checked');
-                $('.ecwid-product-select').prop('checked', isChecked);
+                $('.ecwid-product-select').each(function() {
+                    const productId = $(this).val();
+                    $(this).prop('checked', isChecked);
+                    if (isChecked) {
+                        selectedProductIds.add(productId);
+                    } else {
+                        selectedProductIds.delete(productId);
+                    }
+                });
                 updateImportButtonText();
             });
             
             // Update button text when individual checkboxes change
             $('.ecwid-product-select').on('change', function() {
+                const productId = $(this).val();
+                const isChecked = $(this).prop('checked');
+                
+                if (isChecked) {
+                    selectedProductIds.add(productId);
+                } else {
+                    selectedProductIds.delete(productId);
+                }
+                
                 updateImportButtonText();
                 
-                // Update "Select All" checkbox state
+                // Update "Select All" checkbox state based on current page
                 const totalCheckboxes = $('.ecwid-product-select').length;
                 const checkedCheckboxes = $('.ecwid-product-select:checked').length;
                 
@@ -1482,6 +1571,20 @@
             
             // Initialize button text
             updateImportButtonText();
+            
+            // Add pagination button handlers
+            $('#prev-page-btn').on('click', function() {
+                if (currentProductPage > 1) {
+                    renderProductSelectionList(currentlyDisplayedProducts, currentProductPage - 1);
+                }
+            });
+            
+            $('#next-page-btn').on('click', function() {
+                const totalPages = Math.ceil(currentlyDisplayedProducts.length / productsPerPage);
+                if (currentProductPage < totalPages) {
+                    renderProductSelectionList(currentlyDisplayedProducts, currentProductPage + 1);
+                }
+            });
         }
         
         // Function to render category selection list with enhanced UI
@@ -1564,7 +1667,7 @@
         function updateImportButtonText() {
             if (!importSelectedButton.length) return;
             
-            const selectedCount = $('.ecwid-product-select:checked').length;
+            const selectedCount = selectedProductIds.size; // Use our maintained Set
             if (selectedCount === 0) {
                 importSelectedButton.text(i18n.import_selected || 'Import Selected Products');
             } else if (selectedCount === 1) {
@@ -1578,9 +1681,8 @@
             e.preventDefault();
             if (importSelectedButton.hasClass('disabled')) return;
 
-            productsToImportSelectedIds = $('.ecwid-product-select:checked').map(function() {
-                return $(this).val();
-            }).get();
+            // Collect selected product IDs from our maintained Set (works across all pages)
+            productsToImportSelectedIds = Array.from(selectedProductIds);
 
             if (productsToImportSelectedIds.length === 0) {
                 alert(i18n.no_products_selected);

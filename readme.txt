@@ -5,7 +5,7 @@ Tags: ecwid, woocommerce, sync, products, categories, import, migration, ecwid s
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.0.2
+Stable tag: 1.0.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
@@ -190,6 +190,33 @@ The plugin provides comprehensive debugging tools:
 
 == Changelog ==
 
+= 1.0.4 =
+**Performance Optimization & Enhanced UI**
+
+**Major Improvements:**
+* **Client-side pagination** - Resolves browser freezing issues with large product catalogs (6000+ products)
+* **50 products per page display** - Optimized DOM rendering for smooth performance
+* **Cross-page selection tracking** - Maintains product selections across pagination
+* **Enhanced loading indicators** - Professional animated spinners with success/error states
+* **Improved pagination controls** - Independent positioning outside scroll areas for better UX
+* **API token interface clarity** - Updated labeling to support both public and secret tokens
+* **Complete API pagination support** - Fixed responseFields to load all products (not just first 100)
+* **Enhanced error handling** - Better feedback for API failures and connection issues
+
+**Technical Enhancements:**
+* Implemented Set-based selection management for optimal performance
+* Independent pagination container for improved UI layout
+* Optimized API calls with proper total count retrieval
+* Enhanced JavaScript architecture for large dataset handling
+* Improved memory management for browser stability
+
+**User Experience:**
+* Eliminated browser freezing with large product catalogs
+* Faster page load times with pagination
+* Clearer progress feedback during sync operations
+* Better responsive design for pagination controls
+* Improved accessibility for selection management
+
 = 1.0.2 =
 **Stability, Multilingual Support, and Category Images**
 
@@ -234,6 +261,9 @@ The plugin provides comprehensive debugging tools:
 * Responsive design for all screen sizes
 
 == Upgrade Notice ==
+
+= 1.0.4 =
+Major performance update! Fixes browser freezing with large product catalogs through client-side pagination. Adds enhanced loading indicators, improved pagination controls, and support for 6000+ products. Recommended for all users, especially those with large Ecwid stores.
 
 = 1.0.2 =
 Recommended update. Adds multilingual-safe category slugs, category thumbnail import, improved error diagnostics, and multiple stability fixes including activation error resolution and correct success reporting after fallbacks.

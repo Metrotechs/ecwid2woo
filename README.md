@@ -10,6 +10,7 @@
 - **Modern, Responsive Design** - Clean, intuitive interface that works perfectly on all devices
 - **Real-time Progress Tracking** - Animated progress bars and live status updates
 - **Professional Loading Experience** - Animated spinners with success/error animations during API operations
+- **Client-Side Pagination** - Smooth navigation through large product catalogs (50 products per page)
 - **Visual Connection Testing** - One-click API connection verification with instant feedback
 - **Comprehensive Logging** - Color-coded logs with detailed operation tracking
 - **Smart Navigation** - Seamless transitions between different sync options
@@ -287,13 +288,21 @@
 
 **Product Loading Limited to 100 Items (Fixed in v1.0.3)**
 - **Issue:** Previous versions could only load first 100 products due to API pagination bug
-- **Solution:** Update to v1.0.3 which includes complete pagination system overhaul
+- **Solution:** Update to v1.0.3+ which includes complete pagination system overhaul
 - **Verification:** Check browser console for "API calls made: 70" (instead of "API calls made: 1")
 - **Expected Result:** Should see total products matching your Ecwid store count
 
+**Browser Freezing with Large Product Lists (Fixed in v1.0.4)**
+- **Issue:** Browser becomes unresponsive when displaying 1000+ products simultaneously in DOM
+- **Solution:** Update to v1.0.4+ which includes client-side pagination (50 products per page)
+- **Verification:** Check for pagination controls under "Reload Products" button
+- **Expected Result:** Smooth navigation through products without browser freezing
+
 **Large Store Performance**
-- **6000+ Products:** Plugin now handles large stores efficiently with proper API pagination
+- **6000+ Products:** Plugin now handles large stores efficiently with API pagination + client-side pagination
+- **Browser Optimization:** Products displayed in pages of 50 items for instant loading (v1.0.4+)
 - **Multiple API Calls:** Monitor console output showing "Made 70 API calls" for large catalogs
+- **Cross-Page Selection:** Smart selection tracking maintains choices across all pagination pages
 - **Enabled/Disabled Separation:** Toggle buttons allow easy navigation between product types
 - **Real-time Progress:** Watch pagination progress in browser console debug output
 
@@ -383,10 +392,26 @@ While the plugin is free and open source, professional services are available:
 ---
 
 ## 🎯 Version Information
-**Current Version:** 1.0.3  
+**Current Version:** 1.0.4  
 **Compatibility:** WordPress 5.0+ | WooCommerce 3.0+ | PHP 7.2+  
-**Release Date:** August 28, 2025  
+**Release Date:** August 29, 2025  
 **Update Policy:** Regular updates for compatibility and feature enhancements
+
+### Recent Updates (v1.0.4)
+- **CRITICAL FIX:** Client-side pagination prevents browser freezing with large product catalogs (6000+ products)
+- **MAJOR UX IMPROVEMENT:** Product lists now display 50 items per page instead of rendering all products simultaneously
+- **NEW:** Independent pagination controls positioned outside scrollable areas for optimal navigation
+- **ENHANCED:** Smart selection tracking across all pages - maintains selected products when navigating
+- **IMPROVED:** Pagination positioned directly under "Reload Products" button for intuitive access
+- **ADDED:** Cross-page selection counter showing "📋 X products selected across all pages"
+- **OPTIMIZED:** Browser performance dramatically improved - instant page loads vs previous freezing
+- **ENHANCED:** "Select All/None" functionality works per page while maintaining global selection tracking
+- **IMPROVED:** Import button accurately reflects total selections across all pages
+- **ADDED:** Professional pagination interface with Previous/Next navigation and page indicators
+- **FIXED:** Memory optimization prevents DOM overload when displaying thousands of products
+- **ENHANCED:** Enabled/Disabled product switching resets pagination and clears selections for clean transitions
+- **IMPROVED:** Error handling clears pagination controls during loading failures
+- **ADDED:** Visual feedback showing current page range: "Showing 1-50 of 6748 products (Page 1 of 135)"
 
 ### Recent Updates (v1.0.3)
 - **MAJOR FIX:** Complete product pagination system overhaul - now loads ALL products from large stores (6000+ products)
