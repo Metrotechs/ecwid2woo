@@ -392,7 +392,7 @@ While the plugin is free and open source, professional services are available:
 ---
 
 ## 🎯 Version Information
-**Current Version:** 1.0.4  
+**Current Version:** 1.0.5  
 **Compatibility:** WordPress 5.0+ | WooCommerce 3.0+ | PHP 7.2+  
 **Release Date:** August 29, 2025  
 **Update Policy:** Regular updates for compatibility and feature enhancements
