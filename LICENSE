@@ -1,86 +1,152 @@
 ===============================================================================
-                   Ecwid2Woo Product Sync – License Agreement
+                   Ecwid2Woo Product Sync – Dual License Agreement
 ===============================================================================
 
 Copyright © 2025 Metrotechs, Inc.
 All rights reserved.
 
-This Ecwid2Woo Product Sync plugin (the "Software") is licensed, not sold,
-to you by Metrotechs, Inc. ("Metrotechs") for use only under the terms of this
-license. Metrotechs reserves all rights not expressly granted to you.
+This Ecwid2Woo Product Sync plugin (the "Software") is made available under
+a dual licensing model that separates code licensing from trademark rights.
 
 ===============================================================================
-1. PROPRIETARY SOFTWARE LICENSE AGREEMENT
+1. OPEN SOURCE SOFTWARE LICENSE (GPL v2.0+)
 ===============================================================================
 
-**IMPORTANT: PLEASE READ THIS PROPRIETARY SOFTWARE LICENSE AGREEMENT ("LICENSE") CAREFULLY BEFORE DOWNLOADING, INSTALLING, OR USING THE SOFTWARE.**
+**CODE LICENSE:**
+The source code of this software is licensed under the GNU General Public 
+License version 2.0 or later (GPL-2.0+). This means you are free to:
 
-BY DOWNLOADING, INSTALLING, COPYING, ACCESSING OR USING THE SOFTWARE, YOU AGREE TO BE BOUND BY THE TERMS OF THIS LICENSE. IF YOU DO NOT AGREE TO THE TERMS OF THIS LICENSE, DO NOT DOWNLOAD, INSTALL, COPY, ACCESS OR USE THE SOFTWARE.
+✅ **Use** - Run the software for any purpose
+✅ **Study** - Examine and learn from the source code  
+✅ **Modify** - Change the code to suit your needs
+✅ **Share** - Distribute copies of the original software
+✅ **Improve** - Distribute modified versions under the same license
 
-**1.1. License Grant:**
-Subject to the terms and conditions of this Agreement and your payment of any applicable license fees, Metrotechs grants you a limited, non-exclusive, non-transferable, non-sublicensable, revocable license to install and use one copy of the Software on a single WordPress installation, solely for your own internal business purposes or personal use, in accordance with any documentation provided with the Software.
+**FULL GPL LICENSE TEXT:**
+The complete GPL v2.0 license text is available at:
+https://www.gnu.org/licenses/gpl-2.0.html
 
-**1.2. Restrictions:**
-You agree not to, and you will not permit others to:
-  a) license, sell, rent, lease, assign, distribute, transmit, host, outsource, disclose or otherwise commercially exploit the Software or make the Software available to any third party.
-  b) copy, modify, adapt, translate, or create derivative works based on the Software, except as expressly permitted herein or by applicable law notwithstanding this limitation.
-  c) reverse engineer, decompile, disassemble or otherwise attempt to discover the source code of the Software, except and only to the extent that such activity is expressly permitted by applicable law notwithstanding this limitation.
-  d) remove, alter or obscure any proprietary notices (including copyright and trademark notices) of Metrotechs or its licensors on the Software.
-  e) use the Software for any illegal purpose, or in violation of any local, state, national, or international law.
-  f) use the Software on more than one WordPress installation unless you have purchased additional licenses for each such installation.
-
-**1.3. Ownership and Intellectual Property:**
-The Software is protected by copyright and other intellectual property laws and treaties. Metrotechs or its licensors own the title, copyright, and other worldwide intellectual property rights in the Software and all copies thereof. This License is not a sale of the Software or any copy thereof. All rights not expressly granted are reserved by Metrotechs.
-
-**1.4. Updates and Support:**
-Metrotechs may, from time to time, provide updates, upgrades, bug fixes, or new versions of the Software ("Updates"). Such Updates may be provided subject to additional terms or fees. This License applies to any Updates unless Metrotechs provides other terms along with the Update. Metrotechs is not obligated to provide any support or maintenance services for the Software unless you have purchased a separate support agreement or the license you purchased explicitly includes support.
-
-**1.5. Term and Termination:**
-This License is effective until terminated. Your rights under this License will terminate automatically without notice from Metrotechs if you fail to comply with any term(s) of this License. Upon termination of the License, you shall cease all use of the Software and destroy all copies, full or partial, of the Software. Sections 1.2, 1.3, 1.5, 3 (Disclaimer & Warranty), and a new "Limitation of Liability" section shall survive any termination of this License.
-
-**1.6. Governing Law:**
-This License will be governed by and construed in accordance with the laws of [Your State/Country, e.g., "the State of California, USA"], without regard to its conflict of laws principles. You agree to submit to the exclusive jurisdiction of the courts located within [Your County, State/Country, e.g., "Santa Clara County, California"] to resolve any legal matter arising from this License.
+**GPL REQUIREMENTS:**
+If you distribute this software or derivative works, you must:
+- Include this license notice
+- Make source code available
+- License derivative works under GPL v2.0+
+- Preserve copyright notices
 
 ===============================================================================
-2. BRAND & TRADEMARK – “Ecwid2Woo”™ and “Ecwid2Woo Product Sync”™
+2. TRADEMARK RIGHTS - "Ecwid2Woo"™ BRAND PROTECTION
 ===============================================================================
 
-Metrotechs Digital Marketing Agency, LLC. is the sole owner of the trademarks “Ecwid2Woo” and
-“Ecwid2Woo Product Sync,” together with all related logos, stylized marks,
-icons, and trade dress (the “Trademarks”).
+**TRADEMARK OWNERSHIP:**
+Metrotechs, Inc. is the exclusive owner of the following trademarks:
+• "Ecwid2Woo"™ 
+• "Ecwid2Woo Product Sync"™
+• Related logos, icons, and trade dress (the "Trademarks")
 
-  • You may refer to the plugin by its name in documentation or
-    screenshots, so long as you do not imply endorsement by Metrotechs.  
-  • Any other usage of Metrotechs’ Trademarks—especially in connection with
-    derivative works, hosted services, or commercial products—must comply
-    with Metrotechs’ Brand Guidelines and requires prior written permission.
-  • To request permission, please contact branding@metrotechs.net.
+**TRADEMARK USAGE RIGHTS:**
 
-===============================================================================
-3. DISCLAIMER OF WARRANTY
-===============================================================================
+**✅ PERMITTED USES (No Permission Required):**
+• Reference the plugin by name in documentation, reviews, or tutorials
+• Include the name in compatibility statements ("Compatible with Ecwid2Woo")
+• Use in academic research or educational materials
+• Fair use commentary or criticism
 
-THE SOFTWARE IS PROVIDED “AS IS” AND “AS AVAILABLE,” WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL METROTECHS, ITS AFFILIATES, OR CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE SOFTWARE IS WITH YOU. SHOULD THE SOFTWARE PROVE DEFECTIVE, YOU ASSUME THE COST OF ALL NECESSARY SERVICING, REPAIR, OR CORRECTION.
+**⚠️ RESTRICTED USES (Permission Required):**
+• Using "Ecwid2Woo" in derivative plugin names
+• Creating hosted services or SaaS products using the name
+• Commercial redistribution under the "Ecwid2Woo" brand
+• Implying official endorsement or affiliation with Metrotechs
 
-===============================================================================
-4. LIMITATION OF LIABILITY
-===============================================================================
+**🚫 PROHIBITED USES:**
+• Claiming ownership of the "Ecwid2Woo" trademark
+• Creating confusingly similar marks or names
+• Removing or altering trademark notices in the code
 
-TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL METROTECHS OR ITS SUPPLIERS BE LIABLE FOR ANY SPECIAL, INCIDENTAL, INDIRECT, OR CONSEQUENTIAL DAMAGES WHATSOEVER (INCLUDING, WITHOUT LIMITATION, DAMAGES FOR LOSS OF BUSINESS PROFITS, BUSINESS INTERRUPTION, LOSS OF BUSINESS INFORMATION, OR ANY OTHER PECUNIARY LOSS) ARISING OUT OF THE USE OF OR INABILITY TO USE THE SOFTWARE, EVEN IF METROTECHS HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. IN ANY CASE, METROTECHS' ENTIRE LIABILITY UNDER ANY PROVISION OF THIS LICENSE SHALL BE LIMITED TO THE AMOUNT ACTUALLY PAID BY YOU FOR THE SOFTWARE OR U.S. $1.00 IF YOU RECEIVED THE SOFTWARE FREE OF CHARGE. BECAUSE SOME STATES AND JURISDICTIONS DO NOT ALLOW THE EXCLUSION OR LIMITATION OF LIABILITY, THE ABOVE LIMITATION MAY NOT APPLY TO YOU.
-
-===============================================================================
-5. SUPPORT & PROFESSIONAL SERVICES
-===============================================================================
-
-While the Software is licensed under the terms above, Metrotechs offers
-commercial services to help you get the most out of Ecwid2Woo:
-
-  • Premium support and priority bug fixes (subject to separate agreement/purchase)
-  • Custom development and feature extensions
-  • Migration and data-sync consulting
-
-Visit https://metrotechs.io or email support@metrotechs.net for details.
+**TRADEMARK CONTACT:**
+For trademark permissions or brand guidelines:
+Email: branding@metrotechs.io
+Website: https://metrotechs.io/brand-guidelines
 
 ===============================================================================
-                        END OF LICENSE AGREEMENT
+3. WHY DUAL LICENSING?
+===============================================================================
+
+**OPEN SOURCE BENEFITS:**
+• Encourages community contributions and improvements
+• Allows developers to study, modify, and extend the code
+• Promotes transparency and security through code review
+• Enables integration with other open source projects
+
+**TRADEMARK PROTECTION BENEFITS:**
+• Maintains brand integrity and quality standards
+• Prevents market confusion with unofficial versions
+• Protects Metrotechs' business interests and reputation
+• Ensures authentic support channels for users
+
+===============================================================================
+4. DERIVATIVE WORKS GUIDELINES
+===============================================================================
+
+**FOR DEVELOPERS:**
+You may create derivative works under the GPL license, but:
+
+**✅ RECOMMENDED APPROACH:**
+• Create your own brand name (e.g., "MyPlugin for Ecwid-WooCommerce Sync")
+• Credit original work: "Based on Ecwid2Woo Product Sync by Metrotechs"
+• Follow GPL requirements for source code distribution
+• Use descriptive names that don't cause confusion
+
+**⚠️ TRADEMARK COMPLIANCE:**
+• Don't use "Ecwid2Woo" in your plugin/product name
+• Don't imply official Metrotechs endorsement
+• Include proper attribution to original work
+• Contact Metrotechs for permission if unsure
+
+===============================================================================
+5. COMMERCIAL SERVICES & SUPPORT
+===============================================================================
+
+While the code is open source, Metrotechs offers commercial services:
+
+**PROFESSIONAL SERVICES:**
+• Premium support and priority bug fixes
+• Custom development and feature extensions  
+• Migration consulting and implementation services
+• Enterprise licensing for trademark usage
+
+**CONTACT:**
+• Support: support@metrotechs.io
+• Sales: sales@metrotechs.io  
+• Website: https://metrotechs.io
+
+===============================================================================
+6. DISCLAIMER & LIABILITY
+===============================================================================
+
+**WARRANTY DISCLAIMER:**
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+**LIMITATION OF LIABILITY:**
+IN NO EVENT SHALL METROTECHS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
+SOFTWARE.
+
+===============================================================================
+7. CONTACT INFORMATION
+===============================================================================
+
+**METROTECHS, INC.**
+• Website: https://metrotechs.io
+• Email: legal@metrotechs.io
+• GitHub: https://github.com/Metrotechs
+
+**LICENSE QUESTIONS:**
+For questions about this dual licensing model, please contact:
+legal@metrotechs.io
+
+===============================================================================
+                        END OF DUAL LICENSE AGREEMENT
 ===============================================================================
