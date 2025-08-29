@@ -162,11 +162,11 @@ class Ecwid_WC_Sync {
 
         add_settings_field(
             'token',
-            __('Ecwid API Token (Secret Token)', 'ecwid2woo-product-sync'),
+            __('Ecwid API Token', 'ecwid2woo-product-sync'),
             [$this, 'field_text'],
             $this->settings_slug,
             'ecwidSync_api_credentials_section',
-            ['id' => 'token', 'type' => 'password', 'label_for' => 'token', 'description' => __('Your Ecwid API Secret Token. This is sensitive information.', 'ecwid2woo-product-sync')]
+            ['id' => 'token', 'type' => 'password', 'label_for' => 'token', 'description' => __('Your Ecwid API Token (Public or Secret) with read permissions for catalog, products, and categories.', 'ecwid2woo-product-sync')]
         );
     }
 

@@ -79,7 +79,7 @@
 
 ### Post-Installation Setup
 1. Go to **Ecwid2Woo Sync → Settings** in your admin menu
-2. Enter your **Ecwid Store ID** and **API Secret Token**
+2. Enter your **Ecwid Store ID** and **API Token**
 3. Click **Save Settings** and test your connection
 4. You're ready to start syncing!
 
@@ -97,7 +97,8 @@
    - Copy this number (it's typically 8-9 digits)
 
 3. **Generate API Token**
-   - Click **Create new token** or **Generate Secret Token**
+   - Click **Create new token** or **Generate Token**
+   - **Note:** Both Public and Secret tokens work - what matters are the permissions
    - Ensure the token has these permissions:
      - ✅ Read catalog
      - ✅ Read store profile  
