@@ -8,7 +8,7 @@ Version: 1.0.5
 Author: Metrotechs
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
-Text Domain: e2w-product-sync
+Text Domain: ecwid2woo-product-sync
 Domain Path: /languages
 Requires at least: 5.0
 Requires PHP: 7.2
