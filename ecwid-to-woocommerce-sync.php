@@ -4,7 +4,7 @@ Plugin Name: Ecwid2Woo Product Sync
 Description: Professional Ecwid to WooCommerce synchronization plugin by Metrotechs.
 Plugin URI: https://metrotechs.io/plugins/ecwid2woo/
 Author URI: https://metrotechs.io
-Version: 1.0.4
+Version: 1.0.5
 Author: Metrotechs
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -26,10 +26,18 @@ if (!defined('ABSPATH')) {
 }
 
 if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
-    define('ECWID2WOO_VARIATION_BATCH_SIZE', 50); // Number of variations to process per batch
+    define('ECWID2WOO_VARIATION_BATCH_SIZE', 25); // Reduced from 50 to 25 for better stability
 }
 
-define('ECWID2WOO_VERSION', '1.0.4'); // Define version constant
+if (!defined('ECWID2WOO_CATEGORY_BATCH_SIZE')) {
+    define('ECWID2WOO_CATEGORY_BATCH_SIZE', 15); // Categories are lighter, can handle more
+}
+
+if (!defined('ECWID2WOO_PRODUCT_BATCH_SIZE')) {
+    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 3); // Products are heavier, especially with variations
+}
+
+define('ECWID2WOO_VERSION', '1.0.5'); // Define version constant
 
 class Ecwid_WC_Sync {
     private $options;
@@ -578,6 +586,82 @@ class Ecwid_WC_Sync {
         <?php
     }
 
+    /**
+     * Make API request with retry logic and rate limiting
+     */
+    private function make_api_request_with_retry($url, $token, $method = 'GET', $max_retries = 3, $data = null) {
+        $attempt = 0;
+        $base_delay = 1; // Base delay in seconds
+        
+        while ($attempt < $max_retries) {
+            $attempt++;
+            
+            $args = [
+                'timeout' => 60,
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token,
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json'
+                ],
+                'method' => $method
+            ];
+            
+            if ($data && ($method === 'POST' || $method === 'PUT')) {
+                $args['body'] = is_array($data) ? json_encode($data) : $data;
+            }
+            
+            $response = wp_remote_request($url, $args);
+            
+            if (!is_wp_error($response)) {
+                $http_code = wp_remote_retrieve_response_code($response);
+                
+                // Success codes
+                if ($http_code >= 200 && $http_code < 300) {
+                    return $response;
+                }
+                
+                // Rate limiting - wait and retry
+                if ($http_code === 429 || $http_code === 503) {
+                    if ($attempt < $max_retries) {
+                        $delay = $base_delay * pow(2, $attempt - 1); // Exponential backoff
+                        if (defined('WP_DEBUG') && WP_DEBUG) {
+                            error_log("Ecwid Sync: Rate limited (HTTP $http_code), retrying in {$delay}s. Attempt $attempt/$max_retries");
+                        }
+                        sleep($delay);
+                        continue;
+                    }
+                }
+                
+                // Server errors - retry with backoff
+                if ($http_code >= 500 && $http_code < 600) {
+                    if ($attempt < $max_retries) {
+                        $delay = $base_delay * pow(2, $attempt - 1);
+                        if (defined('WP_DEBUG') && WP_DEBUG) {
+                            error_log("Ecwid Sync: Server error (HTTP $http_code), retrying in {$delay}s. Attempt $attempt/$max_retries");
+                        }
+                        sleep($delay);
+                        continue;
+                    }
+                }
+                
+                // Client errors (4xx) - don't retry
+                return $response;
+            } else {
+                // Network/connection errors - retry
+                if ($attempt < $max_retries) {
+                    $delay = $base_delay * pow(2, $attempt - 1);
+                    if (defined('WP_DEBUG') && WP_DEBUG) {
+                        error_log("Ecwid Sync: Connection error, retrying in {$delay}s. Attempt $attempt/$max_retries. Error: " . $response->get_error_message());
+                    }
+                    sleep($delay);
+                    continue;
+                }
+            }
+        }
+        
+        return $response; // Return last response/error after all retries exhausted
+    }
+
     private function _get_api_essentials() {
         $store_id = isset($this->options['store_id']) ? sanitize_text_field($this->options['store_id']) : '';
         $token    = isset($this->options['token']) ? sanitize_text_field($this->options['token']) : '';
@@ -991,7 +1075,15 @@ class Ecwid_WC_Sync {
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]); return;
         }
+        
+        // Enhanced resource management
         set_time_limit(300);
+        if (function_exists('ini_set')) {
+            ini_set('memory_limit', '512M'); // Increase memory limit
+        }
+        
+        // Wrap entire function in try-catch for better error handling
+        try {
 
         $api_essentials = $this->_get_api_essentials();
         if (is_wp_error($api_essentials)) {
@@ -1004,10 +1096,18 @@ class Ecwid_WC_Sync {
             error_log("Ecwid Sync: Currency sync result for batch sync: " . print_r($currency_sync_result, true));
         }
 
-        // MODIFICATION: Change the default batch size from 10 to a smaller number, e.g., 5.
-        // This will fetch and process fewer items per AJAX call, leading to more frequent updates.
-        $limit_per_api_call = apply_filters('ecwid_wc_sync_batch_api_limit', 5); // Changed from 10 to 5
+        // MODIFICATION: Use different batch sizes based on content type for optimal performance
+        // Categories are lighter and can handle larger batches, products are heavier due to variations
         $sync_type = isset($_POST['sync_type']) ? sanitize_text_field($_POST['sync_type']) : '';
+        
+        // Determine appropriate batch size based on sync type
+        if ($sync_type === 'categories') {
+            $default_batch_size = ECWID2WOO_CATEGORY_BATCH_SIZE;
+        } else {
+            $default_batch_size = ECWID2WOO_PRODUCT_BATCH_SIZE;
+        }
+        
+        $limit_per_api_call = apply_filters('ecwid_wc_sync_batch_api_limit', $default_batch_size, $sync_type);
         $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
 
         if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -1031,10 +1131,9 @@ class Ecwid_WC_Sync {
         }
 
         $api_url = add_query_arg($query_params_for_url, $api_url_base);
-        $response = wp_remote_get($api_url, [
-            'timeout' => 60,
-            'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
-        ]);
+        
+        // Enhanced API request with retry logic
+        $response = $this->make_api_request_with_retry($api_url, $api_essentials['token'], 'GET', 3);
 
         if (is_wp_error($response)) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
@@ -1172,6 +1271,28 @@ class Ecwid_WC_Sync {
             'batch_logs' => $batch_detailed_logs,
             'batch_item_results' => $batch_item_results // <-- ADDED: Send structured results
         ]);
+        
+        } catch (Error $e) {
+            // Handle fatal errors (PHP 7+)
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: Fatal Error in ajax_batch_sync: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+            }
+            wp_send_json_error([
+                'message' => __('A critical error occurred during sync. Please check your server error logs or try again with a smaller batch size.', 'ecwid2woo-product-sync'),
+                'error_type' => 'fatal_error',
+                'error_details' => WP_DEBUG ? $e->getMessage() : 'Enable WP_DEBUG for details'
+            ]);
+        } catch (Exception $e) {
+            // Handle regular exceptions
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: Exception in ajax_batch_sync: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+            }
+            wp_send_json_error([
+                'message' => __('An error occurred during sync: ', 'ecwid2woo-product-sync') . $e->getMessage(),
+                'error_type' => 'exception',
+                'error_details' => WP_DEBUG ? $e->getTraceAsString() : 'Enable WP_DEBUG for details'
+            ]);
+        }
     }
 
     /**
@@ -2038,7 +2159,15 @@ class Ecwid_WC_Sync {
             wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo-product-sync')]);
             return;
         }
+        
+        // Enhanced resource management for variation processing
         set_time_limit(0); // Attempt to disable time limit for variation batch
+        if (function_exists('ini_set')) {
+            ini_set('memory_limit', '512M'); // Increase memory limit
+        }
+        
+        // Wrap entire function in try-catch for better error handling
+        try {
 
         $wc_product_id = isset($_POST['wc_product_id']) ? intval($_POST['wc_product_id']) : 0;
         $ecwid_product_id_for_log = isset($_POST['ecwid_product_id']) ? intval($_POST['ecwid_product_id']) : 0; // For logging context
@@ -2101,6 +2230,75 @@ class Ecwid_WC_Sync {
             'processed_in_batch' => count($combinations_batch),
             'failed_in_batch' => $result['failed_count'] ?? 0,
         ]);
+        
+        } catch (Error $e) {
+            // Handle fatal errors (PHP 7+)
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: Fatal Error in ajax_process_variation_batch: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+            }
+            wp_send_json_error([
+                'message' => __('A critical error occurred during variation processing. Please check your server error logs or try again with a smaller batch size.', 'ecwid2woo-product-sync'),
+                'error_type' => 'fatal_error',
+                'error_details' => WP_DEBUG ? $e->getMessage() : 'Enable WP_DEBUG for details'
+            ]);
+        } catch (Exception $e) {
+            // Handle regular exceptions
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: Exception in ajax_process_variation_batch: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
+            }
+            wp_send_json_error([
+                'message' => __('An error occurred during variation processing: ', 'ecwid2woo-product-sync') . $e->getMessage(),
+                'error_type' => 'exception',
+                'error_details' => WP_DEBUG ? $e->getTraceAsString() : 'Enable WP_DEBUG for details'
+            ]);
+        }
+    }
+
+    /**
+     * Generate a unique SKU for a variation, handling conflicts and duplicates
+     */
+    private function generate_unique_variation_sku($desired_sku, $existing_variation_id = 0, $ecwid_combination_id = '', &$batch_logs = []) {
+        // Clean the desired SKU
+        $base_sku = sanitize_text_field(trim($desired_sku));
+        
+        // If empty, generate a fallback
+        if (empty($base_sku)) {
+            $base_sku = 'var-' . $ecwid_combination_id . '-' . time();
+            $batch_logs[] = "[INFO] Empty SKU provided, generated fallback: $base_sku";
+        }
+        
+        // Check if the desired SKU is already available
+        $sku_product_id = wc_get_product_id_by_sku($base_sku);
+        
+        // If SKU is free, or if it belongs to the current variation being updated, use it
+        if (!$sku_product_id || ($existing_variation_id && $sku_product_id == $existing_variation_id)) {
+            $batch_logs[] = "[INFO] SKU '$base_sku' is available for variation.";
+            return $base_sku;
+        }
+        
+        $batch_logs[] = "[WARNING] SKU '$base_sku' is already in use by product/variation ID $sku_product_id. Generating unique alternative.";
+        
+        // SKU is taken, need to generate a unique one
+        $counter = 1;
+        $unique_sku = $base_sku;
+        
+        while ($counter <= 100) { // Prevent infinite loops
+            $unique_sku = $base_sku . '-' . $counter;
+            $conflict_id = wc_get_product_id_by_sku($unique_sku);
+            
+            if (!$conflict_id || ($existing_variation_id && $conflict_id == $existing_variation_id)) {
+                $batch_logs[] = "[INFO] Generated unique SKU: '$unique_sku' for Ecwid combination $ecwid_combination_id";
+                return $unique_sku;
+            }
+            
+            $counter++;
+        }
+        
+        // If we still haven't found a unique SKU after 100 attempts, use timestamp-based fallback
+        $fallback_sku = $base_sku . '-' . time() . '-' . mt_rand(100, 999);
+        $batch_logs[] = "[WARNING] Could not generate unique SKU after 100 attempts. Using timestamp-based fallback: '$fallback_sku'";
+        
+        return $fallback_sku;
     }
 
     private function _process_product_variations_batch(WC_Product_Variable $parent_product, array $combinations_slice, array $original_ecwid_options, array &$batch_logs, $ecwid_product_id_for_log) {
@@ -2140,19 +2338,37 @@ class Ecwid_WC_Sync {
 
                     $term_object = get_term_by('name', $term_value_from_ecwid, $wc_attr_taxonomy_slug);
                     
-                    // MODIFIED: Create the term if it doesn't exist
+                    // IMPROVED: Enhanced term creation with better error handling
                     if (!$term_object || is_wp_error($term_object)) {
                         $batch_logs[] = "Term '$term_value_from_ecwid' not found in '$wc_attr_taxonomy_slug'. Creating it now...";
                         
+                        // Check if term exists by slug as well
                         $term_slug = sanitize_title($term_value_from_ecwid);
-                        $term_result = wp_insert_term($term_value_from_ecwid, $wc_attr_taxonomy_slug, ['slug' => $term_slug]);
+                        $term_by_slug = get_term_by('slug', $term_slug, $wc_attr_taxonomy_slug);
                         
-                        if (is_wp_error($term_result)) {
-                            $batch_logs[] = "[ERROR] Failed to create term '$term_value_from_ecwid' for attribute '$wc_attr_taxonomy_slug': " . $term_result->get_error_message();
+                        if ($term_by_slug && !is_wp_error($term_by_slug)) {
+                            $term_object = $term_by_slug;
+                            $batch_logs[] = "Found existing term by slug: '$term_slug' for attribute '$wc_attr_taxonomy_slug'.";
                         } else {
-                            // Get the newly created term
-                            $term_object = get_term_by('id', $term_result['term_id'], $wc_attr_taxonomy_slug);
-                            $batch_logs[] = "Successfully created term '$term_value_from_ecwid' with ID {$term_result['term_id']} for attribute '$wc_attr_taxonomy_slug'.";
+                            // Try to create the term with error handling
+                            $term_result = wp_insert_term($term_value_from_ecwid, $wc_attr_taxonomy_slug, ['slug' => $term_slug]);
+                            
+                            if (is_wp_error($term_result)) {
+                                // If term already exists (common in concurrent operations), try to get it
+                                if ($term_result->get_error_code() === 'term_exists') {
+                                    $existing_term_id = $term_result->get_error_data();
+                                    $term_object = get_term_by('id', $existing_term_id, $wc_attr_taxonomy_slug);
+                                    $batch_logs[] = "Term '$term_value_from_ecwid' already exists with ID $existing_term_id for attribute '$wc_attr_taxonomy_slug'.";
+                                } else {
+                                    $batch_logs[] = "[ERROR] Failed to create term '$term_value_from_ecwid' for attribute '$wc_attr_taxonomy_slug': " . $term_result->get_error_message();
+                                    // Try one more time to get the term in case it was created by another process
+                                    $term_object = get_term_by('name', $term_value_from_ecwid, $wc_attr_taxonomy_slug);
+                                }
+                            } else {
+                                // Successfully created term
+                                $term_object = get_term_by('id', $term_result['term_id'], $wc_attr_taxonomy_slug);
+                                $batch_logs[] = "Successfully created term '$term_value_from_ecwid' with ID {$term_result['term_id']} for attribute '$wc_attr_taxonomy_slug'.";
+                            }
                         }
                     }
                     
@@ -2191,8 +2407,10 @@ class Ecwid_WC_Sync {
             $variation->set_parent_id($parent_product_id);
             $variation->set_attributes($variation_attributes_for_wc);
 
-            $variation_sku = $combo['sku'] ?? ($parent_sku . '-combo-' . $ecwid_combination_id);
-            $variation->set_sku(sanitize_text_field($variation_sku));
+            // Enhanced SKU handling with conflict resolution
+            $desired_sku = $combo['sku'] ?? ($parent_sku . '-combo-' . $ecwid_combination_id);
+            $final_sku = $this->generate_unique_variation_sku($desired_sku, $variation_id, $ecwid_combination_id, $batch_logs);
+            $variation->set_sku(sanitize_text_field($final_sku));
             
             $combo_regular_price_to_set = null;
             if (isset($combo['defaultDisplayedPrice']) && is_numeric($combo['defaultDisplayedPrice'])) {
@@ -2248,16 +2466,41 @@ class Ecwid_WC_Sync {
                 $var_saved_id = $variation->save();
                 if ($var_saved_id && !is_wp_error($var_saved_id)) {
                     update_post_meta($var_saved_id, '_ecwid_variation_id', $ecwid_combination_id);
-                    $batch_logs[] = "Saved WC Variation ID $var_saved_id (Ecwid Combo ID: $ecwid_combination_id). Attributes: " . wp_json_encode($variation_attributes_for_wc);
+                    $batch_logs[] = "Saved WC Variation ID $var_saved_id (Ecwid Combo ID: $ecwid_combination_id). SKU: '$final_sku'. Attributes: " . wp_json_encode($variation_attributes_for_wc);
                     $processed_count++;
                 } else {
                     $var_error_msg = is_wp_error($var_saved_id) ? $var_saved_id->get_error_message() : "Unknown error saving variation";
-                    $batch_logs[] = "[ERROR] Failed to save WC Variation for Ecwid Combo ID $ecwid_combination_id. Error: $var_error_msg.";
+                    $batch_logs[] = "[ERROR] Failed to save WC Variation for Ecwid Combo ID $ecwid_combination_id. Error: $var_error_msg. SKU attempted: '$final_sku'";
                     $failed_count++;
                 }
             } catch (Exception $e) {
-                $batch_logs[] = "[EXCEPTION] Saving WC Variation for Ecwid Combo ID $ecwid_combination_id. Error: " . $e->getMessage();
-                $failed_count++;
+                $error_msg = $e->getMessage();
+                $batch_logs[] = "[ERROR] Exception while saving variation for Ecwid Combo ID $ecwid_combination_id: $error_msg. SKU attempted: '$final_sku'";
+                
+                // Handle specific SKU conflict errors
+                if (strpos($error_msg, 'SKU') !== false || strpos($error_msg, 'sku') !== false) {
+                    $batch_logs[] = "[INFO] Attempting to resolve SKU conflict by generating new unique SKU...";
+                    try {
+                        // Generate a completely new unique SKU
+                        $emergency_sku = 'emergency-' . $ecwid_combination_id . '-' . time() . '-' . mt_rand(100, 999);
+                        $variation->set_sku($emergency_sku);
+                        $var_saved_id = $variation->save();
+                        
+                        if ($var_saved_id && !is_wp_error($var_saved_id)) {
+                            update_post_meta($var_saved_id, '_ecwid_variation_id', $ecwid_combination_id);
+                            $batch_logs[] = "[SUCCESS] Variation saved with emergency SKU '$emergency_sku' for Ecwid Combo ID $ecwid_combination_id";
+                            $processed_count++;
+                        } else {
+                            $batch_logs[] = "[ERROR] Emergency SKU save also failed for Ecwid Combo ID $ecwid_combination_id";
+                            $failed_count++;
+                        }
+                    } catch (Exception $e2) {
+                        $batch_logs[] = "[ERROR] Emergency SKU save exception for Ecwid Combo ID $ecwid_combination_id: " . $e2->getMessage();
+                        $failed_count++;
+                    }
+                } else {
+                    $failed_count++;
+                }
             }
             $batch_logs[] = "--- Finished Ecwid Combination ID: $ecwid_combination_id ---";
         }

@@ -397,6 +397,22 @@ While the plugin is free and open source, professional services are available:
 **Release Date:** August 29, 2025  
 **Update Policy:** Regular updates for compatibility and feature enhancements
 
+### Recent Updates (v1.0.5)
+- **CRITICAL FIX:** Eliminated 500 Internal Server Errors during full sync operations through comprehensive error handling and resource management
+- **MAJOR IMPROVEMENT:** Dynamic batch sizing - Categories sync 15 items per batch (5x faster), Products use 3 items for stability  
+- **NEW:** Intelligent SKU conflict resolution - Automatically handles duplicate SKUs during variation processing with multi-level fallback
+- **ENHANCED:** API request retry logic with exponential backoff for rate limiting (429) and server errors (5xx)
+- **IMPROVED:** Memory management - Increased to 512MB for sync operations with better resource allocation
+- **ADDED:** Comprehensive exception handling - Fatal errors and regular exceptions caught with user-friendly error messages
+- **NEW:** Enhanced term creation with conflict resolution - Handles concurrent database operations gracefully
+- **IMPROVED:** Variation batch processing reduced from 50 to 25 items for better stability
+- **ADDED:** Emergency SKU generation - Timestamp-based unique SKUs when conflicts cannot be resolved normally
+- **ENHANCED:** JavaScript error handling - Automatic retry for retryable errors with progressive delays
+- **IMPROVED:** Database operation robustness - Better handling of term creation conflicts and race conditions
+- **ADDED:** Professional error classification - Server errors, rate limits, and network issues handled distinctly
+- **ENHANCED:** Sync reliability for large stores - Handles memory exhaustion and database timeout scenarios
+- **IMPROVED:** Real-time error feedback - Clear indication of temporary vs permanent failures with retry recommendations
+
 ### Recent Updates (v1.0.4)
 - **CRITICAL FIX:** Client-side pagination prevents browser freezing with large product catalogs (6000+ products)
 - **MAJOR UX IMPROVEMENT:** Product lists now display 50 items per page instead of rendering all products simultaneously

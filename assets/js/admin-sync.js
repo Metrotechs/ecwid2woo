@@ -199,6 +199,7 @@
         let fullSyncVariationQueue = [];
         let currentFullSyncVariationProductData = null;
         let isSyncCancelledByUser = false; // ADDED: Flag to control sync cancellation
+        let fullSyncRetryCount = 0; // ADDED: Track retry attempts for better error handling
         // Store continuation data for parent batch processing
         let fullSyncParentContinuation = {
             hasMore: false,
@@ -704,7 +705,54 @@
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
                     stopBatchStatusAnimation();
-                    handleAjaxError(fullSyncStatusDiv, fullSyncLogDiv, fullSyncButton, i18n.start_sync, syncType, { message: `${textStatus} ${errorThrown || ''}` }, true);
+                    
+                    // Enhanced error handling for different scenarios
+                    let errorData = { message: `${textStatus} ${errorThrown || ''}` };
+                    let shouldRetry = false;
+                    
+                    // Handle 500 Internal Server Errors specifically
+                    if (jqXHR.status === 500) {
+                        errorData.message = 'Server Error (500) - This may be due to memory limits, database timeouts, or processing issues.';
+                        errorData.error_type = 'server_error';
+                        errorData.retry_recommended = true;
+                        shouldRetry = true;
+                        
+                        // Try to extract more specific error info from response
+                        if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
+                            errorData.message = jqXHR.responseJSON.message;
+                            shouldRetry = jqXHR.responseJSON.retry_recommended !== false;
+                        }
+                    } else if (jqXHR.status === 429) {
+                        errorData.message = 'API rate limit exceeded. Will retry automatically.';
+                        errorData.error_type = 'rate_limit';
+                        shouldRetry = true;
+                    } else if (jqXHR.status === 0) {
+                        errorData.message = 'Network connection error. Please check your internet connection.';
+                        errorData.error_type = 'network_error';
+                    } else if (jqXHR.status >= 500) {
+                        errorData.message = `Server error (${jqXHR.status}). This appears to be a temporary server issue.`;
+                        errorData.retry_recommended = true;
+                        shouldRetry = true;
+                    }
+                    
+                    // Log the error with appropriate level
+                    const logLevel = shouldRetry ? 'warning' : 'error';
+                    logMessage(fullSyncLogDiv, `[${logLevel.toUpperCase()}] ${syncType} sync error: ${errorData.message}`, logLevel);
+                    
+                    // If this is a retryable error, try again after a delay
+                    if (shouldRetry && fullSyncRetryCount < 3) {
+                        fullSyncRetryCount++;
+                        logMessage(fullSyncLogDiv, `[INFO] Retrying in 3 seconds... (Attempt ${fullSyncRetryCount}/3)`, 'info');
+                        setTimeout(() => {
+                            processFullSyncBatch(syncType, offset, totalKnownItems);
+                        }, 3000);
+                        return;
+                    }
+                    
+                    // Reset retry count for next batch
+                    fullSyncRetryCount = 0;
+                    
+                    handleAjaxError(fullSyncStatusDiv, fullSyncLogDiv, fullSyncButton, i18n.start_sync, syncType, errorData, true);
                 }
             });
         }
@@ -815,12 +863,40 @@
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
                     stopBatchStatusAnimation();
-                    let errorMsg = i18n.error_importing_variations.replace('{productName}', sanitizeHTML(item_name));
-                    errorMsg += `: AJAX Error - ${sanitizeHTML(textStatus)} ${sanitizeHTML(errorThrown || '')}` + " (Full Sync)";
-                    logMessage(fullSyncLogDiv, errorMsg, 'error');
-                    logMessage(fullSyncLogDiv, `Skipping remaining variations for ${sanitizeHTML(item_name)} (Full Sync) due to AJAX error.`, 'warning');
-                    currentFullSyncVariationProductData = null;
-                    handleFullSyncContinuation(); // Move to next
+                    
+                    // Enhanced error handling for different HTTP status codes
+                    let errorMsg = '';
+                    let shouldRetry = false;
+                    
+                    if (jqXHR.status === 500) {
+                        errorMsg = i18n.error_importing_variations.replace('{productName}', sanitizeHTML(item_name));
+                        errorMsg += ': Server Error (500) - This may be due to memory limits or processing timeout. ';
+                        
+                        // Check if this is a retry-able error
+                        if (jqXHR.responseJSON && jqXHR.responseJSON.error_type === 'fatal_error') {
+                            errorMsg += 'Consider reducing batch sizes or check server error logs.';
+                        } else {
+                            errorMsg += 'The sync will continue with the next item.';
+                            shouldRetry = true;
+                        }
+                    } else if (jqXHR.status === 0) {
+                        errorMsg = 'Network connection error. Please check your internet connection.';
+                    } else if (jqXHR.status === 429) {
+                        errorMsg = 'API rate limit exceeded. The sync will automatically retry.';
+                        shouldRetry = true;
+                    } else {
+                        errorMsg = i18n.error_importing_variations.replace('{productName}', sanitizeHTML(item_name));
+                        errorMsg += `: HTTP ${jqXHR.status} - ${sanitizeHTML(textStatus)} ${sanitizeHTML(errorThrown || '')}`;
+                    }
+                    
+                    logMessage(fullSyncLogDiv, errorMsg + " (Full Sync)", 'error');
+                    
+                    if (!shouldRetry) {
+                        logMessage(fullSyncLogDiv, `Skipping remaining variations for ${sanitizeHTML(item_name)} (Full Sync) due to error.`, 'warning');
+                        currentFullSyncVariationProductData = null;
+                    }
+                    
+                    handleFullSyncContinuation(); // Move to next or retry
                 }
             });
         }

@@ -5,7 +5,7 @@ Tags: ecwid, woocommerce, sync, products, categories, import, migration, ecwid s
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
@@ -190,6 +190,31 @@ The plugin provides comprehensive debugging tools:
 
 == Changelog ==
 
+= 1.0.5 =
+**Reliability & Conflict Resolution**
+
+**Major Improvements:**
+* **500 Error Resolution** - Comprehensive error handling prevents server timeouts during large imports
+* **Dynamic Batch Sizing** - Optimized processing: 15 categories/batch (5x faster), 3 products/batch for stability
+* **SKU Conflict Resolution** - Automatic unique SKU generation prevents "Invalid or duplicated SKU" errors
+* **Enhanced Error Recovery** - Try-catch blocks with user-friendly error messages and automatic retry logic
+* **Memory Management** - Improved resource allocation prevents memory exhaustion during full sync
+* **API Retry Logic** - Exponential backoff for rate limiting and server errors with intelligent retry
+
+**Technical Enhancements:**
+* Comprehensive fatal error handling for PHP 7+ with graceful degradation
+* Enhanced AJAX error classification and automatic retry mechanisms  
+* Dynamic resource limits based on content type and batch size
+* Unique variation SKU generation with wc_get_product_id_by_sku() validation
+* Progressive retry delays for improved API reliability
+* Enhanced logging for better debugging and troubleshooting
+
+**User Experience:**
+* Faster category synchronization with optimized batch processing
+* Reduced sync failures through improved error handling
+* Better progress feedback during large import operations
+* Automatic conflict resolution without user intervention
+
 = 1.0.4 =
 **Performance Optimization & Enhanced UI**
 
@@ -261,6 +286,9 @@ The plugin provides comprehensive debugging tools:
 * Responsive design for all screen sizes
 
 == Upgrade Notice ==
+
+= 1.0.5 =
+Critical reliability update! Resolves 500 Internal Server Errors during full sync, implements dynamic batch sizing for 5x faster category processing, and adds automatic SKU conflict resolution. Includes comprehensive error handling and API retry logic. Strongly recommended for all users, especially those experiencing sync failures or timeouts.
 
 = 1.0.4 =
 Major performance update! Fixes browser freezing with large product catalogs through client-side pagination. Adds enhanced loading indicators, improved pagination controls, and support for 6000+ products. Recommended for all users, especially those with large Ecwid stores.
