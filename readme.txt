@@ -1,7 +1,7 @@
 === Ecwid2Woo Product Sync ===
 Contributors: Metrotechs, Richard Hunting
 Donate link: https://metrotechs.io/donate
-Tags: ecwid, woocommerce, sync, products, categories, import, migration, ecwid sync, woocommerce sync, product import, category import, product sync, category sync, ecwid to woocommerce, woocommerce ecwid
+Tags: ecwid, woocommerce, sync, products, categories
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.2
@@ -288,7 +288,7 @@ The plugin provides comprehensive debugging tools:
 == Upgrade Notice ==
 
 = 1.0.5 =
-Critical reliability update! Resolves 500 Internal Server Errors during full sync, implements dynamic batch sizing for 5x faster category processing, and adds automatic SKU conflict resolution. Includes comprehensive error handling and API retry logic. Strongly recommended for all users, especially those experiencing sync failures or timeouts.
+Critical reliability update! Fixes 500 errors during sync, adds dynamic batch sizing for faster category processing, and automatic SKU conflict resolution. Strongly recommended for users experiencing sync failures or timeouts.
 
 = 1.0.4 =
 Major performance update! Fixes browser freezing with large product catalogs through client-side pagination. Adds enhanced loading indicators, improved pagination controls, and support for 6000+ products. Recommended for all users, especially those with large Ecwid stores.
@@ -297,7 +297,7 @@ Major performance update! Fixes browser freezing with large product catalogs thr
 Recommended update. Adds multilingual-safe category slugs, category thumbnail import, improved error diagnostics, and multiple stability fixes including activation error resolution and correct success reporting after fallbacks.
 
 = 1.0.0 =
-This is the first official release featuring a complete rewrite with professional UI, enhanced performance, better error handling, and improved WordPress standards compliance. If you've been using a previous version, please backup your database before upgrading and test the connection after activation.
+First official release with a complete rewrite, professional UI, better performance, improved error handling, and WordPress standards compliance. Please backup your database before upgrading and test the connection after activation.
 
 == Support ==
 
