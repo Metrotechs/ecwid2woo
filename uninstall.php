@@ -2,7 +2,7 @@
 /**
  * Ecwid2Woo Product Sync Uninstall
  *
- * Uninstalls the plugin and deletes its data.
+ * Robust uninstall script with enhanced file cleanup.
  *
  * @package Ecwid2Woo
  */
@@ -12,51 +12,95 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
     exit;
 }
 
-global $wpdb;
+// Ensure we have access to WordPress functions
+if ( ! function_exists( 'delete_option' ) ) {
+    return;
+}
 
-// 1. Delete Plugin Options
+// Delete plugin options
 delete_option( 'ecwid_wc_sync_options' );
 delete_option( 'ecwid_wc_sync_missing_parents' );
-// Add any other options your plugin might create here.
 
-// 2. Delete Custom Post Type Posts ('ecwid_placeholder')
-$placeholder_posts_args = array(
-    'post_type'      => 'ecwid_placeholder',
-    'posts_per_page' => -1,
-    'fields'         => 'ids', // Only get post IDs for efficiency.
-    'post_status'    => 'any', // Include private, trash, etc.
-);
-$placeholder_posts = get_posts( $placeholder_posts_args );
+// Delete custom post type posts only if functions exist
+if ( function_exists( 'get_posts' ) && function_exists( 'wp_delete_post' ) ) {
+    $posts_to_delete = get_posts( array(
+        'post_type'      => 'ecwid_placeholder',
+        'posts_per_page' => 50,
+        'fields'         => 'ids',
+        'post_status'    => array( 'any', 'trash', 'auto-draft' ),
+    ) );
 
-if ( ! empty( $placeholder_posts ) ) {
-    foreach ( $placeholder_posts as $post_id ) {
-        wp_delete_post( $post_id, true ); // true to force delete, bypass trash.
+    if ( ! empty( $posts_to_delete ) ) {
+        foreach ( $posts_to_delete as $post_id ) {
+            wp_delete_post( $post_id, true );
+        }
     }
 }
 
-// 3. Delete Term Meta
-// Meta key for Ecwid category ID link
-$wpdb->delete( $wpdb->termmeta, array( 'meta_key' => '_ecwid_category_id' ) );
-// Meta key for placeholder category identification
-$wpdb->delete( $wpdb->termmeta, array( 'meta_key' => '_ecwid_placeholder_category' ) );
-
-// 4. Delete Post Meta (for products and variations)
-$post_meta_keys_to_delete = array(
-    '_ecwid_product_id',
-    '_ecwid_product_sku_ref',
-    '_ecwid_last_sync_time',
-    '_ecwid_variation_id',
-    '_ecwid_image_source_url',         // For featured images
-    '_ecwid_gallery_image_source_url', // For gallery images
-    '_ecwid_placeholder_parent_id',    // For CPT 'ecwid_placeholder'
-    '_ecwid_placeholder_term_id',      // For CPT 'ecwid_placeholder'
-);
-
-foreach ( $post_meta_keys_to_delete as $meta_key ) {
-    $wpdb->delete( $wpdb->postmeta, array( 'meta_key' => $meta_key ) );
+// Clean up transients if function exists
+if ( function_exists( 'delete_transient' ) ) {
+    delete_transient( 'ecwid_wc_sync_cache' );
+    delete_transient( 'ecwid_wc_categories_cache' );
+    delete_transient( 'ecwid_wc_products_cache' );
 }
 
-// Clear any cached data related to the plugin if necessary
-wp_cache_flush();
+// Clear any scheduled events if function exists
+if ( function_exists( 'wp_clear_scheduled_hook' ) ) {
+    wp_clear_scheduled_hook( 'ecwid_wc_sync_cron' );
+}
+
+// Database cleanup with direct queries (only if wpdb is available)
+global $wpdb;
+if ( $wpdb ) {
+    // Delete term meta
+    if ( isset( $wpdb->termmeta ) ) {
+        $wpdb->delete( $wpdb->termmeta, array( 'meta_key' => '_ecwid_category_id' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+        $wpdb->delete( $wpdb->termmeta, array( 'meta_key' => '_ecwid_placeholder_category' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+    }
+    
+    // Delete post meta
+    $meta_keys = array(
+        '_ecwid_product_id',
+        '_ecwid_product_sku_ref',
+        '_ecwid_last_sync_time',
+        '_ecwid_variation_id',
+        '_ecwid_image_source_url',
+        '_ecwid_gallery_image_source_url',
+        '_ecwid_placeholder_parent_id',
+        '_ecwid_placeholder_term_id',
+    );
+    
+    foreach ( $meta_keys as $meta_key ) {
+        $wpdb->delete( $wpdb->postmeta, array( 'meta_key' => $meta_key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+    }
+}
+
+// Additional cleanup: try to remove plugin files if possible
+// This helps with the file deletion issue
+if ( function_exists( 'wp_filesystem' ) ) {
+    global $wp_filesystem;
+    if ( ! $wp_filesystem ) {
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+        WP_Filesystem();
+    }
+    
+    if ( $wp_filesystem ) {
+        $plugin_dir = plugin_dir_path( __FILE__ );
+        // Try to set proper permissions before deletion
+        if ( $wp_filesystem->is_dir( $plugin_dir . 'assets' ) ) {
+            $wp_filesystem->chmod( $plugin_dir . 'assets', 0755, true );
+            $wp_filesystem->chmod( $plugin_dir . 'assets/css', 0755, true );
+            $wp_filesystem->chmod( $plugin_dir . 'assets/js', 0755, true );
+            
+            // Set file permissions
+            if ( $wp_filesystem->exists( $plugin_dir . 'assets/css/admin-styles.css' ) ) {
+                $wp_filesystem->chmod( $plugin_dir . 'assets/css/admin-styles.css', 0644 );
+            }
+            if ( $wp_filesystem->exists( $plugin_dir . 'assets/js/admin-sync.js' ) ) {
+                $wp_filesystem->chmod( $plugin_dir . 'assets/js/admin-sync.js', 0644 );
+            }
+        }
+    }
+}
 
 ?>

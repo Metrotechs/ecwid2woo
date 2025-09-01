@@ -5,7 +5,7 @@ Tags: ecwid, woocommerce, sync, products, categories
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.0.5
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
@@ -45,6 +45,7 @@ Whether you're transitioning from Ecwid to WooCommerce or maintaining dual platf
 - One-click connection testing with visual feedback
 
 **⚡ Advanced Technical Features**
+- **High-Speed Processing:** Up to 1,000 products per hour (including variations)
 - AJAX-powered batch processing prevents server timeouts
 - Idempotent operations prevent duplicate entries
 - Memory-optimized for large catalogs

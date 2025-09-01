@@ -1,12 +1,2 @@
-# Exclude tools from source exports (GitHub release source zips)
-/tools export-ignore
-
-# Common metadata not needed in exports
-/.gitignore export-ignore
-/.gitattributes export-ignore
-/README.md export-ignore
-
-# Development documentation - keep in repo but exclude from user downloads
-/UI_ENHANCEMENT_SUMMARY.md export-ignore
-/SYNC_ERROR_FIXES.md export-ignore
-/SKU_CONFLICT_FIX.md export-ignore
+# Auto detect text files and perform LF normalization
+* text=auto

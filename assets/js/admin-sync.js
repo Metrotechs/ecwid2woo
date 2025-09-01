@@ -1,4 +1,7 @@
 (function($) {
+    // Debug Mode: Set to true to enable console debugging
+    window.ecwidDebugMode = false; // Debugging completed, back to production mode
+    
     $(document).ready(function() {
         if (typeof ecwid_sync_params === 'undefined') {
             console.error('Ecwid Sync Error: Localization parameters (ecwid_sync_params) not found. Ensure the plugin is activated and scripts are enqueued correctly.');
@@ -162,11 +165,28 @@
         const categoryPageSyncStatusDiv = $('#category-page-sync-status');
         const categoryPageSyncLogDiv = $('#category-page-sync-log');
         const categoryPageSyncProgressBarContainer = $('#category-page-sync-progress-container');
+        
+        // Enhanced Category Sync UI Elements
+        const categorySyncActivity = $('#category-sync-activity');
+        const categoryCurrentBatchInfo = $('#category-current-batch-info');
+        const categoryProcessingIndicator = $('#category-processing-indicator');
+        const categoryProcessingText = $('#category-processing-text');
+        const categorySyncStats = $('#category-sync-stats');
         const loadCategoriesButton = $('#load-ecwid-categories-button');
-        const categoryListContainer = $('#category-list-container');
-        const categorySyncInitialInfoDiv = $('#category-sync-initial-info');
+        const categoryListContainer = $('#selective-category-list-container');
+        
+        // Create or get pagination container for categories (place it right after the load button)
+        let categoryPaginationContainer = $('#category-pagination-container');
+        if (!categoryPaginationContainer.length) {
+            // Create pagination container and insert it after the load button
+            loadCategoriesButton.after('<div id="category-pagination-container" style="margin-top: 10px;"></div>');
+            categoryPaginationContainer = $('#category-pagination-container');
+        }
+        
+        const categorySyncInitialInfoDiv = $('#selective-sync-initial-info');
         const fixHierarchyButton = $('#fix-category-hierarchy-button');
         const importSelectedCategoriesButton = $('#import-selected-categories-button');
+        const syncAllCategoriesButton = $('#sync-all-categories-button');
 
         // Selective Product Sync UI Elements
         const loadProductsButton = $('#load-ecwid-products-button');
@@ -180,6 +200,7 @@
             paginationContainer = $('#product-pagination-container');
         }
         const importSelectedButton = $('#import-selected-products-button');
+        const syncAllProductsButton = $('#sync-all-products-button');
         const selectiveSyncStatusDiv = $('#selective-sync-status');
         const selectiveSyncProgressBar = $('#selective-sync-bar');
         const selectiveSyncProgressBarContainer = $('#selective-sync-progress-container');
@@ -224,6 +245,12 @@
 
         // Selective Category Sync State
         let ecwidCategoriesForSelection = []; // For selective category sync
+        
+        // Category Pagination State
+        let currentCategoryPage = 1;
+        let categoriesPerPage = 50; // Show 50 categories per page to prevent browser freeze
+        let currentlyDisplayedCategories = []; // Currently displayed category subset
+        let selectedCategoryIds = new Set(); // Track selected categories across all pages
 
         let animationInterval = null; // For status text animation
 
@@ -348,7 +375,7 @@
             }
             
             if (buttonElem && buttonText) {
-                buttonElem.removeClass('disabled').text(buttonText);
+                buttonElem.removeClass('disabled').html(buttonText);
             }
         }
 
@@ -443,7 +470,11 @@
                         fullSyncProductPreviewList.empty();
                         if (products && products.length > 0) {
                             products.forEach(prod => {
-                                fullSyncProductPreviewList.append(`<div>${sanitizeHTML(prod.name || 'Unnamed Product')} (ID: ${prod.id || 'N/A'})</div>`);
+                                const productName = sanitizeHTML(prod.name || 'Unnamed Product');
+                                const productId = prod.id || 'N/A';
+                                const productSku = prod.sku ? ` | SKU: ${sanitizeHTML(prod.sku)}` : '';
+                                const variationCount = prod.combinations ? ` | ${prod.combinations.length} variations` : '';
+                                fullSyncProductPreviewList.append(`<div>${productName} (ID: ${productId}${productSku}${variationCount})</div>`);
                             });
                             fullSyncProductPreviewList.append(`<hr><p><strong>Total products to sync: ${totalProductsToSync}</strong></p>`);
                         } else {
@@ -596,7 +627,7 @@
             } else {
                 stopBatchStatusAnimation();
                 updateStatus(fullSyncStatusDiv, i18n.sync_complete || 'Sync Complete!');
-                logMessage(fullSyncLogDiv, i18n.sync_complete || 'Sync Complete!', 'success');
+                logMessage(fullSyncLogDiv, '✅ Full synchronization completed successfully! All categories and products have been processed.', 'success');
                 fullSyncButton.text(i18n.start_sync || 'Start Full Sync').prop('disabled', false);
                 stopFullSyncButton.hide(); // Hide STOP button on completion
                 loadFullSyncPreviewButton.prop('disabled', false); // Re-enable reload preview
@@ -712,16 +743,55 @@
                     
                     // Handle 500 Internal Server Errors specifically
                     if (jqXHR.status === 500) {
-                        errorData.message = 'Server Error (500) - This may be due to memory limits, database timeouts, or processing issues.';
+                        let errorMessage = 'Server Error (500) - This usually indicates a server memory limit, timeout, or processing issue.';
+                        let suggestions = [];
+                        
+                        // Try to extract more specific error info from response
+                        if (jqXHR.responseJSON && jqXHR.responseJSON.data) {
+                            const responseData = jqXHR.responseJSON.data;
+                            
+                            if (responseData.error_type === 'fatal_error') {
+                                errorMessage = responseData.message || errorMessage;
+                                
+                                // Add specific suggestions based on error type
+                                if (responseData.suggested_action === 'increase_memory_or_reduce_batch') {
+                                    suggestions.push('• Increase server memory limit to 128MB+ (recommended 256MB+) or contact your hosting provider');
+                                    suggestions.push('• Try syncing categories and products separately');
+                                    suggestions.push('• Reduce the number of items processed at once');
+                                } else if (responseData.suggested_action === 'reduce_batch_size') {
+                                    suggestions.push('• Try syncing smaller batches of items');
+                                    suggestions.push('• Increase server execution time limit');
+                                } else if (responseData.suggested_action === 'check_server_logs') {
+                                    suggestions.push('• Check your server error logs for more details');
+                                    suggestions.push('• Contact your hosting provider for assistance');
+                                }
+                                
+                                // Add memory info if available
+                                if (responseData.memory_info) {
+                                    errorMessage += `\n\nMemory Info: Limit: ${responseData.memory_info.limit}, Usage: ${responseData.memory_info.usage}, Peak: ${responseData.memory_info.peak}`;
+                                }
+                            } else if (jqXHR.responseJSON.message) {
+                                errorMessage = jqXHR.responseJSON.message;
+                            }
+                        }
+                        
+                        // Add general suggestions if none were provided
+                        if (suggestions.length === 0) {
+                            suggestions = [
+                                '• Try refreshing the page and syncing again',
+                                '• Check if other plugins are causing conflicts',
+                                '• Contact your hosting provider to increase memory limits'
+                            ];
+                        }
+                        
+                        errorData.message = errorMessage;
+                        if (suggestions.length > 0) {
+                            errorData.message += '\n\nSuggestions:\n' + suggestions.join('\n');
+                        }
+                        
                         errorData.error_type = 'server_error';
                         errorData.retry_recommended = true;
                         shouldRetry = true;
-                        
-                        // Try to extract more specific error info from response
-                        if (jqXHR.responseJSON && jqXHR.responseJSON.message) {
-                            errorData.message = jqXHR.responseJSON.message;
-                            shouldRetry = jqXHR.responseJSON.retry_recommended !== false;
-                        }
                     } else if (jqXHR.status === 429) {
                         errorData.message = 'API rate limit exceeded. Will retry automatically.';
                         errorData.error_type = 'rate_limit';
@@ -919,15 +989,52 @@
             if (loadCategoriesButton.hasClass('disabled')) return;
 
             const originalButtonText = loadCategoriesButton.text();
-            loadCategoriesButton.addClass('disabled').text(i18n.loading_ecwid_categories);
+            loadCategoriesButton.addClass('disabled').html('<span class="loading-spinner"></span>' + (i18n.loading_ecwid_categories || 'Loading Categories...'));
             
-            categoryListContainer.html('<p>' + i18n.loading_ecwid_categories + '</p>').show();
+            // Create enhanced loading interface matching Product Sync
+            const loadingHtml = `
+                <div class="ecwid-loading-container" style="text-align: center; padding: 40px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 5px; margin: 20px 0;">
+                    <div class="ecwid-loading-spinner" style="font-size: 48px; color: #0073aa; margin-bottom: 20px;">
+                        <span class="dashicons dashicons-update" style="animation: ecwid-spin 1s linear infinite;"></span>
+                    </div>
+                    <div class="ecwid-loading-title" style="font-size: 18px; font-weight: bold; color: #23282d; margin-bottom: 10px;">
+                        📁 Loading Categories from Ecwid
+                    </div>
+                    <div class="ecwid-loading-status" style="font-size: 14px; color: #666; margin-bottom: 15px;">
+                        Making API calls to fetch all categories...
+                    </div>
+                    <div class="ecwid-loading-progress" style="font-size: 12px; color: #999;">
+                        This may take a moment for large stores (700+ categories require ~8 API calls)
+                    </div>
+                </div>
+                <style>
+                    @keyframes ecwid-spin {
+                        from { transform: rotate(0deg); }
+                        to { transform: rotate(360deg); }
+                    }
+                </style>
+            `;
+            
+            categoryListContainer.html(loadingHtml).show();
             if (categorySyncInitialInfoDiv.length) {
-                categorySyncInitialInfoDiv.text(i18n.loading_ecwid_categories);
+                categorySyncInitialInfoDiv.html(`
+                    <div style="padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; margin: 10px 0;">
+                        <strong>⏳ Loading Categories...</strong><br>
+                        <span style="font-size: 12px; color: #856404;">Fetching complete category catalog from Ecwid API</span>
+                    </div>
+                `);
             }
             importSelectedCategoriesButton.hide();
             ecwidCategoriesForSelection = [];
             totalCategoriesForCategoryPageSync = 0;
+            
+            // Clear any existing pagination and reset pagination state
+            const categoryPaginationContainer = $('#category-pagination-container');
+            if (categoryPaginationContainer.length) {
+                categoryPaginationContainer.html('');
+            }
+            currentCategoryPage = 1;
+            selectedCategoryIds.clear(); // Reset category selection across all pages
 
             $.ajax({
                 url: ajax_url,
@@ -965,13 +1072,15 @@
                             categorySyncInitialInfoDiv.html(styledStatusHtml);
                         }
 
-                        // Console debug info
-                        console.log('Category loading debug:', {
-                            categoriesReceived: totalFound,
-                            apiCallsMade: apiCalls,
-                            totalAvailable: totalAvailable,
-                            actualArrayLength: ecwidCategoriesForSelection.length
-                        });
+                        // Category loading complete
+                        if (window.ecwidDebugMode) {
+                            console.log('Category loading debug:', {
+                                categoriesReceived: totalFound,
+                                apiCallsMade: apiCalls,
+                                totalAvailable: totalAvailable,
+                                actualArrayLength: ecwidCategoriesForSelection.length
+                            });
+                        }
 
                         renderCategorySelectionList(ecwidCategoriesForSelection);
                         if (ecwidCategoriesForSelection.length > 0) {
@@ -988,6 +1097,11 @@
                         if (categorySyncInitialInfoDiv.length) {
                             categorySyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
                         }
+                        // Clear pagination on error
+                        const categoryPaginationContainer = $('#category-pagination-container');
+                        if (categoryPaginationContainer.length) {
+                            categoryPaginationContainer.html('');
+                        }
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
@@ -996,9 +1110,14 @@
                     if (categorySyncInitialInfoDiv.length) {
                          categorySyncInitialInfoDiv.html('<span style="color:red;">' + errorText + '</span>');
                     }
+                    // Clear pagination on error
+                    const categoryPaginationContainer = $('#category-pagination-container');
+                    if (categoryPaginationContainer.length) {
+                        categoryPaginationContainer.html('');
+                    }
                 },
                 complete: function() {
-                    loadCategoriesButton.removeClass('disabled').text(originalButtonText);
+                    loadCategoriesButton.removeClass('disabled').html(originalButtonText);
                 }
             });
         }
@@ -1019,17 +1138,17 @@
             // Select All/None functionality
             $('#select-all-categories-checkbox').off('change').on('change', function() {
                 const isChecked = $(this).is(':checked');
-                $('.category-checkbox').prop('checked', isChecked);
+                $('.ecwid-category-select').prop('checked', isChecked);
                 updateSelectedCategoriesCount();
             });
 
             // Individual checkbox changes
-            $(document).off('change', '.category-checkbox').on('change', '.category-checkbox', function() {
+            $(document).off('change', '.ecwid-category-select').on('change', '.ecwid-category-select', function() {
                 updateSelectedCategoriesCount();
                 
                 // Update select all checkbox state
-                const totalCheckboxes = $('.category-checkbox').length;
-                const checkedCheckboxes = $('.category-checkbox:checked').length;
+                const totalCheckboxes = $('.ecwid-category-select').length;
+                const checkedCheckboxes = $('.ecwid-category-select:checked').length;
                 const selectAllCheckbox = $('#select-all-categories-checkbox');
                 
                 if (checkedCheckboxes === 0) {
@@ -1046,8 +1165,8 @@
         }
 
         function updateSelectedCategoriesCount() {
-            const selectedCount = $('.category-checkbox:checked').length;
-            const totalCount = $('.category-checkbox').length;
+            const selectedCount = $('.ecwid-category-select:checked').length;
+            const totalCount = $('.ecwid-category-select').length;
             const importButton = $('#import-selected-categories-button');
             
             if (selectedCount > 0) {
@@ -1063,7 +1182,7 @@
         if ($('#select-all-categories-button').length) {
             $('#select-all-categories-button').on('click', function(e) {
                 e.preventDefault();
-                const checkboxes = $('.category-checkbox');
+                const checkboxes = $('.ecwid-category-select');
                 const checkedCount = checkboxes.filter(':checked').length;
                 const shouldCheck = checkedCount === 0;
                 
@@ -1080,9 +1199,14 @@
                 if ($(this).hasClass('disabled')) return;
 
                 const selectedCategoryIds = [];
-                $('.category-checkbox:checked').each(function() {
+                $('.ecwid-category-select:checked').each(function() {
                     selectedCategoryIds.push(parseInt($(this).val()));
                 });
+
+                if (window.ecwidDebugMode) {
+                    console.log('DEBUG: Selected category IDs:', selectedCategoryIds);
+                    console.log('DEBUG: Number of selected categories:', selectedCategoryIds.length);
+                }
 
                 if (selectedCategoryIds.length === 0) {
                     alert(i18n.no_categories_selected || 'No categories selected for import.');
@@ -1092,15 +1216,25 @@
                 // Disable buttons during import
                 const importButton = $(this);
                 const originalText = importButton.text();
-                importButton.addClass('disabled').text(i18n.importing_selected_categories || 'Importing Selected Categories...');
+                importButton.addClass('disabled').html('<span class="loading-spinner"></span>' + (i18n.importing_selected_categories || 'Importing Selected Categories...'));
                 loadCategoriesButton.addClass('disabled').prop('disabled', true);
                 categoryPageSyncButton.addClass('disabled').prop('disabled', true);
 
-                // Clear previous results
+                // Show enhanced activity display for selective import
+                categorySyncActivity.show();
                 categoryPageSyncLogDiv.html('');
                 updateProgressBar(categoryPageSyncProgressBar, 0);
                 categoryPageSyncProgressBarContainer.show();
-                updateStatus(categoryPageSyncStatusDiv, i18n.importing_selected_categories || 'Importing Selected Categories...');
+                
+                // Update activity indicators
+                categoryCurrentBatchInfo.html(`Preparing to import ${selectedCategoryIds.length} selected categories...`);
+                categoryProcessingText.text('Starting selective import...');
+                
+                // Initialize stats for selective import
+                resetCategorySyncStats();
+                updateCategorySyncStats(0, 0, 0, selectedCategoryIds.length);
+                
+                updateStatus(categoryPageSyncStatusDiv, `Importing ${selectedCategoryIds.length} selected categories...`);
 
                 // Start import
                 importSelectedCategories(selectedCategoryIds, importButton, originalText);
@@ -1108,48 +1242,194 @@
         }
 
         function importSelectedCategories(categoryIds, importButton, originalButtonText) {
-            logMessage(categoryPageSyncLogDiv, `Starting import of ${categoryIds.length} selected categories...`, 'info');
+            // Use the same UI elements as Product Sync for consistency
+            selectiveSyncStatusDiv.empty();
+            selectiveSyncLogDiv.empty();
+            selectiveSyncProgressBarContainer.show();
+            updateProgressBar(selectiveSyncProgressBar, 0);
+            updateStatus(selectiveSyncStatusDiv, 'Starting category import...');
+            
+            // Check if we need to use batching for large imports
+            const batchSize = 50; // Process 50 categories at a time
+            const useBatching = categoryIds.length > batchSize;
+            
+            if (useBatching) {
+                importCategoriesInBatches(categoryIds, importButton, originalButtonText, batchSize);
+                return;
+            }
+            
+            // For smaller imports, process all at once
+            processCategoryBatch(categoryIds, importButton, originalButtonText, 1, 1);
+        }
+        
+        function importCategoriesInBatches(categoryIds, importButton, originalButtonText, batchSize) {
+            const totalBatches = Math.ceil(categoryIds.length / batchSize);
+            let currentBatch = 1;
+            let allResults = {
+                imported_count: 0,
+                updated_count: 0,
+                skipped_count: 0,
+                failed_count: 0,
+                logs: []
+            };
+            
+            // Update activity info for batched import
+            updateStatus(selectiveSyncStatusDiv, `Processing ${categoryIds.length} categories in ${totalBatches} batches...`);
+            
+            function processBatch(batchNumber) {
+                const startIndex = (batchNumber - 1) * batchSize;
+                const endIndex = Math.min(startIndex + batchSize, categoryIds.length);
+                const batchIds = categoryIds.slice(startIndex, endIndex);
+                
+                // Update activity display
+                updateStatus(selectiveSyncStatusDiv, `Processing batch ${batchNumber} of ${totalBatches} (${batchIds.length} categories)...`);
+                
+                processCategoryBatch(batchIds, importButton, originalButtonText, batchNumber, totalBatches, function(batchResults) {
+                    // Accumulate results
+                    allResults.imported_count += batchResults.imported_count || 0;
+                    allResults.updated_count += batchResults.updated_count || 0;
+                    allResults.skipped_count += batchResults.skipped_count || 0;
+                    allResults.failed_count += batchResults.failed_count || 0;
+                    if (batchResults.logs) {
+                        allResults.logs = allResults.logs.concat(batchResults.logs);
+                    }
+                    
+                    // Update progress
+                    const overallProgress = (batchNumber / totalBatches) * 100;
+                    updateProgressBar(selectiveSyncProgressBar, overallProgress);
+                    
+                    if (batchNumber < totalBatches) {
+                        // Process next batch
+                        setTimeout(() => processBatch(batchNumber + 1), 500); // Small delay between batches
+                    } else {
+                        // All batches completed
+                        updateProgressBar(selectiveSyncProgressBar, 100);
+                        updateStatus(selectiveSyncStatusDiv, 'All categories imported successfully!');
+                        
+                        const finalMessage = `Batch import completed. Imported: ${allResults.imported_count}, Updated: ${allResults.updated_count}, Skipped: ${allResults.skipped_count}, Failed: ${allResults.failed_count}`;
+                        logMessage(selectiveSyncLogDiv, finalMessage, 'success');
+                        
+                        // Display all accumulated logs
+                        if (allResults.logs && allResults.logs.length > 0) {
+                            allResults.logs.forEach(function(logEntry) {
+                                logMessage(selectiveSyncLogDiv, logEntry, 'info');
+                            });
+                        }
+                        
+                        // Re-enable buttons
+                        importButton.removeClass('disabled').html(originalButtonText);
+                        loadCategoriesButton.removeClass('disabled').prop('disabled', false);
+                        updateSelectedCategoriesCount();
+                    }
+                });
+            }
+            
+            // Start processing batches
+            processBatch(1);
+        }
+        
+        function processCategoryBatch(categoryIds, importButton, originalButtonText, batchNumber, totalBatches, callback) {
+            // Update activity info
+            if (totalBatches === 1) {
+                updateStatus(selectiveSyncStatusDiv, 'Processing categories...');
+            }
+            
+            logMessage(selectiveSyncLogDiv, `Starting import of ${categoryIds.length} categories${totalBatches > 1 ? ` (batch ${batchNumber}/${totalBatches})` : ''}...`, 'info');
+            
+            // Update progress bar to show processing
+            if (totalBatches === 1) {
+                updateProgressBar(selectiveSyncProgressBar, 10);
+                updateStatus(selectiveSyncStatusDiv, 'Processing categories...');
+            }
             
             $.ajax({
                 url: ajax_url,
                 method: 'POST',
+                timeout: 300000, // 5 minutes timeout
                 data: {
                     action: 'ecwid_wc_import_selected_categories',
                     nonce: nonce,
                     category_ids: categoryIds
                 },
+                beforeSend: function() {
+                    if (totalBatches === 1) {
+                        updateProgressBar(selectiveSyncProgressBar, 25);
+                        updateStatus(selectiveSyncStatusDiv, 'Importing categories from Ecwid...');
+                    }
+                },
                 success: function(response) {
+                    if (window.ecwidDebugMode) {
+                        console.log('DEBUG: AJAX response received:', response);
+                    }
+                    
                     if (response.success) {
                         const data = response.data;
-                        updateProgressBar(categoryPageSyncProgressBar, 100);
-                        updateStatus(categoryPageSyncStatusDiv, i18n.categories_import_complete || 'Selected categories import complete!');
                         
-                        logMessage(categoryPageSyncLogDiv, data.message, 'success');
-                        logMessage(categoryPageSyncLogDiv, `Imported: ${data.imported_count}, Skipped: ${data.skipped_count}, Failed: ${data.failed_count}`, 'info');
+                        if (totalBatches === 1) {
+                            updateProgressBar(selectiveSyncProgressBar, 100);
+                            updateStatus(selectiveSyncStatusDiv, i18n.categories_import_complete || 'Selected categories import complete!');
+                        }
                         
-                        // Display detailed logs
-                        if (data.logs && data.logs.length > 0) {
-                            data.logs.forEach(function(logEntry) {
-                                logMessage(categoryPageSyncLogDiv, logEntry, 'info');
+                        // Extract counts with proper fallbacks
+                        const importedCount = parseInt(data.imported_count) || 0;
+                        const updatedCount = parseInt(data.updated_count) || 0;
+                        const skippedCount = parseInt(data.skipped_count) || 0;
+                        const failedCount = parseInt(data.failed_count) || 0;
+                        const totalProcessed = importedCount + updatedCount + skippedCount + failedCount;
+                        
+                        logMessage(selectiveSyncLogDiv, data.message, 'success');
+                        
+                        if (totalBatches === 1) {
+                            // Display detailed logs
+                            if (data.logs && data.logs.length > 0) {
+                                data.logs.forEach(function(logEntry) {
+                                    logMessage(selectiveSyncLogDiv, logEntry, 'info');
+                                });
+                            }
+                        }
+                        
+                        // Call callback for batching system (return the raw data)
+                        if (callback) {
+                            callback({
+                                imported_count: importedCount,
+                                updated_count: updatedCount,
+                                skipped_count: skippedCount,
+                                failed_count: failedCount,
+                                logs: data.logs
                             });
                         }
                     } else {
                         const errorMsg = response.data && response.data.message ? response.data.message : i18n.ajax_error;
-                        updateStatus(categoryPageSyncStatusDiv, 'Import failed');
-                        logMessage(categoryPageSyncLogDiv, `Error: ${errorMsg}`, 'error');
+                        
+                        if (totalBatches === 1) {
+                            updateStatus(selectiveSyncStatusDiv, 'Import failed');
+                            logMessage(selectiveSyncLogDiv, `Error: ${errorMsg}`, 'error');
+                        }
+                        
+                        if (callback) {
+                            callback({ failed_count: categoryIds.length, logs: [`Error: ${errorMsg}`] });
+                        }
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
                     const errorMsg = `${i18n.ajax_error}: ${textStatus} ${errorThrown || ''}`;
-                    updateStatus(categoryPageSyncStatusDiv, 'Import failed');
-                    logMessage(categoryPageSyncLogDiv, `Error: ${errorMsg}`, 'error');
+                    
+                    if (totalBatches === 1) {
+                        updateStatus(selectiveSyncStatusDiv, 'Import failed');
+                        logMessage(selectiveSyncLogDiv, `Error: ${errorMsg}`, 'error');
+                    }
+                    
+                    if (callback) {
+                        callback({ failed_count: categoryIds.length, logs: [`Error: ${errorMsg}`] });
+                    }
                 },
                 complete: function() {
-                    // Re-enable buttons
-                    importButton.removeClass('disabled').text(originalButtonText);
-                    loadCategoriesButton.removeClass('disabled').prop('disabled', false);
-                    categoryPageSyncButton.removeClass('disabled').prop('disabled', false);
-                    updateSelectedCategoriesCount(); // Update button text with selection count
+                    if (totalBatches === 1) {
+                        // Re-enable buttons for single batch
+                        importButton.removeClass('disabled').html(originalButtonText);
+                        loadCategoriesButton.removeClass('disabled').prop('disabled', false);
+                        updateSelectedCategoriesCount();
+                    }
                 }
             });
         }
@@ -1163,13 +1443,19 @@
                     logMessage(categoryPageSyncLogDiv, "Warning: Category list not loaded or appears empty. Totals in status might show as N/A. Consider loading categories first.", 'warning');
                 }
 
-                $(this).addClass('disabled').text(i18n.syncing_categories_page_button);
+                $(this).addClass('disabled').html('<span class="loading-spinner"></span>' + (i18n.syncing_categories_page_button || 'Syncing Categories...'));
                 loadCategoriesButton.addClass('disabled').prop('disabled', true); 
                 fixHierarchyButton.add('disabled').prop('disabled', true);
                 
+                // Show enhanced activity display
+                categorySyncActivity.show();
                 categoryPageSyncLogDiv.html('');
                 updateProgressBar(categoryPageSyncProgressBar, 0);
                 categoryPageSyncProgressBarContainer.show();
+                
+                // Reset and initialize stats
+                resetCategorySyncStats();
+                updateCategorySyncStats(0, 0, 0, totalCategoriesForCategoryPageSync);
                 
                 const initialStatus = i18n.syncing_item_of_total
                     .replace('{syncType}', 'Categories')
@@ -1182,8 +1468,52 @@
             });
         }
 
+        // Enhanced category sync stats display with cumulative tracking
+        let categorySyncCumulativeStats = { processed: 0, created: 0, updated: 0, errors: 0 };
+        
+        function updateCategorySyncStats(processed = null, created = null, updated = null, total = null) {
+            // Use provided values or current cumulative stats
+            const displayProcessed = processed !== null ? processed : categorySyncCumulativeStats.processed;
+            const displayCreated = created !== null ? created : categorySyncCumulativeStats.created;
+            const displayUpdated = updated !== null ? updated : categorySyncCumulativeStats.updated;
+            const displayErrors = categorySyncCumulativeStats.errors;
+            
+            const statsHtml = `
+                <div class="stat-item">
+                    <div class="stat-value">${displayProcessed}</div>
+                    <div class="stat-label">Processed</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${displayCreated}</div>
+                    <div class="stat-label">Created</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${displayUpdated}</div>
+                    <div class="stat-label">Updated</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${displayErrors}</div>
+                    <div class="stat-label">Errors</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${total !== null && total > 0 ? total : 'N/A'}</div>
+                    <div class="stat-label">Total</div>
+                </div>
+            `;
+            categorySyncStats.html(statsHtml);
+        }
+        
+        function resetCategorySyncStats() {
+            categorySyncCumulativeStats = { processed: 0, created: 0, updated: 0, errors: 0 };
+        }
+
         function processCategoryPageSyncBatch(syncType, offset, totalKnownCategories) {
             let baseStatusForAnimation = i18n.syncing_just_categories_page_status;
+            
+            // Update batch info
+            const batchNumber = Math.floor(offset / 50) + 1; // Assuming 50 categories per batch
+            categoryCurrentBatchInfo.html(`Processing batch ${batchNumber} starting from category ${offset + 1}...`);
+            categoryProcessingText.text('Fetching categories from Ecwid...');
             
             if (offset === 0) { // Initial status already set by button click handler
                 // For animation, use a generic base if numbers are involved or N/A
@@ -1211,41 +1541,78 @@
                 },
                 success: function(response) {
                     stopBatchStatusAnimation();
+                    categoryProcessingText.text('Processing categories...');
+                    
                     if (response.success) {
-                        (response.data.batch_logs || []).forEach(logEntry => categorizeAndLog(categoryPageSyncLogDiv, logEntry));
+                        // Use actual counts from the response
+                        const batchImportedCount = parseInt(response.data.imported_count) || 0;
+                        const batchUpdatedCount = parseInt(response.data.updated_count) || 0;
+                        const batchSkippedCount = parseInt(response.data.skipped_count) || 0;
+                        const batchFailedCount = parseInt(response.data.failed_count) || 0;
+                        const batchProcessedCount = batchImportedCount + batchUpdatedCount + batchSkippedCount + batchFailedCount;
                         
+                        // Log the batch results
+                        (response.data.batch_logs || []).forEach(logEntry => {
+                            categorizeAndLog(categoryPageSyncLogDiv, logEntry);
+                        });
+                        
+                        // Update cumulative stats with actual counts
+                        categorySyncCumulativeStats.created += batchImportedCount;
+                        categorySyncCumulativeStats.updated += batchUpdatedCount + batchSkippedCount; // Combine updated and skipped for display
+                        categorySyncCumulativeStats.errors += batchFailedCount;
+                        categorySyncCumulativeStats.processed = response.data.next_offset || offset + batchProcessedCount;
+                        
+                        // Calculate progress based on items processed so far
                         let currentProgress = 0;
-                        const itemsProcessed = response.data.next_offset || 0;
-                        
-                        // Use the totalKnownCategories (pre-fetched) for progress calculation.
-                        // If it's 0, progress will be based on has_more, or jump to 100.
+                        const itemsProcessed = categorySyncCumulativeStats.processed;
                         const totalForCalc = totalKnownCategories > 0 ? totalKnownCategories : 0;
 
                         if (totalForCalc > 0) {
                             currentProgress = (itemsProcessed / totalForCalc) * 100;
                         } else if (response.data.has_more === false) { 
                             currentProgress = 100; // If no total known and no more items, assume 100%
+                        } else {
+                            // If we don't know total, show incremental progress
+                            currentProgress = Math.min(95, (itemsProcessed / 100) * 100); // Cap at 95% until done
                         }
+                        
                         currentProgress = Math.min(100, Math.max(0, currentProgress));
                         updateProgressBar(categoryPageSyncProgressBar, currentProgress);
                         
+                        // Update stats display with cumulative counts
+                        updateCategorySyncStats(
+                            categorySyncCumulativeStats.processed, 
+                            categorySyncCumulativeStats.created, 
+                            categorySyncCumulativeStats.updated, 
+                            totalForCalc
+                        );
+                        
                         const statusUpdate = i18n.syncing_item_of_total
                             .replace('{syncType}', 'Categories')
-                            .replace('{current}', itemsProcessed)
+                            .replace('{current}', categorySyncCumulativeStats.processed)
                             .replace('{total}', totalForCalc > 0 ? totalForCalc : 'N/A');
                         updateStatus(categoryPageSyncStatusDiv, statusUpdate);
 
                         if (response.data.has_more) {
                             processCategoryPageSyncBatch(syncType, response.data.next_offset, totalKnownCategories); 
                         } else {
+                            // Sync complete
+                            categoryProcessingText.text('Sync completed!');
+                            categoryCurrentBatchInfo.html('✅ All categories have been processed successfully.');
                             updateStatus(categoryPageSyncStatusDiv, i18n.category_sync_page_complete);
                             logMessage(categoryPageSyncLogDiv, i18n.category_sync_page_complete, 'success');
-                            categoryPageSyncButton.removeClass('disabled').text(i18n.start_category_sync_page);
+                            categoryPageSyncButton.removeClass('disabled').html(i18n.start_category_sync_page || 'Sync All Categories');
                             loadCategoriesButton.removeClass('disabled').prop('disabled', false);
                             fixHierarchyButton.removeClass('disabled').prop('disabled', false);
-                            updateProgressBar(categoryPageSyncProgressBar, 100); 
+                            updateProgressBar(categoryPageSyncProgressBar, 100);
+                            
+                            // Hide sync activity display after completion
+                            setTimeout(function() {
+                                categorySyncActivity.hide();
+                            }, 3000);
                         }
                     } else {
+                        categoryProcessingText.text('Error occurred during sync');
                         handleAjaxError(categoryPageSyncStatusDiv, categoryPageSyncLogDiv, categoryPageSyncButton, i18n.start_category_sync_page, syncType, response.data);
                         loadCategoriesButton.removeClass('disabled').prop('disabled', false);
                         fixHierarchyButton.removeClass('disabled').prop('disabled', false);
@@ -1253,6 +1620,7 @@
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
                     stopBatchStatusAnimation();
+                    categoryProcessingText.text('Network error occurred');
                     handleAjaxError(categoryPageSyncStatusDiv, categoryPageSyncLogDiv, categoryPageSyncButton, i18n.start_category_sync_page, syncType, { message: `${textStatus} ${errorThrown || ''}` }, true);
                     loadCategoriesButton.removeClass('disabled').prop('disabled', false);
                     fixHierarchyButton.removeClass('disabled').prop('disabled', false);
@@ -1351,17 +1719,19 @@
                         const disabledCount = parseInt(response.data.disabled_count) || 0;
 
                         // Console logging for debugging
-                        console.log('=== PRODUCT LOADING DEBUG ===');
-                        console.log('Total products found:', totalFound);
-                        console.log('Enabled products:', enabledCount);
-                        console.log('Disabled products:', disabledCount);
-                        console.log('API calls made:', apiCalls);
-                        console.log('Total available in Ecwid:', totalAvailable);
-                        console.log('Actual array length:', ecwidProductsForSelection.length);
-                        console.log('Response data:', response.data);
+                        if (window.ecwidDebugMode) {
+                            console.log('=== PRODUCT LOADING DEBUG ===');
+                            console.log('Total products found:', totalFound);
+                            console.log('Enabled products:', enabledCount);
+                            console.log('Disabled products:', disabledCount);
+                            console.log('API calls made:', apiCalls);
+                            console.log('Total available in Ecwid:', totalAvailable);
+                            console.log('Actual array length:', ecwidProductsForSelection.length);
+                            console.log('Response data:', response.data);
+                        }
                         
                         // Show server debug info if available
-                        if (response.data.debug_info) {
+                        if (response.data.debug_info && window.ecwidDebugMode) {
                             console.log('🔧 Server Debug Info:', response.data.debug_info);
                         }
                         
@@ -1663,26 +2033,55 @@
             });
         }
         
-        // Function to render category selection list with enhanced UI
-        function renderCategorySelectionList(categories) {
-            let html = '<div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">';
-            html += '<p style="margin: 0 0 5px 0; font-weight: bold;">📁 Select Categories to Import:</p>';
+        // Function to render category selection list with pagination and enhanced UI
+        function renderCategorySelectionList(categories, page = 1) {
+            currentCategoryPage = page;
+            currentlyDisplayedCategories = categories;
+            
+            const totalCategories = categories.length;
+            const totalPages = Math.ceil(totalCategories / categoriesPerPage);
+            const startIndex = (page - 1) * categoriesPerPage;
+            const endIndex = Math.min(startIndex + categoriesPerPage, totalCategories);
+            const categoriesForPage = categories.slice(startIndex, endIndex);
+            
+            // First, render pagination controls in the separate container above the category list
+            const categoryPaginationContainer = $('#category-pagination-container');
+            if (totalPages > 1) {
+                const paginationHtml = `
+                    <div class="category-pagination" style="text-align: center; margin-bottom: 15px; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 4px;">
+                        <button id="prev-category-page-btn" class="button button-secondary" ${page <= 1 ? 'disabled' : ''} style="margin-right: 10px;">← Previous</button>
+                        <span style="margin: 0 15px; font-weight: bold;">Page ${page} of ${totalPages}</span>
+                        <button id="next-category-page-btn" class="button button-secondary" ${page >= totalPages ? 'disabled' : ''} style="margin-left: 10px;">Next →</button>
+                        ${selectedCategoryIds.size > 0 ? `<div style="margin-top: 8px; font-size: 12px; color: #0073aa;">📋 ${selectedCategoryIds.size} categories selected across all pages</div>` : ''}
+                    </div>
+                `;
+                categoryPaginationContainer.html(paginationHtml);
+            } else {
+                categoryPaginationContainer.html('');
+            }
+            
+            let html = `<div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">`;
+            html += `<p style="margin: 0 0 5px 0; font-weight: bold;">📁 Select Categories to Import:</p>`;
             html += '<p style="margin: 0; font-size: 12px; color: #666;">✓ Check individual categories to import them one by one, or select multiple categories for batch import.</p>';
+            if (totalPages > 1) {
+                html += `<p style="margin: 5px 0 0 0; font-size: 12px; color: #0073aa; font-weight: bold;">📄 Showing ${startIndex + 1}-${endIndex} of ${totalCategories} categories (Page ${page} of ${totalPages})</p>`;
+            }
             html += '</div>';
             
             html += '<ul style="list-style:none; margin:0; padding:0;">';
             html += `<li style="padding-bottom: 8px; margin-bottom: 8px; border-bottom: 2px solid #0073aa; background: #f0f8ff; padding: 8px;">
                         <label style="font-weight: bold; color: #0073aa;">
                             <input type="checkbox" id="select-all-ecwid-categories" style="margin-right: 8px;" /> 
-                            ${i18n.select_all_none} (${categories.length} categories)
+                            ${i18n.select_all_none} (${categoriesForPage.length} on this page${totalPages > 1 ? ` / ${totalCategories} total` : ''})
                         </label>
                      </li>`;
             
-            categories.forEach(function(category, index) {
+            categoriesForPage.forEach(function(category, index) {
                 const bgColor = index % 2 === 0 ? '#fff' : '#f9f9f9';
+                const isSelected = selectedCategoryIds.has(category.id.toString());
                 html += `<li style="padding: 8px; border-bottom: 1px solid #eee; background: ${bgColor};">
                             <label style="display: flex; align-items: center; cursor: pointer;">
-                                <input type="checkbox" class="ecwid-category-select" value="${category.id}" style="margin-right: 8px;" />
+                                <input type="checkbox" class="ecwid-category-select" value="${category.id}" ${isSelected ? 'checked' : ''} style="margin-right: 8px;" />
                                 <div>
                                     <strong>${category.name}</strong><br>
                                     <small style="color: #666;">
@@ -1697,18 +2096,35 @@
             
             categoryListContainer.html(html);
 
-            // Enhanced Select All/None functionality
+            // Enhanced Select All/None functionality for current page
             $('#select-all-ecwid-categories').on('change', function() {
                 const isChecked = $(this).prop('checked');
-                $('.ecwid-category-select').prop('checked', isChecked);
+                $('.ecwid-category-select').each(function() {
+                    const categoryId = $(this).val();
+                    $(this).prop('checked', isChecked);
+                    if (isChecked) {
+                        selectedCategoryIds.add(categoryId);
+                    } else {
+                        selectedCategoryIds.delete(categoryId);
+                    }
+                });
                 updateCategoryImportButtonText();
             });
             
-            // Update button text when individual checkboxes change
+            // Update button text and track selections when individual checkboxes change
             $('.ecwid-category-select').on('change', function() {
+                const categoryId = $(this).val();
+                const isChecked = $(this).prop('checked');
+                
+                if (isChecked) {
+                    selectedCategoryIds.add(categoryId);
+                } else {
+                    selectedCategoryIds.delete(categoryId);
+                }
+                
                 updateCategoryImportButtonText();
                 
-                // Update "Select All" checkbox state
+                // Update "Select All" checkbox state for current page
                 const totalCheckboxes = $('.ecwid-category-select').length;
                 const checkedCheckboxes = $('.ecwid-category-select:checked').length;
                 
@@ -1719,17 +2135,36 @@
                 } else {
                     $('#select-all-ecwid-categories').prop('indeterminate', true);
                 }
+                
+                // Update pagination info if it exists
+                if (totalPages > 1) {
+                    categoryPaginationContainer.find('div').html(`📋 ${selectedCategoryIds.size} categories selected across all pages`);
+                }
             });
             
             // Initialize button text
             updateCategoryImportButtonText();
+            
+            // Add pagination button handlers
+            $('#prev-category-page-btn').on('click', function() {
+                if (currentCategoryPage > 1) {
+                    renderCategorySelectionList(currentlyDisplayedCategories, currentCategoryPage - 1);
+                }
+            });
+            
+            $('#next-category-page-btn').on('click', function() {
+                const totalPages = Math.ceil(currentlyDisplayedCategories.length / categoriesPerPage);
+                if (currentCategoryPage < totalPages) {
+                    renderCategorySelectionList(currentlyDisplayedCategories, currentCategoryPage + 1);
+                }
+            });
         }
         
         // Function to update category import button text based on selection
         function updateCategoryImportButtonText() {
             if (!importSelectedCategoriesButton.length) return;
             
-            const selectedCount = $('.ecwid-category-select:checked').length;
+            const selectedCount = selectedCategoryIds.size; // Use our maintained Set
             if (selectedCount === 0) {
                 importSelectedCategoriesButton.text(i18n.import_selected_categories || 'Import Selected Categories');
             } else if (selectedCount === 1) {
@@ -1995,9 +2430,7 @@
             e.preventDefault();
             if (importSelectedCategoriesButton.hasClass('disabled')) return;
 
-            const categoriesToImportIds = $('.ecwid-category-select:checked').map(function() {
-                return $(this).val();
-            }).get();
+            const categoriesToImportIds = Array.from(selectedCategoryIds); // Use global selection across all pages
 
             if (categoriesToImportIds.length === 0) {
                 alert(i18n.no_categories_selected);
@@ -2011,8 +2444,8 @@
 
             // Create a simple status message
             const statusMessage = `Importing ${categoriesToImportIds.length} selected categories...`;
-            if (categoryPageSyncStatusDiv.length) {
-                categoryPageSyncStatusDiv.text(statusMessage);
+            if (selectiveSyncStatusDiv.length) {
+                selectiveSyncStatusDiv.text(statusMessage);
             }
 
             $.ajax({
@@ -2026,21 +2459,21 @@
                 success: function(response) {
                     if (response.success) {
                         const resultMessage = `Successfully imported ${categoriesToImportIds.length} categories!`;
-                        if (categoryPageSyncStatusDiv.length) {
-                            categoryPageSyncStatusDiv.text(resultMessage);
+                        if (selectiveSyncStatusDiv.length) {
+                            selectiveSyncStatusDiv.text(resultMessage);
                         }
                         if (categorySyncInitialInfoDiv.length) {
-                            categorySyncInitialInfoDiv.text(resultMessage + ' You can select more categories or use bulk actions below.');
+                            categorySyncInitialInfoDiv.text(resultMessage + ' You can select more categories or reload the list.');
                         }
                         
                         // Log details if available
-                        if (categoryPageSyncLogDiv.length) {
-                            (response.data.logs || []).forEach(log => categorizeAndLog(categoryPageSyncLogDiv, log));
+                        if (selectiveSyncLogDiv.length) {
+                            (response.data.logs || []).forEach(log => categorizeAndLog(selectiveSyncLogDiv, log));
                         }
                     } else {
                         const errorMsg = response.data && response.data.message ? response.data.message : 'Unknown error occurred.';
-                        if (categoryPageSyncStatusDiv.length) {
-                            categoryPageSyncStatusDiv.text('Error: ' + errorMsg);
+                        if (selectiveSyncStatusDiv.length) {
+                            selectiveSyncStatusDiv.text('Error: ' + errorMsg);
                         }
                         if (categorySyncInitialInfoDiv.length) {
                             categorySyncInitialInfoDiv.html('<span style="color:red;">Error: ' + sanitizeHTML(errorMsg) + '</span>');
@@ -2049,8 +2482,8 @@
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
                     const errorText = 'AJAX Error: ' + textStatus + (errorThrown ? ' - ' + errorThrown : '');
-                    if (categoryPageSyncStatusDiv.length) {
-                        categoryPageSyncStatusDiv.text(errorText);
+                    if (selectiveSyncStatusDiv.length) {
+                        selectiveSyncStatusDiv.text(errorText);
                     }
                     if (categorySyncInitialInfoDiv.length) {
                         categorySyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorText) + '</span>');
@@ -2063,6 +2496,216 @@
                 }
             });
         });
+
+        // Sync All Categories Button Handler
+        if (syncAllCategoriesButton.length) {
+            syncAllCategoriesButton.on('click', function(e) {
+                e.preventDefault();
+                if (syncAllCategoriesButton.hasClass('disabled')) return;
+
+                // Show confirmation dialog
+                const confirmMessage = 'This will import ALL categories from your Ecwid store to WooCommerce. This may take several minutes for large catalogs. Continue?';
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+
+                // Disable buttons and show progress
+                syncAllCategoriesButton.addClass('disabled').text('Importing All Categories...');
+                loadCategoriesButton.addClass('disabled');
+                importSelectedCategoriesButton.addClass('disabled');
+                
+                // Clear and reset UI elements
+                selectiveSyncStatusDiv.empty();
+                selectiveSyncLogDiv.empty();
+                selectiveSyncProgressBarContainer.show();
+                updateProgressBar(selectiveSyncProgressBar, 0);
+                updateStatus(selectiveSyncStatusDiv, 'Starting full category import...');
+                
+                // Hide category list during sync
+                categoryListContainer.hide();
+                const categoryPaginationContainer = $('#category-pagination-container');
+                if (categoryPaginationContainer.length) {
+                    categoryPaginationContainer.hide();
+                }
+
+                $.ajax({
+                    url: ajax_url,
+                    method: 'POST',
+                    timeout: 300000, // 5 minutes timeout for bulk operations
+                    data: {
+                        action: 'ecwid_wc_sync_all_categories',
+                        nonce: nonce
+                    },
+                    beforeSend: function() {
+                        updateProgressBar(selectiveSyncProgressBar, 10);
+                        updateStatus(selectiveSyncStatusDiv, 'Fetching all categories from Ecwid...');
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            const data = response.data;
+                            updateProgressBar(selectiveSyncProgressBar, 100);
+                            updateStatus(selectiveSyncStatusDiv, 'Full category import completed successfully!');
+                            
+                            // Display results
+                            const resultMessage = data.message || 'Category import completed';
+                            logMessage(selectiveSyncLogDiv, resultMessage, 'success');
+                            
+                            // Show detailed statistics if available
+                            if (data.imported_count !== undefined || data.updated_count !== undefined) {
+                                const importedCount = parseInt(data.imported_count) || 0;
+                                const updatedCount = parseInt(data.updated_count) || 0;
+                                const skippedCount = parseInt(data.skipped_count) || 0;
+                                const failedCount = parseInt(data.failed_count) || 0;
+                                
+                                const statsMessage = `Results: ${importedCount} imported, ${updatedCount} updated, ${skippedCount} skipped, ${failedCount} failed`;
+                                logMessage(selectiveSyncLogDiv, statsMessage, 'info');
+                            }
+                            
+                            // Display detailed logs if available
+                            if (data.logs && data.logs.length > 0) {
+                                data.logs.forEach(function(logEntry) {
+                                    logMessage(selectiveSyncLogDiv, logEntry, 'info');
+                                });
+                            }
+                            
+                            // Reload category list to show updated data
+                            setTimeout(function() {
+                                if (loadCategoriesButton.length) {
+                                    loadAndDisplayCategories();
+                                }
+                            }, 2000);
+                            
+                        } else {
+                            const errorMsg = response.data && response.data.message ? response.data.message : 'Unknown error occurred during category import';
+                            updateStatus(selectiveSyncStatusDiv, 'Import failed');
+                            logMessage(selectiveSyncLogDiv, `Error: ${errorMsg}`, 'error');
+                        }
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        const errorText = `AJAX Error: ${textStatus}${errorThrown ? ' - ' + errorThrown : ''}`;
+                        updateStatus(selectiveSyncStatusDiv, 'Import failed');
+                        logMessage(selectiveSyncLogDiv, `Error: ${errorText}`, 'error');
+                    },
+                    complete: function() {
+                        // Re-enable buttons
+                        syncAllCategoriesButton.removeClass('disabled').text('Import All Categories');
+                        loadCategoriesButton.removeClass('disabled');
+                        importSelectedCategoriesButton.removeClass('disabled');
+                        
+                        // Show category list and pagination again
+                        categoryListContainer.show();
+                        if (categoryPaginationContainer.length) {
+                            categoryPaginationContainer.show();
+                        }
+                    }
+                });
+            });
+        }
+
+        // Sync All Products Button Handler
+        if (syncAllProductsButton.length) {
+            syncAllProductsButton.on('click', function(e) {
+                e.preventDefault();
+                if (syncAllProductsButton.hasClass('disabled')) return;
+
+                // Show confirmation dialog
+                const confirmMessage = 'This will import ALL products from your Ecwid store to WooCommerce. This may take several minutes for large catalogs. Continue?';
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+
+                // Disable buttons and show progress
+                syncAllProductsButton.addClass('disabled').text('Importing All Products...');
+                loadProductsButton.addClass('disabled');
+                importSelectedButton.addClass('disabled');
+                
+                // Clear and reset UI elements
+                selectiveSyncStatusDiv.empty();
+                selectiveSyncLogDiv.empty();
+                selectiveSyncProgressBarContainer.show();
+                updateProgressBar(selectiveSyncProgressBar, 0);
+                updateStatus(selectiveSyncStatusDiv, 'Starting full product import...');
+                
+                // Hide product list during sync
+                productListContainer.hide();
+                const productPaginationContainer = $('#product-pagination-container');
+                if (productPaginationContainer.length) {
+                    productPaginationContainer.hide();
+                }
+
+                $.ajax({
+                    url: ajax_url,
+                    method: 'POST',
+                    timeout: 600000, // 10 minutes timeout for bulk product operations
+                    data: {
+                        action: 'ecwid_wc_sync_all_products',
+                        nonce: nonce
+                    },
+                    beforeSend: function() {
+                        updateProgressBar(selectiveSyncProgressBar, 10);
+                        updateStatus(selectiveSyncStatusDiv, 'Fetching all products from Ecwid...');
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            const data = response.data;
+                            updateProgressBar(selectiveSyncProgressBar, 100);
+                            updateStatus(selectiveSyncStatusDiv, 'Full product import completed successfully!');
+                            
+                            // Display results
+                            const resultMessage = data.message || 'Product import completed';
+                            logMessage(selectiveSyncLogDiv, resultMessage, 'success');
+                            
+                            // Show detailed statistics if available
+                            if (data.imported_count !== undefined || data.updated_count !== undefined) {
+                                const importedCount = parseInt(data.imported_count) || 0;
+                                const updatedCount = parseInt(data.updated_count) || 0;
+                                const skippedCount = parseInt(data.skipped_count) || 0;
+                                const failedCount = parseInt(data.failed_count) || 0;
+                                
+                                const statsMessage = `Results: ${importedCount} imported, ${updatedCount} updated, ${skippedCount} skipped, ${failedCount} failed`;
+                                logMessage(selectiveSyncLogDiv, statsMessage, 'info');
+                            }
+                            
+                            // Display detailed logs if available
+                            if (data.logs && data.logs.length > 0) {
+                                data.logs.forEach(function(logEntry) {
+                                    logMessage(selectiveSyncLogDiv, logEntry, 'info');
+                                });
+                            }
+                            
+                            // Reload product list to show updated data
+                            setTimeout(function() {
+                                if (loadProductsButton.length) {
+                                    loadAndDisplayProductsForSelection();
+                                }
+                            }, 2000);
+                            
+                        } else {
+                            const errorMsg = response.data && response.data.message ? response.data.message : 'Unknown error occurred during product import';
+                            updateStatus(selectiveSyncStatusDiv, 'Import failed');
+                            logMessage(selectiveSyncLogDiv, `Error: ${errorMsg}`, 'error');
+                        }
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        const errorText = `AJAX Error: ${textStatus}${errorThrown ? ' - ' + errorThrown : ''}`;
+                        updateStatus(selectiveSyncStatusDiv, 'Import failed');
+                        logMessage(selectiveSyncLogDiv, `Error: ${errorText}`, 'error');
+                    },
+                    complete: function() {
+                        // Re-enable buttons
+                        syncAllProductsButton.removeClass('disabled').text('Import All Products');
+                        loadProductsButton.removeClass('disabled');
+                        importSelectedButton.removeClass('disabled');
+                        
+                        // Show product list and pagination again
+                        productListContainer.show();
+                        if (productPaginationContainer.length) {
+                            productPaginationContainer.show();
+                        }
+                    }
+                });
+            });
+        }
 
 
         // --- Fix Category Hierarchy Logic ---
@@ -2310,4 +2953,39 @@
         }
 
     });
+    
+    // Debug utility function that can be called from browser console
+    window.ecwid2wooDebug = function() {
+        if (typeof ecwid_sync_params === 'undefined') {
+            console.error('Ecwid Sync Error: Localization parameters not found.');
+            return;
+        }
+        
+        if (window.ecwidDebugMode) {
+            console.log('🔧 Running Ecwid2Woo Debug...');
+        }
+        
+        $.ajax({
+            url: ecwid_sync_params.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'ecwid_wc_debug_info',
+                nonce: ecwid_sync_params.nonce,
+            },
+            dataType: 'json'
+        })
+        .done(function(response) {
+            if (window.ecwidDebugMode) {
+                console.log('✅ Debug Info:', response);
+                console.table(response.data);
+            }
+        })
+        .fail(function(jqXHR, textStatus, errorThrown) {
+            if (window.ecwidDebugMode) {
+                console.error('❌ Debug request failed:', textStatus, errorThrown);
+            }
+            console.error('Response details:', jqXHR.responseText);
+        });
+    };
+    
 })(jQuery);
