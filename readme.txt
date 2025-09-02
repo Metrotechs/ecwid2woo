@@ -11,7 +11,7 @@ License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
 WC tested up to: 9.2
 
-Complete Ecwid to WooCommerce migration solution with Smart Skip Technology for enterprise-scale migrations. Sync products, categories, customers, and orders with intelligent duplicate prevention.
+Complete Ecwid to WooCommerce migration with Smart Skip Technology. Sync products, categories, customers, and orders efficiently.
 
 == Description ==
 
@@ -450,6 +450,45 @@ This plugin:
 - All API communications use secure HTTPS connections
 
 == Changelog ==
+
+= 1.3.5 - Critical Disabled Products Fix =
+* **CRITICAL FIX** - Added check to skip disabled products that have incomplete data
+* Fixed disabled products (enabled=false) being properly skipped instead of causing import failures
+* Eliminated "[CRITICAL] Product missing Ecwid ID or SKU" errors for disabled products
+* Performance improvement by skipping non-relevant disabled products
+* Enhanced stability preventing sync failures due to incomplete disabled product data
+
+= 1.3.4 - PHP Warning Resolution =
+* **CRITICAL FIX** - Fixed "Undefined array key 'error_data'" PHP warning in error handling
+* Enhanced error handling with consistent data structure for all API responses
+* Improved stability eliminating PHP warnings in server error logs
+* Better API error response handling throughout the plugin
+
+= 1.3.3 - Product Sync Restoration =
+* **CRITICAL FIX** - Removed 'enabled=true' filter that was causing product sync to be skipped
+* Product sync now includes all products to match Ecwid behavior
+* Enhanced debugging for empty API responses
+* Resolved issue where sync would skip from categories directly to customers
+
+= 1.3.2 - Server Performance Optimization =
+* **CRITICAL FIX** - Reduced batch sizes to prevent server overload (Categories: 50→10, Products: 25→5)
+* Added 1-2 second delays between AJAX requests to prevent rapid-fire errors
+* Enhanced 404 error handling for AJAX endpoints
+* Added 60-second timeout to AJAX requests
+* Improved error detection and retry logic for server connectivity
+
+= 1.3.1 - AJAX Handler Registration Fix =
+* **CRITICAL FIX** - Added missing 'ecwid_wc_process_variation_batch' AJAX handler
+* Fixed 404 errors in admin-ajax.php for variation processing
+* Complete AJAX handler coverage for all sync functionality
+* Resolved admin console errors for missing endpoints
+
+= 1.3.0 - Gallery Image Import Fix =
+* **CRITICAL FIX** - Fixed gallery images not importing during full sync
+* Corrected API field mapping from 'hdUrl' to 'url' field
+* Added comprehensive fallback support for gallery image URL detection
+* Smart field selection with multiple fallback options
+* Enhanced gallery image preservation logic
 
 = 1.1.0+ - MAJOR UPDATE: Complete Migration Suite =
 

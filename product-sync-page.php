@@ -490,6 +490,7 @@ class Ecwid2Woo_Product_Sync {
 
         // Skip disabled products - they often have incomplete data
         if (isset($item['enabled']) && $item['enabled'] === false) {
+            // translators: %s is the Ecwid product ID
             $product_logs[] = sprintf(__("Skipping disabled product (Ecwid ID: %s). Disabled products are not synced to WooCommerce.", 'ecwid2woo'), $ecwid_id_for_log);
             return ['status' => 'skipped', 'logs' => $product_logs, 'item_name' => $product_name_for_log, 'ecwid_id' => $ecwid_id_for_log, 'sku' => $sku_for_log];
         }
@@ -587,9 +588,9 @@ class Ecwid2Woo_Product_Sync {
                 if ($ecwid_updated_timestamp && $local_import_timestamp) {
                     if ($ecwid_updated_timestamp <= $local_import_timestamp) {
                         $should_skip = true;
-                        $product_logs[] = "SKIPPING: Product has not been modified since last import. Ecwid updated: " . date('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", Last imported: " . date('Y-m-d H:i:s', $local_import_timestamp);
+                        $product_logs[] = "SKIPPING: Product has not been modified since last import. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", Last imported: " . gmdate('Y-m-d H:i:s', $local_import_timestamp);
                     } else {
-                        $product_logs[] = "UPDATE NEEDED: Product has been modified since last import. Ecwid updated: " . date('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", Last imported: " . date('Y-m-d H:i:s', $local_import_timestamp);
+                        $product_logs[] = "UPDATE NEEDED: Product has been modified since last import. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", Last imported: " . gmdate('Y-m-d H:i:s', $local_import_timestamp);
                     }
                 } elseif ($local_import_timestamp) {
                     // Product was imported before but no Ecwid timestamp - be more conservative about re-processing
@@ -609,11 +610,11 @@ class Ecwid2Woo_Product_Sync {
                         $product_modified_time = strtotime($product->get_date_modified()->date('Y-m-d H:i:s'));
                         if ($ecwid_updated_timestamp <= $product_modified_time) {
                             $should_skip = true;
-                            $product_logs[] = "SKIPPING: Previously imported product with no changes. Ecwid updated: " . date('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", WC modified: " . date('Y-m-d H:i:s', $product_modified_time);
+                            $product_logs[] = "SKIPPING: Previously imported product with no changes. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", WC modified: " . gmdate('Y-m-d H:i:s', $product_modified_time);
                             // Set timestamp for future reference
                             update_post_meta($product_id, '_ecwid_last_import_time', time());
                         } else {
-                            $product_logs[] = "UPDATE NEEDED: Previously imported product needs updating. Ecwid updated: " . date('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", WC modified: " . date('Y-m-d H:i:s', $product_modified_time);
+                            $product_logs[] = "UPDATE NEEDED: Previously imported product needs updating. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", WC modified: " . gmdate('Y-m-d H:i:s', $product_modified_time);
                         }
                     } else {
                         // No timestamps available - skip to avoid unnecessary re-processing
@@ -996,8 +997,8 @@ class Ecwid2Woo_Product_Sync {
         }
         
         // Extract the filename from both URLs
-        $filename1 = basename(parse_url($url1, PHP_URL_PATH));
-        $filename2 = basename(parse_url($url2, PHP_URL_PATH));
+        $filename1 = basename(wp_parse_url($url1, PHP_URL_PATH));
+        $filename2 = basename(wp_parse_url($url2, PHP_URL_PATH));
         
         // Remove common WordPress image size suffixes (e.g., -150x150, -300x200, etc.)
         $filename1 = preg_replace('/-\d+x\d+(\.[a-zA-Z]{3,4})?$/', '$1', $filename1);
@@ -1208,7 +1209,9 @@ class Ecwid2Woo_Product_Sync {
         $api_token = $this->options['api_token'] ?? '';
         
         if (empty($store_id) || empty($api_token)) {
-            error_log("Ecwid2Woo: Missing store_id or api_token for category fetch");
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid2Woo: Missing store_id or api_token for category fetch"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
             return false;
         }
         
@@ -1222,7 +1225,9 @@ class Ecwid2Woo_Product_Sync {
         ]);
         
         if (is_wp_error($response)) {
-            error_log("Ecwid2Woo: API request failed for category {$ecwid_category_id}: " . $response->get_error_message());
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid2Woo: API request failed for category {$ecwid_category_id}: " . $response->get_error_message()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
             return false;
         }
         
@@ -1230,14 +1235,18 @@ class Ecwid2Woo_Product_Sync {
         $body = wp_remote_retrieve_body($response);
         
         if ($response_code !== 200) {
-            error_log("Ecwid2Woo: API returned code {$response_code} for category {$ecwid_category_id}. Response: " . substr($body, 0, 200));
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid2Woo: API returned code {$response_code} for category {$ecwid_category_id}. Response: " . substr($body, 0, 200)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
             return false;
         }
         
         $data = json_decode($body, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
-            error_log("Ecwid2Woo: JSON decode error for category {$ecwid_category_id}: " . json_last_error_msg());
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid2Woo: JSON decode error for category {$ecwid_category_id}: " . json_last_error_msg()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
             return false;
         }
         
