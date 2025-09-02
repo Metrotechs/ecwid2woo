@@ -1,4 +1,4 @@
-# Ecwid2Woo - Complete E-commerce Migration Suite 🚀
+# Metrotechs E2W Sync - Complete E-commerce Migration Suite 🚀
 
 **Professional-grade WordPress plugin for seamless Ecwid to WooCommerce migration with revolutionary Smart Skip Technology and advanced image preservation**
 
@@ -24,7 +24,7 @@ Revolutionary migration recovery system that intelligently skips already importe
 
 ---
 
-## 🌟 Why Choose Ecwid2Woo?
+## 🌟 Why Choose Metrotechs E2W Sync?
 
 **The ONLY plugin that handles complete e-commerce migration with enterprise recovery** – Successfully tested with stores containing 6,974 products across 70+ API calls with advanced pagination, intelligent memory management, plus full customer and order migration capabilities.
 
@@ -122,11 +122,11 @@ Revolutionary migration recovery system that intelligently skips already importe
 
 ### Manual Installation
 1. Download and unzip the plugin
-2. Upload the `ecwid2woo-product-sync` folder to `/wp-content/plugins/`
+2. Upload the `metrotechs-e2w-sync` folder to `/wp-content/plugins/`
 3. Activate the plugin through the **Plugins** menu in WordPress
 
 ### Post-Installation Setup
-1. Go to **Ecwid2Woo Sync → Settings** in your admin menu
+1. Go to **E2W Sync → Settings** in your admin menu
 2. Enter your Ecwid **Store ID** and **API Token**
 3. Click **Save Settings** and test your connection
 4. You're ready to start syncing!
@@ -167,7 +167,7 @@ Revolutionary migration recovery system that intelligently skips already importe
 
 ### 🏠 Settings Page
 
-**Location:** `Ecwid2Woo Sync → Settings`
+**Location:** `E2W Sync → Settings`
 
 - Configure your Ecwid API credentials
 - Test connection with visual feedback
@@ -176,7 +176,7 @@ Revolutionary migration recovery system that intelligently skips already importe
 
 ### 🔄 Full Sync
 
-**Location:** `Ecwid2Woo Sync → Full Sync`
+**Location:** `E2W Sync → Full Sync`
 
 **Perfect for:** Complete store migrations or comprehensive updates
 
@@ -196,7 +196,7 @@ Revolutionary migration recovery system that intelligently skips already importe
 
 ### 📁 Category Sync
 
-**Location:** `Ecwid2Woo Sync → Category Sync`
+**Location:** `E2W Sync → Category Sync`
 
 **Perfect for:** Setting up category structure before product import
 
@@ -226,7 +226,7 @@ Revolutionary migration recovery system that intelligently skips already importe
 
 ### 🎯 Selective Product Sync
 
-**Location:** `Ecwid2Woo Sync → Product Sync`
+**Location:** `E2W Sync → Product Sync`
 
 **Perfect for:** Targeted imports, testing, or specific product updates
 
@@ -240,7 +240,7 @@ Revolutionary migration recovery system that intelligently skips already importe
 
 ### 👥 Customer Sync
 
-**Location:** `Ecwid2Woo Sync → Customer Sync`
+**Location:** `E2W Sync → Customer Sync`
 
 **Perfect for:** Importing customer accounts and contact information
 
@@ -258,7 +258,7 @@ Revolutionary migration recovery system that intelligently skips already importe
 
 ### 📦 Order Sync
 
-**Location:** `Ecwid2Woo Sync → Order Sync`
+**Location:** `E2W Sync → Order Sync`
 
 **Perfect for:** Importing order history with customer association
 
@@ -305,7 +305,7 @@ Revolutionary migration recovery system that intelligently skips already importe
 
 ### 📋 Placeholders Management
 
-**Location:** `Ecwid2Woo Sync → Placeholders`
+**Location:** `E2W Sync → Placeholders`
 
 **Purpose:** Review and manage temporary placeholder items created during sync
 
