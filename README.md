@@ -49,6 +49,25 @@ Revolutionary migration recovery system that intelligently skips already importe
 - **Debug Visibility** – Comprehensive logging of skip decisions and timestamp analysis
 - **Enterprise Scale** – Tested with 4500+ product migrations
 
+### 🛑 Stop Sync Control (v1.4.0)
+
+- **Immediate Cancellation** – Stop any running bulk import operation instantly
+- **User Control** – Cancel long-running operations without page refresh
+- **Smart UI** – Stop buttons appear only during active imports
+- **Confirmation Dialogs** – Prevent accidental cancellation of important operations
+- **AJAX Abortion** – Category imports stop immediately via request cancellation
+- **Batch Interruption** – Product imports stop cleanly between batches
+- **Universal Coverage** – Available on both Product and Category sync pages
+
+### ⚡ Enhanced Performance & Reliability (v1.3.8-1.4.0)
+
+- **Timeout Prevention** – Ultra-small batch sizes (5 products) prevent server timeouts
+- **Batch Processing** – Automatic continuation through all products (fixed bulk import bug)
+- **Progress Tracking** – Real-time progress bars showing current batch and total progress
+- **Server Compatibility** – Works with restrictive hosting environments
+- **Memory Optimization** – Conservative batch sizes prevent memory exhaustion
+- **Network Resilience** – Enhanced retry logic and error handling
+
 ### 🔄 Complete Migration Suite
 
 - **Full Sync** – Complete catalog migration with Smart Skip capabilities
@@ -202,6 +221,7 @@ Revolutionary migration recovery system that intelligently skips already importe
 
 #### Features:
 - **Enhanced UI Design** – Professional interface with bordered information panels and status messages
+- **Stop Sync Control** – Cancel bulk category imports instantly with confirmation dialog
 - **Automatic Category Loading** – Categories load immediately when page opens with "📁 Category Loading Complete" confirmation
 - **Enhanced Debug Information** – Shows API call count, total categories loaded, and detailed performance metrics
 - **Selective Import** – Choose individual categories to import instead of all at once
@@ -231,12 +251,23 @@ Revolutionary migration recovery system that intelligently skips already importe
 **Perfect for:** Targeted imports, testing, or specific product updates
 
 #### Features:
+- **Stop Sync Control** – Cancel long-running import operations immediately with dedicated Stop Sync button
+- **Bulk Import All Products** – Import entire product catalog with automatic batch processing (v1.4.0)
 - **Complete Product Loading** – Handles stores with 6000+ products (tested with 6,974 products)
 - **Advanced Pagination** – Makes 70+ API calls to load entire product catalog
 - **Enabled/Disabled Toggle** – Separate views for enabled and disabled products
 - **Real-time Metrics** – Shows API call count, total products loaded, and performance data
 - **Professional Status Panel** – Comprehensive loading statistics and progress feedback
 - **Automatic Loading** – All products load immediately when page opens
+- **Timeout Prevention** – Ultra-small batch sizes (5 products) prevent server timeouts
+- **Visual Selection Interface** – Enhanced checkbox design with detailed product information
+
+#### Workflow:
+1. **For Selective Import:** Review the product list, select individual products using checkboxes, and click **Import Selected Products**
+2. **For Bulk Import:** Click **Import All Products** to automatically import your entire catalog in batches
+3. **Monitor Progress:** Watch real-time progress updates and detailed status messages
+4. **Stop if Needed:** Use the **Stop Sync** button to cancel long-running operations immediately
+5. **Timeout Protection:** Operations automatically use small batch sizes to prevent server timeouts
 
 ### 👥 Customer Sync
 
@@ -273,35 +304,12 @@ Revolutionary migration recovery system that intelligently skips already importe
 #### Requirements:
 - **API Permission:** Your Ecwid API token must have **"Read orders"** permission
 - **403 Error?** See troubleshooting section below
-- **Visual Selection Interface** – Enhanced checkbox design with alternating row colors and detailed product information
-- **Smart Selection Controls** – "Select All/None" with indeterminate state and dynamic import button text
-- **Detailed Product Information** – Shows SKU, ID, enabled status, and variation count with visual indicators
-- **Complete Store Support** – Successfully tested with 6,974 products across 70 API calls
-- **Enhanced Timeout Handling** – 120-second timeout for large product catalogs
-- **Comprehensive Debug Logging** – Raw API response analysis and pagination troubleshooting
-- **Variation Support** – Handles complex variable products with batch processing
-- **Individual Progress Tracking** – Monitor each selected product with enhanced feedback
 
-#### Technical Improvements:
-- **Fixed API responseFields** – Now includes `,total` parameter ensuring correct pagination
-- **Improved Count Logic** – Uses actual item count instead of unreliable API count field
-- **Enhanced Loop Condition** – Robust pagination logic: `count>0 && offset<total`
-- **Raw Response Debugging** – Displays actual API response data for troubleshooting
-
-#### How to Use:
-1. Products automatically load when visiting the page (all 6000+ products if applicable)
-2. Toggle between **Enabled Products** and **Disabled Products** using the enhanced button interface
-3. Review the complete product list with visual selection interface and detailed product information
-4. Select individual products using the improved checkbox system
-5. Use **Select All/None** for bulk selection with smart state management
-6. Click **Import Selected Products** (text dynamically updates: "Import 1 Product" vs "Import 5 Products")
-7. Monitor individual product progress with enhanced logging and comprehensive status feedback
-
-#### Performance Example:
-- **Large Store:** 6,974 total products loaded via 70 API calls
-- **Separation:** 6,748 enabled + 226 disabled products with toggle interface
-- **Loading Time:** Complete pagination with real-time progress tracking
-- **Debug Output:** "Made 70 API calls, Loop condition: count>0 && offset<total"
+#### Technical Features:
+- **Enhanced Timeout Handling** – Improved processing for large order datasets
+- **Smart Customer Matching** – Multi-tier customer association system
+- **Comprehensive Debug Logging** – Detailed API response analysis for troubleshooting
+- **Professional Interface** – Modern UI with enhanced filtering and status updates
 
 ### 📋 Placeholders Management
 
