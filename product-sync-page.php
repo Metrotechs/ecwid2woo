@@ -76,6 +76,7 @@ class Ecwid2Woo_Product_Sync {
             <div class="product-bulk-actions" style="margin: 25px 0 15px 0; padding-top: 15px; border-top: 1px solid #ddd;">
                 <h3><?php esc_html_e('Bulk Actions', 'ecwid2woo'); ?></h3>
                 <button id="sync-all-products-button" class="button button-primary"><?php esc_html_e('Import All Products', 'ecwid2woo'); ?></button>
+                <button id="stop-sync-products-button" class="button button-secondary" style="margin-left: 10px; display: none;"><?php esc_html_e('Stop Sync', 'ecwid2woo'); ?></button>
             </div>
 
             <div id="selective-sync-status" class="sync-status margin-top-15"></div>
@@ -381,7 +382,7 @@ class Ecwid2Woo_Product_Sync {
         }
 
         $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
-        $limit = 50; // Process in smaller batches for all products sync
+        $limit = 5; // Process in very small batches for all products sync to prevent timeouts
 
         $query_params = [
             'limit' => $limit,

@@ -201,6 +201,7 @@
         const fixHierarchyButton = $('#fix-category-hierarchy-button');
         const importSelectedCategoriesButton = $('#import-selected-categories-button');
         const syncAllCategoriesButton = $('#sync-all-categories-button');
+        const stopSyncCategoriesButton = $('#stop-sync-categories-button');
 
         // Selective Product Sync UI Elements
         const loadProductsButton = $('#load-ecwid-products-button');
@@ -215,6 +216,7 @@
         }
         const importSelectedButton = $('#import-selected-products-button');
         const syncAllProductsButton = $('#sync-all-products-button');
+        const stopSyncProductsButton = $('#stop-sync-products-button');
         const selectiveSyncStatusDiv = $('#selective-sync-status');
         const selectiveSyncProgressBar = $('#selective-sync-bar');
         const selectiveSyncProgressBarContainer = $('#selective-sync-progress-container');
@@ -236,6 +238,9 @@
         let fullSyncVariationQueue = [];
         let currentFullSyncVariationProductData = null;
         let isSyncCancelledByUser = false; // ADDED: Flag to control sync cancellation
+        let isProductSyncCancelled = false; // Flag to control product sync cancellation
+        let isCategorySyncCancelled = false; // Flag to control category sync cancellation
+        let categorySyncRequest = null; // Store AJAX request for cancellation
         let fullSyncRetryCount = 0; // ADDED: Track retry attempts for better error handling
         // Store continuation data for parent batch processing
         let fullSyncParentContinuation = {
@@ -2682,6 +2687,10 @@
                 loadCategoriesButton.addClass('disabled');
                 importSelectedCategoriesButton.addClass('disabled');
                 
+                // Show stop button, reset cancellation flag
+                stopSyncCategoriesButton.show();
+                isCategorySyncCancelled = false;
+                
                 // Clear and reset UI elements
                 selectiveSyncStatusDiv.empty();
                 selectiveSyncLogDiv.empty();
@@ -2696,7 +2705,7 @@
                     categoryPaginationContainer.hide();
                 }
 
-                $.ajax({
+                categorySyncRequest = $.ajax({
                     url: ajax_url,
                     method: 'POST',
                     timeout: 300000, // 5 minutes timeout for bulk operations
@@ -2788,10 +2797,14 @@
                         logMessage(selectiveSyncLogDiv, `Error: ${errorText}`, 'error');
                     },
                     complete: function() {
+                        // Clear request reference
+                        categorySyncRequest = null;
+                        
                         // Re-enable buttons
                         syncAllCategoriesButton.removeClass('disabled').text('Import All Categories');
                         loadCategoriesButton.removeClass('disabled');
                         importSelectedCategoriesButton.removeClass('disabled');
+                        stopSyncCategoriesButton.hide(); // Hide stop button
                         
                         // Show category list and pagination again
                         categoryListContainer.show();
@@ -2820,6 +2833,12 @@
                 loadProductsButton.addClass('disabled');
                 importSelectedButton.addClass('disabled');
                 
+                // Show stop button, hide start button
+                stopSyncProductsButton.show();
+                
+                // Reset cancellation flag
+                isProductSyncCancelled = false;
+                
                 // Clear and reset UI elements
                 selectiveSyncStatusDiv.empty();
                 selectiveSyncLogDiv.empty();
@@ -2834,77 +2853,243 @@
                     productPaginationContainer.hide();
                 }
 
-                $.ajax({
-                    url: ajax_url,
-                    method: 'POST',
-                    timeout: 600000, // 10 minutes timeout for bulk product operations
-                    data: {
-                        action: 'ecwid_wc_sync_all_products',
-                        nonce: nonce
-                    },
-                    beforeSend: function() {
-                        updateProgressBar(selectiveSyncProgressBar, 10);
-                        updateStatus(selectiveSyncStatusDiv, 'Fetching all products from Ecwid...');
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            const data = response.data;
-                            updateProgressBar(selectiveSyncProgressBar, 100);
-                            updateStatus(selectiveSyncStatusDiv, 'Full product import completed successfully!');
-                            
-                            // Display results
-                            const resultMessage = data.message || 'Product import completed';
-                            logMessage(selectiveSyncLogDiv, resultMessage, 'success');
-                            
-                            // Show detailed statistics if available
-                            if (data.imported_count !== undefined || data.updated_count !== undefined) {
-                                const importedCount = parseInt(data.imported_count) || 0;
-                                const updatedCount = parseInt(data.updated_count) || 0;
-                                const skippedCount = parseInt(data.skipped_count) || 0;
-                                const failedCount = parseInt(data.failed_count) || 0;
-                                
-                                const statsMessage = `Results: ${importedCount} imported, ${updatedCount} updated, ${skippedCount} skipped, ${failedCount} failed`;
-                                logMessage(selectiveSyncLogDiv, statsMessage, 'info');
-                            }
-                            
-                            // Display detailed logs if available
-                            if (data.logs && data.logs.length > 0) {
-                                data.logs.forEach(function(logEntry) {
-                                    logMessage(selectiveSyncLogDiv, logEntry, 'info');
-                                });
-                            }
-                            
-                            // Reload product list to show updated data
-                            setTimeout(function() {
-                                if (loadProductsButton.length) {
-                                    loadAndDisplayProductsForSelection();
-                                }
-                            }, 2000);
-                            
-                        } else {
-                            const errorMsg = response.data && response.data.message ? response.data.message : 'Unknown error occurred during product import';
-                            updateStatus(selectiveSyncStatusDiv, 'Import failed');
-                            logMessage(selectiveSyncLogDiv, `Error: ${errorMsg}`, 'error');
-                        }
-                    },
-                    error: function(jqXHR, textStatus, errorThrown) {
-                        const errorText = `AJAX Error: ${textStatus}${errorThrown ? ' - ' + errorThrown : ''}`;
-                        updateStatus(selectiveSyncStatusDiv, 'Import failed');
-                        logMessage(selectiveSyncLogDiv, `Error: ${errorText}`, 'error');
-                    },
-                    complete: function() {
-                        // Re-enable buttons
+                // Initialize batch processing variables
+                let totalImported = 0;
+                let totalUpdated = 0;
+                let totalSkipped = 0;
+                let totalFailed = 0;
+                let totalItems = 0;
+                let processedItems = 0;
+                let allLogs = [];
+                let currentOffset = 0;
+                let batchNumber = 1;
+
+                // Recursive function to process all batches
+                function processNextBatch() {
+                    // Check if sync was cancelled
+                    if (isProductSyncCancelled) {
+                        updateStatus(selectiveSyncStatusDiv, 'Product import cancelled');
+                        logMessage(selectiveSyncLogDiv, 'Import stopped by user', 'warning');
+                        
+                        // Reset UI
                         syncAllProductsButton.removeClass('disabled').text('Import All Products');
                         loadProductsButton.removeClass('disabled');
                         importSelectedButton.removeClass('disabled');
-                        
-                        // Show product list and pagination again
+                        stopSyncProductsButton.hide();
                         productListContainer.show();
+                        const productPaginationContainer = $('#product-pagination-container');
                         if (productPaginationContainer.length) {
                             productPaginationContainer.show();
                         }
+                        return; // Exit the batch processing
                     }
-                });
+                    
+                    updateStatus(selectiveSyncStatusDiv, `Processing batch ${batchNumber}... (${processedItems}/${totalItems || '?'} products)`);
+                    
+                    $.ajax({
+                        url: ajax_url,
+                        method: 'POST',
+                        timeout: 300000, // 5 minutes timeout per batch
+                        data: {
+                            action: 'ecwid_wc_sync_all_products',
+                            nonce: nonce,
+                            offset: currentOffset
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                const data = response.data;
+                                
+                                // Update totals
+                                totalImported += parseInt(data.imported_count) || 0;
+                                totalUpdated += parseInt(data.updated_count) || 0;
+                                totalSkipped += parseInt(data.skipped_count) || 0;
+                                totalFailed += parseInt(data.failed_count) || 0;
+                                
+                                // Set total items if this is the first batch
+                                if (totalItems === 0 && data.total_items) {
+                                    totalItems = parseInt(data.total_items);
+                                }
+                                
+                                // Update processed count
+                                processedItems = parseInt(data.next_offset) || (currentOffset + 50);
+                                
+                                // Update progress bar
+                                let progressPercent = 0;
+                                if (totalItems > 0) {
+                                    progressPercent = Math.min(95, (processedItems / totalItems) * 100);
+                                } else {
+                                    progressPercent = Math.min(95, (batchNumber * 5)); // Fallback progress
+                                }
+                                updateProgressBar(selectiveSyncProgressBar, progressPercent);
+                                
+                                // Log batch results
+                                const batchMessage = `Batch ${batchNumber} completed: ${data.imported_count || 0} imported, ${data.updated_count || 0} updated, ${data.skipped_count || 0} skipped, ${data.failed_count || 0} failed`;
+                                logMessage(selectiveSyncLogDiv, batchMessage, 'info');
+                                
+                                // Add batch logs to overall logs
+                                if (data.batch_logs && data.batch_logs.length > 0) {
+                                    allLogs = allLogs.concat(data.batch_logs);
+                                }
+                                
+                                // Check if we need to process more batches
+                                if (data.has_more && data.next_offset) {
+                                    currentOffset = parseInt(data.next_offset);
+                                    batchNumber++;
+                                    // Continue processing next batch
+                                    setTimeout(processNextBatch, 500); // Small delay between batches
+                                } else {
+                                    // All batches completed
+                                    updateProgressBar(selectiveSyncProgressBar, 100);
+                                    updateStatus(selectiveSyncStatusDiv, 'Full product import completed successfully!');
+                                    
+                                    // Display final results
+                                    const finalMessage = `Product import completed! Processed ${processedItems} products total.`;
+                                    logMessage(selectiveSyncLogDiv, finalMessage, 'success');
+                                    
+                                    // Show detailed statistics
+                                    const statsMessage = `Final Results: ${totalImported} imported, ${totalUpdated} updated, ${totalSkipped} skipped, ${totalFailed} failed`;
+                                    logMessage(selectiveSyncLogDiv, statsMessage, 'info');
+                                    
+                                    // Display detailed logs if available (limit to last 100 entries to prevent overflow)
+                                    if (allLogs.length > 0) {
+                                        const logsToShow = allLogs.slice(-100); // Show last 100 log entries
+                                        if (allLogs.length > 100) {
+                                            logMessage(selectiveSyncLogDiv, `... (showing last 100 of ${allLogs.length} log entries)`, 'info');
+                                        }
+                                        logsToShow.forEach(function(logEntry) {
+                                            logMessage(selectiveSyncLogDiv, logEntry, 'info');
+                                        });
+                                    }
+                                    
+                                    // Re-enable buttons and show UI elements
+                                    syncAllProductsButton.removeClass('disabled').text('Import All Products');
+                                    loadProductsButton.removeClass('disabled');
+                                    importSelectedButton.removeClass('disabled');
+                                    stopSyncProductsButton.hide(); // Hide stop button
+                                    productListContainer.show();
+                                    if (productPaginationContainer.length) {
+                                        productPaginationContainer.show();
+                                    }
+                                    
+                                    // Reload product list to show updated data
+                                    setTimeout(function() {
+                                        if (loadProductsButton.length) {
+                                            loadAndDisplayProductsForSelection();
+                                        }
+                                    }, 2000);
+                                }
+                                
+                            } else {
+                                const errorMsg = response.data && response.data.message ? response.data.message : 'Unknown error occurred during product import';
+                                updateStatus(selectiveSyncStatusDiv, 'Import failed');
+                                logMessage(selectiveSyncLogDiv, `Error in batch ${batchNumber}: ${errorMsg}`, 'error');
+                                
+                                // Re-enable buttons on error
+                                syncAllProductsButton.removeClass('disabled').text('Import All Products');
+                                loadProductsButton.removeClass('disabled');
+                                importSelectedButton.removeClass('disabled');
+                                stopSyncProductsButton.hide(); // Hide stop button
+                                productListContainer.show();
+                                if (productPaginationContainer.length) {
+                                    productPaginationContainer.show();
+                                }
+                            }
+                        },
+                        error: function(jqXHR, textStatus, errorThrown) {
+                            const errorText = `AJAX Error in batch ${batchNumber}: ${textStatus}${errorThrown ? ' - ' + errorThrown : ''}`;
+                            updateStatus(selectiveSyncStatusDiv, 'Import failed');
+                            logMessage(selectiveSyncLogDiv, `Error: ${errorText}`, 'error');
+                            
+                            // Re-enable buttons on error
+                            syncAllProductsButton.removeClass('disabled').text('Import All Products');
+                            loadProductsButton.removeClass('disabled');
+                            importSelectedButton.removeClass('disabled');
+                            stopSyncProductsButton.hide(); // Hide stop button
+                            productListContainer.show();
+                            if (productPaginationContainer.length) {
+                                productPaginationContainer.show();
+                            }
+                        }
+                    });
+                }
+
+                // Start the batch processing
+                updateProgressBar(selectiveSyncProgressBar, 5);
+                updateStatus(selectiveSyncStatusDiv, 'Fetching products from Ecwid...');
+                processNextBatch();
+            });
+        }
+
+        // --- Stop Product Sync Button Handler ---
+        if (stopSyncProductsButton.length) {
+            stopSyncProductsButton.on('click', function(e) {
+                e.preventDefault();
+                
+                // Show confirmation dialog
+                if (!confirm('Are you sure you want to stop the product import? Progress will be lost.')) {
+                    return;
+                }
+                
+                // Set cancellation flag
+                isProductSyncCancelled = true;
+                
+                // Update UI immediately
+                updateStatus(selectiveSyncStatusDiv, 'Stopping product import...');
+                logMessage(selectiveSyncLogDiv, 'Product import cancelled by user.', 'warning');
+                
+                // Hide stop button, show start button
+                stopSyncProductsButton.hide();
+                syncAllProductsButton.removeClass('disabled').text('Import All Products').show();
+                loadProductsButton.removeClass('disabled');
+                importSelectedButton.removeClass('disabled');
+                
+                // Show product list and pagination again
+                productListContainer.show();
+                const productPaginationContainer = $('#product-pagination-container');
+                if (productPaginationContainer.length) {
+                    productPaginationContainer.show();
+                }
+            });
+        }
+
+        // --- Stop Category Sync Button Handler ---
+        if (stopSyncCategoriesButton.length) {
+            stopSyncCategoriesButton.on('click', function(e) {
+                e.preventDefault();
+                
+                // Show confirmation dialog
+                if (!confirm('Are you sure you want to stop the category import? Progress will be lost.')) {
+                    return;
+                }
+                
+                // Set cancellation flag and abort request
+                isCategorySyncCancelled = true;
+                if (categorySyncRequest) {
+                    categorySyncRequest.abort();
+                    categorySyncRequest = null;
+                }
+                
+                // Clear progress animation
+                if (window.categoryProgressInterval) {
+                    clearInterval(window.categoryProgressInterval);
+                }
+                
+                // Update UI immediately
+                updateStatus(selectiveSyncStatusDiv, 'Stopping category import...');
+                logMessage(selectiveSyncLogDiv, 'Category import cancelled by user.', 'warning');
+                
+                // Hide stop button, show start button
+                stopSyncCategoriesButton.hide();
+                syncAllCategoriesButton.removeClass('disabled').text('Import All Categories');
+                loadCategoriesButton.removeClass('disabled');
+                importSelectedCategoriesButton.removeClass('disabled');
+                
+                // Show category list and pagination again
+                categoryListContainer.show();
+                const categoryPaginationContainer = $('#category-pagination-container');
+                if (categoryPaginationContainer.length) {
+                    categoryPaginationContainer.show();
+                }
             });
         }
 

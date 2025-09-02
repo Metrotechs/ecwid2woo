@@ -83,6 +83,7 @@ class Ecwid2Woo_Category_Sync {
             <div class="category-bulk-actions" style="margin: 25px 0 15px 0; padding-top: 15px; border-top: 1px solid #ddd;">
                 <h3><?php esc_html_e('Bulk Actions', 'ecwid2woo'); ?></h3>
                 <button id="sync-all-categories-button" class="button button-primary"><?php esc_html_e('Import All Categories', 'ecwid2woo'); ?></button>
+                <button id="stop-sync-categories-button" class="button button-secondary" style="margin-left: 10px; display: none;"><?php esc_html_e('Stop Sync', 'ecwid2woo'); ?></button>
             </div>
 
             <div id="selective-sync-status" class="sync-status margin-top-15"></div>

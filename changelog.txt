@@ -1,5 +1,34 @@
 ** Metrotechs E2W Sync Changelog **
 
+2025-09-02 - version 1.4.0
+* NEW FEATURE - STOP SYNC BUTTON FOR CATEGORIES: Added "Stop Sync" button to cancel bulk category imports in progress
+* UX - Users can now cancel long-running category imports without waiting for completion
+* UX - Stop button appears during import and hides when import completes or is cancelled
+* UX - Confirmation dialog prevents accidental cancellation of bulk imports
+* Performance - AJAX request abortion immediately stops category import processing
+* Consistency - Both product and category sync pages now have stop functionality
+
+2025-09-02 - version 1.3.9
+* NEW FEATURE - STOP SYNC BUTTON: Added "Stop Sync" button to cancel bulk product imports in progress
+* UX - Users can now cancel long-running product imports without waiting for completion
+* UX - Stop button appears during import and hides when import completes or is cancelled
+* UX - Confirmation dialog prevents accidental cancellation of bulk imports
+* Performance - Allows users to stop imports if they take too long or encounter issues
+
+2025-09-02 - version 1.3.8
+* CRITICAL FIX - TIMEOUT PREVENTION: Reduced bulk product import batch size from 50 to 5 products
+* Fixed - Prevents timeout errors during "Import All Products" for servers with shorter execution limits
+* Performance - Smaller batches ensure reliable processing of large product catalogs
+* Stability - Better compatibility with various hosting environments and server configurations
+
+2025-09-02 - version 1.3.7
+* MAJOR FIX - BULK PRODUCT IMPORT: Fixed "Import All Products" to process ALL products instead of stopping after first 50
+* Fixed - Implemented batch processing to handle large product catalogs (6756+ products) 
+* Fixed - Progress bar now shows accurate progress during bulk product imports
+* Fixed - Final statistics display total counts across all batches
+* Performance - Added 500ms delay between batches to prevent server overload
+* UX - Better status messages showing current batch and progress during import
+
 2025-09-02 - version 1.3.6
 * MAJOR CHANGE - PLUGIN RENAMED: Changed plugin display name from "Ecwid2Woo" to "Metrotechs E2W Sync" for WordPress repository compliance
 * Updated - Plugin display name and description updated for repository submission
