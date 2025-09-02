@@ -1,7 +1,7 @@
-=== Ecwid2Woo Product Sync ===
+=== Ecwid2Woo - Complete E-commerce Migration Suite ===
 Contributors: Metrotechs, Richard Hunting
 Donate link: https://metrotechs.io/donate
-Tags: ecwid, woocommerce, sync, products, categories
+Tags: ecwid, woocommerce, sync, products, categories, customers, orders, migration
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.2
@@ -11,52 +11,60 @@ License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
 WC tested up to: 9.2
 
-Easily sync Ecwid product data (products, categories, images, SKUs, variations) to WooCommerce with a professional, user-friendly interface.
+Complete Ecwid to WooCommerce migration solution: sync products, categories, customers, and orders with professional interface and advanced features.
 
 == Description ==
 
-Ecwid2Woo Product Sync is a comprehensive WordPress plugin designed for seamlessly migrating and synchronizing your Ecwid product catalog with WooCommerce.
-Whether you're transitioning from Ecwid to WooCommerce or maintaining dual platforms, this plugin provides a robust, reliable solution for product data transfer.
+Ecwid2Woo Complete Migration Suite is the most comprehensive WordPress plugin for migrating your entire e-commerce store from Ecwid to WooCommerce.
+Go beyond basic product sync with full customer and order migration capabilities, making it the complete solution for store migration.
 
 **Perfect for:**
-- Store owners migrating from Ecwid to WooCommerce
-- Businesses maintaining both Ecwid and WooCommerce stores
-- Developers managing client store migrations
-- Anyone needing reliable product data synchronization
+- Complete store migrations from Ecwid to WooCommerce
+- E-commerce agencies managing client migrations  
+- Store owners transferring customer data and order history
+- Businesses needing comprehensive data synchronization
+- Developers requiring enterprise-grade migration tools
 
 == Key Features ==
 
-**🔄 Complete Product Synchronization**
-- Transfer products, categories, images, prices, SKUs, stock levels, and variations
-- Preserve complex category hierarchies and parent-child relationships
-- Handle both simple and variable products with full option support
-- Auto-create missing WooCommerce attributes and terms
-- Import category thumbnails and attach them to WooCommerce categories
+**🔄 Complete Migration Suite**
+- **Products & Categories:** Full catalog with variations, images, and hierarchies
+- **Customer Import:** Complete customer profiles with billing/shipping addresses
+- **Order History:** Import orders with automatic customer association
+- **Smart Data Handling:** Prevents duplicates and maintains data integrity
+
+**👥 Customer & Order Management**
+- Import customer accounts with contact information and order statistics
+- Link orders to existing customer accounts automatically
+- Preserve billing and shipping addresses
+- Filter orders by status, payment status, and date range
+- Multi-tier customer matching (email, ID, name similarity)
 
 **🎯 Multiple Sync Options**
 - **Full Sync:** Complete catalog migration with preview capabilities
 - **Category Sync:** Import categories independently with hierarchy management
-- **Selective Sync:** Choose specific products for targeted import/updates
+- **Product Sync:** Selective product import with variation support
+- **Customer Sync:** Import customer accounts and profiles
+- **Order Sync:** Import order history with customer association
 
 **🚀 Professional User Interface**
-- Modern, responsive admin interface with intuitive navigation
+- Modern admin interface with colorful gradient buttons
+- Auto-loading data on all sync pages
 - Real-time progress tracking with animated status indicators
-- Comprehensive logging system with color-coded messages
-- One-click connection testing with visual feedback
+- Comprehensive error handling with actionable solutions
+- Responsive design works on all devices
 
 **⚡ Advanced Technical Features**
-- **High-Speed Processing:** Up to 1,000 products per hour (including variations)
+- **High-Speed Processing:** Up to 1,000 items per hour (including variations)
 - AJAX-powered batch processing prevents server timeouts
-- Idempotent operations prevent duplicate entries
+- Smart pagination handles stores with 6000+ products
 - Memory-optimized for large catalogs
-- Smart matching system using Ecwid IDs and SKU fallbacks
-- Multilingual-safe category slugs with robust transliteration and safe, length-limited generation while preserving original names
-- Enhanced diagnostics for DB insert/slug issues in logs
+- Idempotent operations prevent duplicate entries
 
 **🛡️ Reliable & Safe**
+- Enhanced error handling with specific 403 permission guidance
+- Comprehensive logging for troubleshooting
 - Stop sync functionality for user control
-- Comprehensive error handling and recovery
-- Detailed logging for troubleshooting
 - WordPress security best practices
 
 **🔧 Developer Friendly**
@@ -65,14 +73,17 @@ Whether you're transitioning from Ecwid to WooCommerce or maintaining dual platf
 - WordPress coding standards compliant
 - Extensible architecture for customization
 
-== What's New in Version 1.0.0 ==
+== What's New in Version 1.1.0+ ==
 
-This is the first official release featuring a completely rewritten codebase with:
+**MAJOR UPDATE:** Complete Customer & Order Sync + Enhanced UI
 
-- **Professional UI/UX:** Modern, responsive interface with enhanced visual design
-- **Modular Architecture:** Clean separation of PHP, CSS, and JavaScript for better maintainability
-- **Enhanced Performance:** Optimized asset loading and improved memory management
-- **Better Error Handling:** Comprehensive error reporting with user-friendly messages
+- **Customer Sync:** Full customer import with profiles, addresses, and statistics
+- **Order Sync:** Complete order history with automatic customer association  
+- **Enhanced Admin Interface:** Colorful gradient buttons and professional design
+- **Smart Error Handling:** Detailed 403 permission error messages with solutions
+- **Auto-loading Pages:** All sync pages load data automatically
+- **Improved JavaScript:** Resolved scope issues for better reliability
+- **Better Documentation:** Comprehensive setup guides and troubleshooting
 - **Security Improvements:** Enhanced input validation and secure API handling
 - **WordPress Standards:** Full compliance with WordPress coding and plugin development standards
 
@@ -180,13 +191,42 @@ The plugin provides comprehensive debugging tools:
 - Detailed error reporting
 - WordPress debug log integration
 
+= Why am I getting "HTTP 403" errors for Customer/Order Sync? =
+
+This is the most common issue with Customer and Order sync. The error means your API token doesn't have the required permissions.
+
+**Quick Fix:**
+1. Go to Ecwid Dashboard → Apps → My Apps → API
+2. Create new API token with ALL permissions:
+   * Read catalog
+   * Read store profile
+   * Read products  
+   * Read categories
+   * **Read customers** (required for Customer Sync)
+   * **Read orders** (required for Order Sync)
+3. Update plugin settings with new token
+4. Test connection - should show "Connection successful!"
+
+**Why this happens:** Customer and Order APIs require special permissions that are separate from basic product/category permissions.
+
+= How does Customer/Order association work? =
+
+The plugin uses intelligent multi-tier matching:
+- **Primary:** Email address matching
+- **Secondary:** Ecwid customer ID matching  
+- **Tertiary:** Name similarity matching
+- Orders are automatically linked to existing WordPress users when possible
+
 == Screenshots ==
 
 1. **Settings Page** - Configure Ecwid API credentials with connection testing
-2. **Full Sync Interface** - Complete catalog synchronization with progress tracking
-3. **Category Sync** - Dedicated category import with hierarchy management
-4. **Product Sync** - Selective product import with filtering options
-5. **Sync in Progress** - Real-time progress bars and detailed logging
+2. **Enhanced Dashboard** - Colorful gradient navigation with 6 sync options
+3. **Full Sync Interface** - Complete catalog synchronization with progress tracking
+4. **Category Sync** - Auto-loading categories with professional UI
+5. **Product Sync** - Selective product import with advanced filtering
+6. **Customer Sync** - Import customer accounts with profiles and addresses
+7. **Order Sync** - Import order history with customer association and filtering
+8. **Sync in Progress** - Real-time progress bars and detailed logging
 6. **Navigation Interface** - Modern, intuitive admin navigation
 
 == Changelog ==
@@ -330,9 +370,52 @@ For priority support, custom development, or enterprise solutions, contact us th
 == Privacy & Data Handling ==
 
 This plugin:
-- Only accesses product and category data from your Ecwid store
-- Does not collect or transmit personal user data
-- Stores Ecwid IDs in WordPress meta fields for sync tracking
+- Accesses product, category, customer, and order data from your Ecwid store (based on API permissions)
+- Does not collect or transmit personal user data beyond the migration process
+- Stores Ecwid IDs in WordPress meta fields for sync tracking and duplicate prevention
+- Customer and order data is only processed locally within your WordPress installation
+- All API communications use secure HTTPS connections
+
+== Changelog ==
+
+= 1.1.0+ - MAJOR UPDATE: Complete Migration Suite =
+
+**New Features:**
+* Customer Sync - Full customer import with profiles, addresses, and statistics
+* Order Sync - Complete order history with automatic customer association
+* Enhanced Admin Interface - Colorful gradient buttons and professional design
+* Auto-loading Pages - All sync pages load data automatically on page visit
+
+**Improvements:**
+* Enhanced error handling with specific 403 permission guidance
+* Improved JavaScript reliability (resolved i18n and sanitizeHTML scope issues)
+* Smart customer-order association with multi-tier matching
+* Professional UI consistency across all sync pages
+* Better documentation with comprehensive setup guides
+
+**Technical:**
+* Moved utility functions to global scope for better accessibility
+* Enhanced API error messages with actionable solutions
+* Updated README with customer/order sync requirements
+* Added troubleshooting documentation for common permission issues
+
+= 1.1.0 - Enhanced Product Loading System =
+* Major pagination improvements for large catalogs
+* Support for stores with 6000+ products
+* Advanced API call optimization
+* Memory usage improvements
+
+= 1.0.5 - Advanced Technical Features =
+* Comprehensive error handling
+* Enhanced debugging capabilities
+* Performance optimizations
+* Security improvements
+
+= 1.0.0 - Initial Release =
+* Core sync functionality for products and categories
+* Professional admin interface
+* AJAX-powered batch processing
+* WordPress security best practices
 - Does not modify your Ecwid store data (read-only access)
 - Follows WordPress privacy best practices
 

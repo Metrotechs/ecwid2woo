@@ -19,7 +19,7 @@ if (!defined('ABSPATH')) {
 class Ecwid2Woo_Full_Sync {
     
     private $parent_plugin;
-    private $sync_steps = ['categories', 'products']; // Define order of sync for full sync
+    private $sync_steps = ['categories', 'products', 'customers', 'orders']; // Define order of sync for full sync
     
     public function __construct($parent_plugin) {
         $this->parent_plugin = $parent_plugin;
@@ -36,7 +36,7 @@ class Ecwid2Woo_Full_Sync {
         ?>
         <div class="ecwid-page-header">
             <h1><?php esc_html_e('Full Data Sync', 'ecwid2woo'); ?></h1>
-            <p class="description"><?php esc_html_e('This will sync all categories and then all enabled products from Ecwid to WooCommerce. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'ecwid2woo'); ?></p>
+            <p class="description"><?php esc_html_e('This will sync all categories, products, customers, and orders from Ecwid to WooCommerce. The sync happens in order: Categories → Products → Customers → Orders. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'ecwid2woo'); ?></p>
         </div>
 
         <!-- Navigation Bar -->
@@ -53,12 +53,22 @@ class Ecwid2Woo_Full_Sync {
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->partial_sync_slug)); ?>" class="nav-link">
                 <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'ecwid2woo'); ?>
             </a>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->customer_sync_slug)); ?>" class="nav-link">
+                <span class="nav-icon">👥</span> <?php esc_html_e('Customer Sync', 'ecwid2woo'); ?>
+            </a>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->order_sync_slug)); ?>" class="nav-link">
+                <span class="nav-icon">📦</span> <?php esc_html_e('Order Sync', 'ecwid2woo'); ?>
+            </a>
         </div>
 
         <div class="ecwid-sync-container">
-        <button id="load-full-sync-preview-button" class="button margin-bottom-15"><?php esc_html_e('Reload Sync Data', 'ecwid2woo'); ?></button>
+            <div id="full-sync-initial-info" class="selective-sync-initial-info">
+                <!-- This will be populated by JavaScript -->
+            </div>
 
-        <div id="full-sync-preview-container" class="sync-preview-container">
+            <button id="load-full-sync-preview-button" class="button button-primary"><?php esc_html_e('Reload Sync Data', 'ecwid2woo'); ?></button>
+
+            <div id="full-sync-preview-container" class="sync-preview-container">
                 <div class="sync-preview-grid">
                     <div class="sync-preview-column">
                         <h3><?php esc_html_e('Categories to be Synced:', 'ecwid2woo'); ?></h3>
@@ -68,11 +78,22 @@ class Ecwid2Woo_Full_Sync {
                         <h3><?php esc_html_e('Products to be Synced:', 'ecwid2woo'); ?></h3>
                         <div id="full-sync-product-preview-list" class="sync-preview-list"></div>
                     </div>
+                    <div class="sync-preview-column">
+                        <h3><?php esc_html_e('Customers to be Synced:', 'ecwid2woo'); ?></h3>
+                        <div id="full-sync-customer-preview-list" class="sync-preview-list"></div>
+                    </div>
+                    <div class="sync-preview-column">
+                        <h3><?php esc_html_e('Orders to be Synced:', 'ecwid2woo'); ?></h3>
+                        <div id="full-sync-order-preview-list" class="sync-preview-list"></div>
+                    </div>
                 </div>
             </div>
             
+            <button id="full-sync-button" class="button button-primary sync-button-primary"><?php esc_html_e('Start Full Sync', 'ecwid2woo'); ?></button>
+            <button id="stop-full-sync-button" class="button button-secondary sync-button-stop"><?php esc_html_e('STOP SYNC', 'ecwid2woo'); ?></button>
+            
+            <div id="full-sync-status" class="sync-status margin-top-15"></div>
             <div id="full-sync-counts-info" class="sync-counts-info"><?php esc_html_e('Item counts will be displayed here.', 'ecwid2woo'); ?></div>
-            <div id="full-sync-status" class="sync-status"></div>
             
             <div class="sync-progress-wrapper">
                 <label for="full-sync-bar" class="sync-progress-label"><?php esc_html_e('Overall Progress:', 'ecwid2woo'); ?></label>
@@ -81,8 +102,6 @@ class Ecwid2Woo_Full_Sync {
                 </div>
             </div>
 
-            <button id="full-sync-button" class="button button-primary sync-button-primary"><?php esc_html_e('Start Full Sync', 'ecwid2woo'); ?></button>
-            <button id="stop-full-sync-button" class="button button-secondary sync-button-stop"><?php esc_html_e('STOP SYNC', 'ecwid2woo'); ?></button>
             <div id="full-sync-log" class="sync-log"></div>
         </div>
         <?php
@@ -181,7 +200,7 @@ class Ecwid2Woo_Full_Sync {
             error_log("Ecwid Sync: FULL BATCH - Type: $sync_type, Offset: $offset, API Limit: $limit_per_api_call, Memory: " . size_format($free_memory) . " free"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
         }
 
-        $endpoints = ['products' => '/products', 'categories' => '/categories'];
+        $endpoints = ['products' => '/products', 'categories' => '/categories', 'customers' => '/customers', 'orders' => '/orders'];
         if (!isset($endpoints[$sync_type])) {
             wp_send_json_error(['message' => __('Invalid sync type for full sync.', 'ecwid2woo')]); return;
         }
@@ -195,6 +214,10 @@ class Ecwid2Woo_Full_Sync {
             $query_params_for_url['responseFields'] = 'items(id,sku,name,price,description,shortDescription,enabled,weight,quantity,unlimited,categoryIds,hdThumbnailUrl,imageUrl,galleryImages,options,combinations(id,sku,price,compareToPrice,defaultDisplayedPrice,defaultDisplayedCompareToPrice,options,quantity),productClassId,attributes,compareToPrice,dimensions,shipping)';
         } elseif ($sync_type === 'categories') {
             $query_params_for_url['responseFields'] = 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl)';
+        } elseif ($sync_type === 'customers') {
+            $query_params_for_url['responseFields'] = 'items(id,email,name,customerGroupId,customerGroupName,acceptMarketing,registered,lang,billingPerson,shippingAddresses)';
+        } elseif ($sync_type === 'orders') {
+            $query_params_for_url['responseFields'] = 'items(id,orderNumber,vendorOrderNumber,subtotal,total,email,paymentMethod,paymentModule,tax,customerTaxExempt,customerTaxId,customerTaxIdValid,reversedTaxApplied,couponDiscount,paymentStatus,fulfillmentStatus,refererUrl,orderComments,volumeDiscount,customerId,membershipBasedDiscount,totalAndMembershipBasedDiscount,discount,usdTotal,globalReferer,createDate,updateDate,createTimestamp,updateTimestamp,hidden,orderExtraFields,customSurcharges,items,billingPerson,shippingPerson,shippingOption,handlingFee,predictedPackage,shipments,discountCoupon,discountInfo,creditCardStatus,externalTransactionId,paymentReference,paymentRequestId,additionalInfo,paymentParams,acceptMarketing)';
         }
 
         $api_url = add_query_arg($query_params_for_url, $api_url_base);
@@ -266,7 +289,17 @@ class Ecwid2Woo_Full_Sync {
                 }
 
                 $result_array = null;
-                $item_identifier_for_log = ($sync_type === 'products' ? "Product" : "Category") . " (Ecwid ID: " . ($item_data['id'] ?? 'N/A') . ")";
+                if ($sync_type === 'products') {
+                    $item_identifier_for_log = "Product (Ecwid ID: " . ($item_data['id'] ?? 'N/A') . ")";
+                } elseif ($sync_type === 'categories') {
+                    $item_identifier_for_log = "Category (Ecwid ID: " . ($item_data['id'] ?? 'N/A') . ")";
+                } elseif ($sync_type === 'customers') {
+                    $item_identifier_for_log = "Customer (Ecwid ID: " . ($item_data['id'] ?? 'N/A') . ")";
+                } elseif ($sync_type === 'orders') {
+                    $item_identifier_for_log = "Order (Ecwid ID: " . ($item_data['id'] ?? 'N/A') . ")";
+                } else {
+                    $item_identifier_for_log = "Item (Ecwid ID: " . ($item_data['id'] ?? 'N/A') . ")";
+                }
 
                 try {
                     switch ($sync_type) {
@@ -275,6 +308,12 @@ class Ecwid2Woo_Full_Sync {
                             break;
                         case 'categories':
                             $result_array = $this->parent_plugin->category_sync_handler->import_category($item_data);
+                            break;
+                        case 'customers':
+                            $result_array = $this->parent_plugin->customer_sync_handler->import_customer($item_data);
+                            break;
+                        case 'orders':
+                            $result_array = $this->parent_plugin->order_sync_handler->import_order($item_data);
                             break;
                     }
 
@@ -476,6 +515,8 @@ class Ecwid2Woo_Full_Sync {
 
             $category_count = 0;
             $product_count = 0;
+            $customer_count = 0;
+            $order_count = 0;
             $errors = [];
 
             // Fetch category count and preview
@@ -530,13 +571,79 @@ class Ecwid2Woo_Full_Sync {
                 $errors[] = sprintf(__('Product count request failed: %s', 'ecwid2woo'), $products_response->get_error_message());
             }
 
+            // Fetch customer count and preview
+            $customers_url = add_query_arg([
+                'limit' => 5,
+                'responseFields' => 'items(id,email,name,customerGroupName),total'
+            ], $api_essentials['base_url'] . '/customers');
+            $customers_response = wp_remote_get($customers_url, [
+                'timeout' => 60,
+                'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
+            ]);
+
+            $customers_preview = [];
+            if (!is_wp_error($customers_response)) {
+                $customers_body = json_decode(wp_remote_retrieve_body($customers_response), true);
+                $customers_http_code = wp_remote_retrieve_response_code($customers_response);
+                
+                if ($customers_http_code === 200 && isset($customers_body['total'])) {
+                    $customer_count = intval($customers_body['total']);
+                    if (isset($customers_body['items']) && is_array($customers_body['items'])) {
+                        $customers_preview = array_slice($customers_body['items'], 0, 5);
+                    }
+                } elseif ($customers_http_code === 403) {
+                    // Handle permission error gracefully for customers
+                    $customer_count = 0;
+                    $errors[] = __('Customer access requires "Read customers" permission in your Ecwid API token.', 'ecwid2woo');
+                } else {
+                    $errors[] = sprintf(__('Failed to fetch customer count (HTTP %d)', 'ecwid2woo'), $customers_http_code);
+                }
+            } else {
+                $errors[] = sprintf(__('Customer count request failed: %s', 'ecwid2woo'), $customers_response->get_error_message());
+            }
+
+            // Fetch order count and preview
+            $orders_url = add_query_arg([
+                'limit' => 5,
+                'responseFields' => 'items(id,orderNumber,email,total,paymentStatus,fulfillmentStatus,createDate),total'
+            ], $api_essentials['base_url'] . '/orders');
+            $orders_response = wp_remote_get($orders_url, [
+                'timeout' => 60,
+                'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
+            ]);
+
+            $orders_preview = [];
+            if (!is_wp_error($orders_response)) {
+                $orders_body = json_decode(wp_remote_retrieve_body($orders_response), true);
+                $orders_http_code = wp_remote_retrieve_response_code($orders_response);
+                
+                if ($orders_http_code === 200 && isset($orders_body['total'])) {
+                    $order_count = intval($orders_body['total']);
+                    if (isset($orders_body['items']) && is_array($orders_body['items'])) {
+                        $orders_preview = array_slice($orders_body['items'], 0, 5);
+                    }
+                } elseif ($orders_http_code === 403) {
+                    // Handle permission error gracefully for orders
+                    $order_count = 0;
+                    $errors[] = __('Order access requires "Read orders" permission in your Ecwid API token.', 'ecwid2woo');
+                } else {
+                    $errors[] = sprintf(__('Failed to fetch order count (HTTP %d)', 'ecwid2woo'), $orders_http_code);
+                }
+            } else {
+                $errors[] = sprintf(__('Order count request failed: %s', 'ecwid2woo'), $orders_response->get_error_message());
+            }
+
             // Send response
             $response_data = [
                 'categories_count' => $category_count,
                 'products_count' => $product_count,
-                'total_items' => $category_count + $product_count,
+                'customers_count' => $customer_count,
+                'orders_count' => $order_count,
+                'total_items' => $category_count + $product_count + $customer_count + $order_count,
                 'categories_preview' => $categories_preview,
                 'products_preview' => $products_preview,
+                'customers_preview' => $customers_preview,
+                'orders_preview' => $orders_preview,
                 'success' => empty($errors),
                 'debug_info' => [
                     'api_configured' => !is_wp_error($api_essentials),
@@ -544,8 +651,12 @@ class Ecwid2Woo_Full_Sync {
                     'has_errors' => !empty($errors),
                     'categories_api_status' => isset($categories_http_code) ? $categories_http_code : 'No response',
                     'products_api_status' => isset($products_http_code) ? $products_http_code : 'No response',
+                    'customers_api_status' => isset($customers_http_code) ? $customers_http_code : 'No response',
+                    'orders_api_status' => isset($orders_http_code) ? $orders_http_code : 'No response',
                     'categories_url' => isset($categories_url) ? $categories_url : 'Not set',
-                    'products_url' => isset($products_url) ? $products_url : 'Not set'
+                    'products_url' => isset($products_url) ? $products_url : 'Not set',
+                    'customers_url' => isset($customers_url) ? $customers_url : 'Not set',
+                    'orders_url' => isset($orders_url) ? $orders_url : 'Not set'
                 ]
             ];
 

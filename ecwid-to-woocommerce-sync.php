@@ -77,7 +77,7 @@ define('ECWID2WOO_VERSION', '1.1.0'); // Define version constant
 
 class Ecwid_WC_Sync {
     private $options;
-    private $sync_steps = ['categories', 'products']; // Define order of sync for full sync
+    private $sync_steps = ['categories', 'products', 'customers', 'orders']; // Define order of sync for full sync
     private $ecwid_currency = null; // Cache for Ecwid store currency
     private $wc_currency = null; // Cache for WooCommerce base currency
 
@@ -86,8 +86,13 @@ class Ecwid_WC_Sync {
     public $full_sync_slug = 'ecwid-sync-full';
     public $partial_sync_slug = 'ecwid-sync-partial';
     public $category_sync_slug = 'ecwid-sync-categories';
+    public $product_sync_slug = 'ecwid-sync-products';
+    public $customer_sync_slug = 'ecwid-sync-customers';
+    public $order_sync_slug = 'ecwid-sync-orders';
     public $category_sync_handler; // Category sync handler instance
     public $product_sync_handler; // Product sync handler instance
+    public $customer_sync_handler; // Customer sync handler instance
+    public $order_sync_handler; // Order sync handler instance
     private $full_sync_handler; // Full sync handler instance
 
     public function __construct() {
@@ -104,6 +109,14 @@ class Ecwid_WC_Sync {
         // Include and initialize the full sync handler
         require_once plugin_dir_path(__FILE__) . 'full-sync-page.php';
         $this->full_sync_handler = new Ecwid2Woo_Full_Sync($this);
+        
+        // Include and initialize the customer sync handler
+        require_once plugin_dir_path(__FILE__) . 'customer-sync-page.php';
+        $this->customer_sync_handler = new Ecwid2Woo_Customer_Sync($this);
+        
+        // Include and initialize the order sync handler
+        require_once plugin_dir_path(__FILE__) . 'order-sync-page.php';
+        $this->order_sync_handler = new Ecwid2Woo_Order_Sync($this);
         
         add_action('init', [$this, 'register_placeholder_cpt']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
@@ -248,6 +261,24 @@ class Ecwid_WC_Sync {
             [$this, 'options_page_router']
         );
 
+        add_submenu_page(
+            $this->settings_slug,
+            __('Customer Sync', 'ecwid2woo'),
+            __('Customer Sync', 'ecwid2woo'),
+            'manage_options',
+            $this->customer_sync_slug,
+            [$this, 'options_page_router']
+        );
+
+        add_submenu_page(
+            $this->settings_slug,
+            __('Order Sync', 'ecwid2woo'),
+            __('Order Sync', 'ecwid2woo'),
+            'manage_options',
+            $this->order_sync_slug,
+            [$this, 'options_page_router']
+        );
+
         // Add the Placeholders CPT as the last submenu item
         add_submenu_page(
             $this->settings_slug,                         // Parent slug
@@ -361,6 +392,12 @@ class Ecwid_WC_Sync {
                 'no_products_selected' => __('No products selected for import.', 'ecwid2woo'),
                 'select_all_none' => __('Select All/None', 'ecwid2woo'),
                 'no_products_found' => __('No enabled products found in Ecwid store or failed to fetch.', 'ecwid2woo'),
+                'no_customers_found' => __('No customers found or access denied.', 'ecwid2woo'),
+                'no_orders_found' => __('No orders found or access denied.', 'ecwid2woo'),
+                'loading_customers' => __('Loading Customers...', 'ecwid2woo'),
+                'loading_orders' => __('Loading Orders...', 'ecwid2woo'),
+                'customers_to_sync_info' => __('Customers to sync: {count}', 'ecwid2woo'),
+                'orders_to_sync_info' => __('Orders to sync: {count}', 'ecwid2woo'),
                 'start_category_sync_page' => __('Start Category Sync', 'ecwid2woo'),
                 'syncing_categories_page_button' => __('Syncing Categories...', 'ecwid2woo'),
                 'category_sync_page_complete' => __('Category Sync Complete!', 'ecwid2woo'),
@@ -397,6 +434,28 @@ class Ecwid_WC_Sync {
                 'categories_import_complete' => __('Selected categories import complete!', 'ecwid2woo'),
                 'load_categories' => __('Load Ecwid Categories', 'ecwid2woo'),
                 'loading_categories' => __('Loading Categories...', 'ecwid2woo'),
+                
+                // Customer Sync i18n
+                'loading_customers' => __('Loading Customers...', 'ecwid2woo'),
+                'select_all_customers' => __('Select All/None', 'ecwid2woo'),
+                'import_selected_customers' => __('Import Selected Customers', 'ecwid2woo'),
+                'importing_selected_customers' => __('Importing Selected Customers...', 'ecwid2woo'),
+                'no_customers_selected' => __('No customers selected for import.', 'ecwid2woo'),
+                'customers_import_complete' => __('Selected customers import complete!', 'ecwid2woo'),
+                'load_customers' => __('Load Ecwid Customers', 'ecwid2woo'),
+                'no_customers_found' => __('No customers found in your Ecwid store or failed to fetch.', 'ecwid2woo'),
+                'customers_loaded_for_display' => __('{count} customers loaded for display.', 'ecwid2woo'),
+                
+                // Order Sync i18n
+                'loading_orders' => __('Loading Orders...', 'ecwid2woo'),
+                'select_all_orders' => __('Select All/None', 'ecwid2woo'),
+                'import_selected_orders' => __('Import Selected Orders', 'ecwid2woo'),
+                'importing_selected_orders' => __('Importing Selected Orders...', 'ecwid2woo'),
+                'no_orders_selected' => __('No orders selected for import.', 'ecwid2woo'),
+                'orders_import_complete' => __('Selected orders import complete!', 'ecwid2woo'),
+                'load_orders' => __('Load Ecwid Orders', 'ecwid2woo'),
+                'no_orders_found' => __('No orders found in your Ecwid store or failed to fetch.', 'ecwid2woo'),
+                'orders_loaded_for_display' => __('{count} orders loaded for display.', 'ecwid2woo')
             ]
         ]);
 
@@ -427,6 +486,12 @@ class Ecwid_WC_Sync {
                 break;
             case $this->partial_sync_slug:
                 $this->product_sync_handler->render_product_sync_page();
+                break;
+            case $this->customer_sync_slug:
+                $this->customer_sync_handler->render_customer_sync_page();
+                break;
+            case $this->order_sync_slug:
+                $this->order_sync_handler->render_order_sync_page();
                 break;
             default:
                 $this->render_settings_page();
@@ -498,7 +563,23 @@ class Ecwid_WC_Sync {
                         </div>
                     </a>
                     
-                    <a href="<?php echo esc_url(admin_url('edit.php?post_type=ecwid_placeholder')); ?>" class="nav-button nav-button-quaternary">
+                    <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->customer_sync_slug)); ?>" class="nav-button nav-button-quinary">
+                        <div class="nav-button-icon">👥</div>
+                        <div class="nav-button-content">
+                            <h3><?php esc_html_e('Customer Sync', 'ecwid2woo'); ?></h3>
+                            <p><?php esc_html_e('Import customer data', 'ecwid2woo'); ?></p>
+                        </div>
+                    </a>
+                    
+                    <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->order_sync_slug)); ?>" class="nav-button nav-button-senary">
+                        <div class="nav-button-icon">📦</div>
+                        <div class="nav-button-content">
+                            <h3><?php esc_html_e('Order Sync', 'ecwid2woo'); ?></h3>
+                            <p><?php esc_html_e('Import order data', 'ecwid2woo'); ?></p>
+                        </div>
+                    </a>
+                    
+                    <a href="<?php echo esc_url(admin_url('edit.php?post_type=ecwid_placeholder')); ?>" class="nav-button nav-button-septenary">
                         <div class="nav-button-icon">📋</div>
                         <div class="nav-button-content">
                             <h3><?php esc_html_e('Placeholders', 'ecwid2woo'); ?></h3>

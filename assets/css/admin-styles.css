@@ -149,6 +149,36 @@
     color: white;
 }
 
+.nav-button-quinary {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+}
+
+.nav-button-quinary:hover {
+    background: linear-gradient(135deg, #2980b9 0%, #1f5f8b 100%);
+    color: white;
+}
+
+.nav-button-senary {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: white;
+}
+
+.nav-button-senary:hover {
+    background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+    color: white;
+}
+
+.nav-button-septenary {
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    color: white;
+}
+
+.nav-button-septenary:hover {
+    background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+    color: white;
+}
+
 .nav-button-icon {
     font-size: 24px;
     margin-right: 15px;

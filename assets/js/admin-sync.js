@@ -2,6 +2,13 @@
     // Debug Mode: Set to true to enable console debugging
     window.ecwidDebugMode = false; // Debugging completed, back to production mode
     
+    // --- Global Utility Functions ---
+    function sanitizeHTML(str) {
+        const temp = document.createElement('div');
+        temp.textContent = str;
+        return temp.innerHTML;
+    }
+    
     $(document).ready(function() {
         if (typeof ecwid_sync_params === 'undefined') {
             console.error('Ecwid Sync Error: Localization parameters (ecwid_sync_params) not found. Ensure the plugin is activated and scripts are enqueued correctly.');
@@ -79,17 +86,11 @@
             if (!i18n[key]) {
                 i18n[key] = i18n_defaults[key];
             }
-        }        const fullSyncSteps = (ecwid_sync_params.sync_steps && ecwid_sync_params.sync_steps.length > 0) ? ecwid_sync_params.sync_steps : ['categories', 'products'];
+        }        const fullSyncSteps = (ecwid_sync_params.sync_steps && ecwid_sync_params.sync_steps.length > 0) ? ecwid_sync_params.sync_steps : ['categories', 'products', 'customers', 'orders'];
         const totalFullSyncSteps = fullSyncSteps.length;
         const variationBatchSize = parseInt(ecwid_sync_params.variation_batch_size) || 50; // Ensure it's an integer
 
         // --- Utility Functions ---
-        function sanitizeHTML(str) {
-            const temp = document.createElement('div');
-            temp.textContent = str;
-            return temp.innerHTML;
-        }
-
         function capitalizeFirstLetter(string) {
             if (!string) return ''; // Handle empty or null string
             return string.charAt(0).toUpperCase() + string.slice(1);
@@ -114,6 +115,10 @@
                     completedStepsWeight += totalCategoriesToSync;
                 } else if (fullSyncSteps[i] === 'products' && totalProductsToSync > 0) {
                     completedStepsWeight += totalProductsToSync;
+                } else if (fullSyncSteps[i] === 'customers' && totalCustomersToSync > 0) {
+                    completedStepsWeight += totalCustomersToSync;
+                } else if (fullSyncSteps[i] === 'orders' && totalOrdersToSync > 0) {
+                    completedStepsWeight += totalOrdersToSync;
                 }
             }
 
@@ -122,11 +127,17 @@
                 currentStepWeight = (currentStepProgressPercent / 100) * totalCategoriesToSync;
             } else if (fullSyncSteps[currentFullSyncStepIndex] === 'products' && totalProductsToSync > 0) {
                 currentStepWeight = (currentStepProgressPercent / 100) * totalProductsToSync;
+            } else if (fullSyncSteps[currentFullSyncStepIndex] === 'customers' && totalCustomersToSync > 0) {
+                currentStepWeight = (currentStepProgressPercent / 100) * totalCustomersToSync;
+            } else if (fullSyncSteps[currentFullSyncStepIndex] === 'orders' && totalOrdersToSync > 0) {
+                currentStepWeight = (currentStepProgressPercent / 100) * totalOrdersToSync;
             }
             
             // If current step has no items, but it's completed, consider its "weight" fully contributed if it's not the only step
             if ( (fullSyncSteps[currentFullSyncStepIndex] === 'categories' && totalCategoriesToSync === 0 && currentStepProgressPercent >=100) ||
-                 (fullSyncSteps[currentFullSyncStepIndex] === 'products' && totalProductsToSync === 0 && currentStepProgressPercent >=100) ) {
+                 (fullSyncSteps[currentFullSyncStepIndex] === 'products' && totalProductsToSync === 0 && currentStepProgressPercent >=100) ||
+                 (fullSyncSteps[currentFullSyncStepIndex] === 'customers' && totalCustomersToSync === 0 && currentStepProgressPercent >=100) ||
+                 (fullSyncSteps[currentFullSyncStepIndex] === 'orders' && totalOrdersToSync === 0 && currentStepProgressPercent >=100) ) {
                 // This logic might need refinement if a step with 0 items shouldn't contribute to progress unless it's the *only* step.
                 // For now, if a step with 0 items is "100% complete", it doesn't add to currentStepWeight unless explicitly handled.
                 // The overall progress will mostly be driven by steps that *do* have items.
@@ -156,8 +167,11 @@
         const fullSyncPreviewContainer = $('#full-sync-preview-container');
         const fullSyncCategoryPreviewList = $('#full-sync-category-preview-list');
         const fullSyncProductPreviewList = $('#full-sync-product-preview-list');
+        const fullSyncCustomerPreviewList = $('#full-sync-customer-preview-list');
+        const fullSyncOrderPreviewList = $('#full-sync-order-preview-list');
         const fullSyncProgressContainer = $('#full-sync-progress-container');
         const stopFullSyncButton = $('#stop-full-sync-button'); // ADDED
+        const fullSyncInitialInfoDiv = $('#full-sync-initial-info'); // ADDED
 
         // Category Sync Page UI Elements
         const categoryPageSyncButton = $('#category-page-sync-button');
@@ -216,6 +230,8 @@
 
         let totalCategoriesToSync = 0; // Ensure these are declared in a scope accessible by updateOverallFullSyncProgress
         let totalProductsToSync = 0;   // and are updated by fetchAndDisplayFullSyncCounts
+        let totalCustomersToSync = 0;
+        let totalOrdersToSync = 0;
         let grandTotalAllItemsForSync = 0;
         let fullSyncVariationQueue = [];
         let currentFullSyncVariationProductData = null;
@@ -422,12 +438,28 @@
             loadFullSyncPreviewButton.prop('disabled', true).text(i18n.loading_sync_preview || 'Reloading sync data...');
             updateStatus(fullSyncStatusDiv, i18n.loading_sync_preview || 'Reloading sync data...');
             
+            // Show loading state in initial info container
+            if (fullSyncInitialInfoDiv.length) {
+                fullSyncInitialInfoDiv.html(`
+                    <div style="padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; margin: 10px 0;">
+                        <strong>⏳ Loading Full Sync Data...</strong><br>
+                        <span style="font-size: 12px; color: #856404;">Fetching Categories, Products, Customers, and Orders from Ecwid API</span>
+                    </div>
+                `);
+            }
+            
             // Only update these if they exist
             if (fullSyncCategoryPreviewList.length) {
                 fullSyncCategoryPreviewList.html('<em>' + (i18n.loading_ecwid_categories || 'Loading Categories...') + '</em>');
             }
             if (fullSyncProductPreviewList.length) {
                 fullSyncProductPreviewList.html('<em>' + (i18n.loading_products || 'Loading Products...') + '</em>');
+            }
+            if (fullSyncCustomerPreviewList.length) {
+                fullSyncCustomerPreviewList.html('<em>' + (i18n.loading_customers || 'Loading Customers...') + '</em>');
+            }
+            if (fullSyncOrderPreviewList.length) {
+                fullSyncOrderPreviewList.html('<em>' + (i18n.loading_orders || 'Loading Orders...') + '</em>');
             }
 
             $.ajax({
@@ -445,13 +477,19 @@
                 if (response.success && response.data) {
                     totalCategoriesToSync = parseInt(response.data.categories_count) || 0;
                     totalProductsToSync = parseInt(response.data.products_count) || 0;
-                    grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync;
+                    totalCustomersToSync = parseInt(response.data.customers_count) || 0;
+                    totalOrdersToSync = parseInt(response.data.orders_count) || 0;
+                    grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync + totalCustomersToSync + totalOrdersToSync;
 
                     const categories = response.data.categories_preview || [];
                     const products = response.data.products_preview || [];
+                    const customers = response.data.customers_preview || [];
+                    const orders = response.data.orders_preview || [];
                     
                     console.log('Categories preview data available:', categories ? categories.length : 0);
                     console.log('Products preview data available:', products ? products.length : 0);
+                    console.log('Customers preview data available:', customers ? customers.length : 0);
+                    console.log('Orders preview data available:', orders ? orders.length : 0);
 
                     // Only update preview lists if the elements exist
                     if (fullSyncCategoryPreviewList.length) {
@@ -481,12 +519,83 @@
                             fullSyncProductPreviewList.html('<em>' + (i18n.no_products_found || 'No enabled products found or failed to fetch.') + '</em>');
                         }
                     }
+
+                    if (fullSyncCustomerPreviewList.length) {
+                        fullSyncCustomerPreviewList.empty();
+                        if (customers && customers.length > 0) {
+                            customers.forEach(customer => {
+                                const customerName = sanitizeHTML(customer.name || 'Unnamed Customer');
+                                const customerEmail = sanitizeHTML(customer.email || 'No email');
+                                const customerId = customer.id || 'N/A';
+                                fullSyncCustomerPreviewList.append(`<div>${customerName} (${customerEmail}) - ID: ${customerId}</div>`);
+                            });
+                            fullSyncCustomerPreviewList.append(`<hr><p><strong>Total customers to sync: ${totalCustomersToSync}</strong></p>`);
+                        } else {
+                            fullSyncCustomerPreviewList.html('<em>' + (i18n.no_customers_found || 'No customers found or access denied.') + '</em>');
+                        }
+                    }
+
+                    if (fullSyncOrderPreviewList.length) {
+                        fullSyncOrderPreviewList.empty();
+                        if (orders && orders.length > 0) {
+                            orders.forEach(order => {
+                                const orderNumber = sanitizeHTML(order.orderNumber || 'N/A');
+                                const customerEmail = sanitizeHTML(order.email || 'No email');
+                                const orderId = order.id || 'N/A';
+                                const total = order.total ? `$${order.total}` : 'N/A';
+                                fullSyncOrderPreviewList.append(`<div>Order #${orderNumber} (${customerEmail}) - ${total} - ID: ${orderId}</div>`);
+                            });
+                            fullSyncOrderPreviewList.append(`<hr><p><strong>Total orders to sync: ${totalOrdersToSync}</strong></p>`);
+                        } else {
+                            fullSyncOrderPreviewList.html('<em>' + (i18n.no_orders_found || 'No orders found or access denied.') + '</em>');
+                        }
+                    }
                     
                     let countText = (i18n.categories_to_sync_info || 'Categories to sync: {count}').replace('{count}', totalCategoriesToSync) + ', ' +
-                                    (i18n.products_to_sync_info || 'Products to sync: {count}').replace('{count}', totalProductsToSync);
+                                    (i18n.products_to_sync_info || 'Products to sync: {count}').replace('{count}', totalProductsToSync) + ', ' +
+                                    (i18n.customers_to_sync_info || 'Customers to sync: {count}').replace('{count}', totalCustomersToSync) + ', ' +
+                                    (i18n.orders_to_sync_info || 'Orders to sync: {count}').replace('{count}', totalOrdersToSync);
                     fullSyncCountsInfoDiv.text(countText);
 
                     updateStatus(fullSyncStatusDiv, i18n.preview_loaded_ready_to_sync || 'Preview loaded. Ready to start full sync.');
+                    
+                    // Update initial info container with success state
+                    if (fullSyncInitialInfoDiv.length) {
+                        const styledStatusHtml = `
+                            <div style="padding: 15px; background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; margin: 10px 0;">
+                                <p style="margin: 0 0 5px 0; font-weight: bold;">🎯 Full Sync Data Loaded Successfully!</p>
+                                <p style="margin: 0 0 10px 0; font-size: 12px; color: #0c5460; font-style: normal;">Ready to sync all store data: Categories, Products, Customers, and Orders</p>
+                                <div style="margin: 10px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; font-size: 11px;">
+                                    <div style="background: #f8f9fa; padding: 8px; border-radius: 3px; text-align: center;">
+                                        <strong>📂 Categories</strong><br>
+                                        <span style="color: #28a745; font-weight: bold;">${totalCategoriesToSync}</span>
+                                    </div>
+                                    <div style="background: #f8f9fa; padding: 8px; border-radius: 3px; text-align: center;">
+                                        <strong>📦 Products</strong><br>
+                                        <span style="color: #28a745; font-weight: bold;">${totalProductsToSync}</span>
+                                    </div>
+                                    <div style="background: #f8f9fa; padding: 8px; border-radius: 3px; text-align: center;">
+                                        <strong>👥 Customers</strong><br>
+                                        <span style="color: #28a745; font-weight: bold;">${totalCustomersToSync}</span>
+                                    </div>
+                                    <div style="background: #f8f9fa; padding: 8px; border-radius: 3px; text-align: center;">
+                                        <strong>🛒 Orders</strong><br>
+                                        <span style="color: #28a745; font-weight: bold;">${totalOrdersToSync}</span>
+                                    </div>
+                                </div>
+                                <details style="margin-top: 10px; font-size: 11px; color: #6c757d;">
+                                    <summary style="cursor: pointer;">🔍 Full Sync Details (click to expand)</summary>
+                                    <div style="margin-top: 5px; padding: 5px; background: #f9f9f9; border-radius: 3px;">
+                                        <strong>Total Items:</strong> ${grandTotalAllItemsForSync}<br>
+                                        <strong>Sync Steps:</strong> Categories → Products → Customers → Orders<br>
+                                        <strong>Progress Tracking:</strong> Real-time with weighted calculations<br>
+                                        <strong>Data Source:</strong> Ecwid Store API
+                                    </div>
+                                </details>
+                            </div>
+                        `;
+                        fullSyncInitialInfoDiv.html(styledStatusHtml);
+                    }
                     
                     // Only show preview container if it exists
                     if (fullSyncPreviewContainer.length) {
@@ -497,6 +606,16 @@
                     const errorMsg = response.data && response.data.message ? response.data.message : (i18n.preview_load_error || 'Error loading preview data.');
                     updateStatus(fullSyncStatusDiv, errorMsg);
                     logMessage(fullSyncLogDiv, 'Preview Error: ' + errorMsg, 'error');
+                    
+                    // Update initial info container with error state
+                    if (fullSyncInitialInfoDiv.length) {
+                        fullSyncInitialInfoDiv.html(`
+                            <div style="padding: 15px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; margin: 10px 0;">
+                                <strong>❌ Failed to Load Full Sync Data</strong><br>
+                                <span style="font-size: 12px; color: #721c24;">${sanitizeHTML(errorMsg)}</span>
+                            </div>
+                        `);
+                    }
                     
                     // Handle error case but still try to show preview data if available
                     if (response.data) {
@@ -531,6 +650,16 @@
                 updateStatus(fullSyncStatusDiv, errorMsg + ` (${textStatus})`);
                 logMessage(fullSyncLogDiv, `Failed to load sync preview: ${textStatus}, ${errorThrown}`, 'error');
                 console.error('AJAX error details:', jqXHR.responseText);
+                
+                // Update initial info container with AJAX error state
+                if (fullSyncInitialInfoDiv.length) {
+                    fullSyncInitialInfoDiv.html(`
+                        <div style="padding: 15px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; margin: 10px 0;">
+                            <strong>❌ Connection Error</strong><br>
+                            <span style="font-size: 12px; color: #721c24;">Failed to connect to Ecwid API. Please check your connection and try again.</span>
+                        </div>
+                    `);
+                }
                 
                 if (fullSyncCategoryPreviewList.length) {
                     fullSyncCategoryPreviewList.html('<em>AJAX error loading categories.</em>');
@@ -568,7 +697,7 @@
                 currentFullSyncStepIndex = 0;
                 currentFullSyncStepOffset = 0;
                 fullSyncOverallProgress = 0;
-                grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync; // Recalculate here or ensure it's fresh
+                grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync + totalCustomersToSync + totalOrdersToSync; // Recalculate here or ensure it's fresh
 
                 fullSyncProgressBar.css('width', '0%').text('0%');
                 fullSyncProgressContainer.show();
@@ -616,6 +745,10 @@
                     currentTotalForStep = totalCategoriesToSync;
                 } else if (syncType === 'products') {
                     currentTotalForStep = totalProductsToSync;
+                } else if (syncType === 'customers') {
+                    currentTotalForStep = totalCustomersToSync;
+                } else if (syncType === 'orders') {
+                    currentTotalForStep = totalOrdersToSync;
                 }
                 // Update status to "Syncing {type}: 0 of {total}..."
                 const initialStepStatus = i18n.syncing_item_of_total
@@ -2987,5 +3120,662 @@
             console.error('Response details:', jqXHR.responseText);
         });
     };
+    
+    // ================== ORDER SYNC FUNCTIONALITY ==================
+    
+    // Order Sync Page Elements
+    const loadOrdersButton = $('#load-ecwid-orders-button');
+    const orderListContainer = $('#selective-order-list-container');
+    const orderSyncInitialInfoDiv = $('#selective-sync-initial-info');
+    const importSelectedOrdersButton = $('#import-selected-orders-button');
+    const syncAllOrdersButton = $('#sync-all-orders-button');
+    const orderStatusFilter = $('#order-status-filter');
+    const orderDateFrom = $('#order-date-from');
+    const orderDateTo = $('#order-date-to');
+    
+    // Order sync state
+    let ecwidOrdersForSelection = [];
+    let currentOrderPage = 1;
+    let selectedOrderIds = new Set();
+    const ordersPerPage = 15;
+    
+    // Function to load and display all orders for selection
+    function loadAndDisplayOrdersForSelection() {
+        if (!loadOrdersButton.length || !orderListContainer.length) {
+            if (loadOrdersButton.length && !orderListContainer.length) {
+                console.warn("loadOrdersButton exists, but orderListContainer does not. Cannot load orders.");
+            }
+            if (orderSyncInitialInfoDiv.length) {
+                orderSyncInitialInfoDiv.text('');
+            }
+            return;
+        }
+
+        if (loadOrdersButton.hasClass('disabled')) return;
+
+        const originalButtonText = loadOrdersButton.text();
+        loadOrdersButton.addClass('disabled').text(ecwid_sync_params.i18n.loading_orders || 'Loading Orders...');
+        
+        // Get filter values
+        const statusFilter = orderStatusFilter.val() || '';
+        const dateFrom = orderDateFrom.val() || '';
+        const dateTo = orderDateTo.val() || '';
+        
+        // Create enhanced loading interface
+        const loadingHtml = `
+            <div class="ecwid-loading-container" style="text-align: center; padding: 40px 20px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+                <div class="ecwid-loading-spinner" style="margin-bottom: 15px;">
+                    <span class="dashicons dashicons-update" style="font-size: 24px; animation: ecwid-spin 1s linear infinite; color: #0073aa;"></span>
+                </div>
+                <div class="ecwid-loading-title" style="font-size: 16px; font-weight: bold; margin-bottom: 8px; color: #333;">
+                    ⏳ Loading Order Data
+                </div>
+                <div class="ecwid-loading-status" style="font-size: 14px; color: #666; margin-bottom: 10px;">
+                    Making API calls to fetch orders with customer associations...
+                </div>
+                <div class="ecwid-loading-progress" style="font-size: 12px; color: #999;">
+                    This may take a moment for large stores with many orders
+                </div>
+            </div>
+            <style>
+                @keyframes ecwid-spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+            </style>
+        `;
+        
+        orderListContainer.html(loadingHtml).show();
+        if (orderSyncInitialInfoDiv.length) {
+            orderSyncInitialInfoDiv.html(`
+                <div style="padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; margin: 10px 0;">
+                    <strong>⏳ Loading Orders...</strong><br>
+                    <span style="font-size: 12px; color: #666;">Fetching order data and matching with customers...</span>
+                </div>
+            `);
+        }
+
+        // AJAX call to fetch orders
+        $.ajax({
+            url: ecwid_sync_params.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'ecwid_wc_fetch_orders_for_display',
+                nonce: ecwid_sync_params.nonce,
+                status_filter: statusFilter,
+                date_from: dateFrom,
+                date_to: dateTo
+            },
+            dataType: 'json',
+            timeout: 180000 // 3 minutes timeout for large stores
+        })
+        .done(function(response) {
+            if (response.success && response.data && response.data.orders) {
+                ecwidOrdersForSelection = response.data.orders;
+                const totalFound = parseInt(response.data.total_found) || 0;
+                const apiCalls = parseInt(response.data.api_calls_made) || 1;
+                const totalAvailable = parseInt(response.data.total_available) || totalFound;
+                const filtersApplied = response.data.filters_applied || {};
+
+                // Enhanced status message
+                let statusMessage = `${totalFound} orders loaded`;
+                if (apiCalls > 1) {
+                    statusMessage += ` (${apiCalls} API calls)`;
+                }
+                if (totalAvailable && totalAvailable !== totalFound) {
+                    statusMessage += ` out of ${totalAvailable} available`;
+                }
+                
+                // Add filter info
+                let filterInfo = '';
+                if (filtersApplied.status) {
+                    filterInfo += ` | Status: ${filtersApplied.status}`;
+                }
+                if (filtersApplied.date_from || filtersApplied.date_to) {
+                    filterInfo += ` | Date filtered`;
+                }
+                statusMessage += filterInfo + '. Select individual orders to import.';
+
+                if (orderSyncInitialInfoDiv.length) {
+                    const styledStatusHtml = `
+                        <div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                            <p style="margin: 0 0 5px 0; font-weight: bold;">📦 Order Loading Complete:</p>
+                            <p style="margin: 0; font-size: 12px; color: #666; font-style: normal;">${statusMessage}</p>
+                            <p style="margin: 5px 0 0 0; font-size: 11px; color: #0073aa;"><strong>Note:</strong> Orders will be matched with existing customers and attached to their accounts.</p>
+                        </div>
+                    `;
+                    orderSyncInitialInfoDiv.html(styledStatusHtml);
+                }
+
+                // Reset pagination and selection state
+                currentOrderPage = 1;
+                selectedOrderIds.clear();
+
+                renderOrderSelectionList(ecwidOrdersForSelection);
+                
+                // Show final success message with fade out
+                $('.ecwid-loading-status').html(`✅ ${totalFound} orders ready for import!`);
+                setTimeout(function() {
+                    $('.ecwid-loading-container').fadeOut(800);
+                }, 2000);
+
+                if (ecwidOrdersForSelection.length > 0) {
+                    importSelectedOrdersButton.show();
+                } else {
+                    orderListContainer.html('<p style="color: orange;">No orders found matching your criteria.</p>');
+                    importSelectedOrdersButton.hide();
+                }
+            } else {
+                $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
+                $('.ecwid-loading-title').html('❌ Loading Failed');
+                $('.ecwid-loading-status').html('Error: ' + (response.data && response.data.message ? response.data.message : 'Unknown error occurred'));
+                
+                console.log('=== ORDER LOADING ERROR ===');
+                console.log('Response success:', response.success);
+                console.log('Response data:', response.data);
+                console.log('==============================');
+                
+                const errorMsg = response.data && response.data.message ? response.data.message : 'No orders found or failed to fetch.';
+                orderListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
+                if (orderSyncInitialInfoDiv.length) {
+                    orderSyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
+                }
+                
+                // Auto-hide error after 5 seconds
+                setTimeout(function() {
+                    $('.ecwid-loading-container').fadeOut(800);
+                }, 5000);
+            }
+        })
+        .fail(function(jqXHR, textStatus, errorThrown) {
+            console.error('Order loading AJAX failed:', textStatus, errorThrown);
+            const errorMessage = `AJAX Error: ${textStatus}. ${errorThrown}`;
+            
+            $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
+            $('.ecwid-loading-title').html('❌ Connection Failed');
+            $('.ecwid-loading-status').html(errorMessage);
+            
+            orderListContainer.html('<p style="color:red;">Failed to load orders. Please check your connection and try again.</p>');
+            if (orderSyncInitialInfoDiv.length) {
+                orderSyncInitialInfoDiv.html('<span style="color:red;">Failed to load orders.</span>');
+            }
+            
+            setTimeout(function() {
+                $('.ecwid-loading-container').fadeOut(800);
+            }, 5000);
+        })
+        .always(function() {
+            loadOrdersButton.removeClass('disabled').text(originalButtonText);
+        });
+    }
+
+    // Function to render order selection list with pagination
+    function renderOrderSelectionList(orders, page = 1) {
+        currentOrderPage = page;
+        
+        const totalOrders = orders.length;
+        const totalPages = Math.ceil(totalOrders / ordersPerPage);
+        const startIndex = (page - 1) * ordersPerPage;
+        const endIndex = Math.min(startIndex + ordersPerPage, totalOrders);
+        const ordersForPage = orders.slice(startIndex, endIndex);
+        
+        // Create pagination container if it doesn't exist
+        let orderPaginationContainer = $('#order-pagination-container');
+        if (!orderPaginationContainer.length) {
+            loadOrdersButton.after('<div id="order-pagination-container" style="margin-top: 10px;"></div>');
+            orderPaginationContainer = $('#order-pagination-container');
+        }
+        
+        // Render pagination controls
+        if (totalPages > 1) {
+            const paginationHtml = `
+                <div class="order-pagination" style="text-align: center; margin-bottom: 15px; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 4px;">
+                    <button id="prev-order-page-btn" class="button button-secondary" ${page <= 1 ? 'disabled' : ''} style="margin-right: 10px;">← Previous</button>
+                    <span style="margin: 0 15px; font-weight: bold;">Page ${page} of ${totalPages}</span>
+                    <button id="next-order-page-btn" class="button button-secondary" ${page >= totalPages ? 'disabled' : ''} style="margin-left: 10px;">Next →</button>
+                    ${selectedOrderIds.size > 0 ? `<div style="margin-top: 8px; font-size: 12px; color: #0073aa;">📋 ${selectedOrderIds.size} orders selected across all pages</div>` : ''}
+                </div>
+            `;
+            orderPaginationContainer.html(paginationHtml);
+        } else {
+            orderPaginationContainer.html('');
+        }
+        
+        let html = `<div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">`;
+        html += `<p style="margin: 0 0 5px 0; font-weight: bold;">📦 Select Orders to Import:</p>`;
+        html += '<p style="margin: 0; font-size: 12px; color: #666;">✓ Check individual orders to import them. Orders will be linked to their respective customer accounts.</p>';
+        if (totalPages > 1) {
+            html += `<p style="margin: 5px 0 0 0; font-size: 12px; color: #0073aa; font-weight: bold;">📄 Showing ${startIndex + 1}-${endIndex} of ${totalOrders} orders (Page ${page} of ${totalPages})</p>`;
+        }
+        html += '</div>';
+        
+        html += '<ul style="list-style:none; margin:0; padding:0;">';
+        html += `<li style="padding-bottom: 8px; margin-bottom: 8px; border-bottom: 2px solid #0073aa; background: #f0f8ff; padding: 8px;">
+                    <label style="font-weight: bold; color: #0073aa;">
+                        <input type="checkbox" id="select-all-ecwid-orders" style="margin-right: 8px;" /> 
+                        Select All/None (${ordersForPage.length} on this page${totalPages > 1 ? ` / ${totalOrders} total` : ''})
+                    </label>
+                 </li>`;
+        
+        ordersForPage.forEach(function(order, index) {
+            const bgColor = index % 2 === 0 ? '#fff' : '#f9f9f9';
+            const isSelected = selectedOrderIds.has(order.orderNumber.toString());
+            const orderNumber = order.orderNumber || order.vendorOrderNumber || 'N/A';
+            const orderEmail = order.email || 'N/A';
+            const orderTotal = order.total ? `$${parseFloat(order.total).toFixed(2)}` : 'N/A';
+            const paymentStatus = order.paymentStatus || 'Unknown';
+            const fulfillmentStatus = order.fulfillmentStatus || 'Unknown';
+            const createDate = order.createDate ? new Date(order.createDate).toLocaleDateString() : 'N/A';
+            const customerAssociation = order.customer_association || {};
+            
+            // Customer association display
+            let customerInfo = '';
+            if (customerAssociation.wp_user_id) {
+                customerInfo = `👤 <span style="color: green;">Customer: ${customerAssociation.wp_user_email} (${customerAssociation.match_method})</span>`;
+            } else {
+                customerInfo = `👤 <span style="color: orange;">No customer match found</span>`;
+            }
+            
+            html += `<li style="padding: 8px; border-bottom: 1px solid #eee; background: ${bgColor};">
+                        <label style="display: flex; align-items: flex-start; cursor: pointer;">
+                            <input type="checkbox" class="ecwid-order-select" value="${orderNumber}" ${isSelected ? 'checked' : ''} style="margin-right: 8px; margin-top: 2px;" />
+                            <div style="flex: 1;">
+                                <strong>Order #${sanitizeHTML(orderNumber.toString())}</strong> - ${orderTotal}<br>
+                                <small style="color: #666; line-height: 1.4;">
+                                    Email: ${sanitizeHTML(orderEmail)} | Date: ${createDate}<br>
+                                    Payment: <span style="color: ${paymentStatus === 'PAID' ? 'green' : 'orange'};">${paymentStatus}</span> | 
+                                    Fulfillment: <span style="color: ${fulfillmentStatus === 'SHIPPED' ? 'green' : 'orange'};">${fulfillmentStatus}</span><br>
+                                    ${customerInfo}
+                                </small>
+                            </div>
+                        </label>
+                     </li>`;
+        });
+        html += '</ul>';
+        
+        orderListContainer.html(html);
+
+        // Enhanced Select All/None functionality
+        $('#select-all-ecwid-orders').on('change', function() {
+            const isChecked = $(this).prop('checked');
+            $('.ecwid-order-select').each(function() {
+                const orderNumber = $(this).val();
+                $(this).prop('checked', isChecked);
+                if (isChecked) {
+                    selectedOrderIds.add(orderNumber);
+                } else {
+                    selectedOrderIds.delete(orderNumber);
+                }
+            });
+            updateOrderImportButtonText();
+        });
+
+        // Individual order selection
+        $('.ecwid-order-select').on('change', function() {
+            const orderNumber = $(this).val();
+            const isChecked = $(this).prop('checked');
+            
+            if (isChecked) {
+                selectedOrderIds.add(orderNumber);
+            } else {
+                selectedOrderIds.delete(orderNumber);
+            }
+            updateOrderImportButtonText();
+        });
+
+        // Pagination handlers
+        $('#prev-order-page-btn').on('click', function() {
+            if (currentOrderPage > 1) {
+                renderOrderSelectionList(orders, currentOrderPage - 1);
+            }
+        });
+
+        $('#next-order-page-btn').on('click', function() {
+            if (currentOrderPage < totalPages) {
+                renderOrderSelectionList(orders, currentOrderPage + 1);
+            }
+        });
+    }
+
+    // Function to update import button text
+    function updateOrderImportButtonText() {
+        if (selectedOrderIds.size > 0) {
+            importSelectedOrdersButton.text(`${ecwid_sync_params.i18n.import_selected_orders || 'Import Selected'} (${selectedOrderIds.size})`).show();
+        } else {
+            importSelectedOrdersButton.text(ecwid_sync_params.i18n.import_selected_orders || 'Import Selected Orders').hide();
+        }
+    }
+
+    // Initialize order sync functionality
+    if (loadOrdersButton.length) {
+        // Automatically load orders when page loads
+        loadAndDisplayOrdersForSelection();
+
+        loadOrdersButton.on('click', function(e) {
+            e.preventDefault();
+            loadAndDisplayOrdersForSelection();
+        });
+        
+        // Filter change handlers
+        orderStatusFilter.on('change', function() {
+            loadAndDisplayOrdersForSelection();
+        });
+        
+        orderDateFrom.on('change', function() {
+            loadAndDisplayOrdersForSelection();
+        });
+        
+        orderDateTo.on('change', function() {
+            loadAndDisplayOrdersForSelection();
+        });
+    }
+    
+    // ================== CUSTOMER SYNC FUNCTIONALITY ==================
+    
+    // Customer Sync Page Elements
+    const loadCustomersButton = $('#load-ecwid-customers-button');
+    const customerListContainer = $('#selective-customer-list-container');
+    const customerSyncInitialInfoDiv = $('#selective-sync-initial-info');
+    const importSelectedCustomersButton = $('#import-selected-customers-button');
+    const syncAllCustomersButton = $('#sync-all-customers-button');
+    
+    // Customer sync state
+    let ecwidCustomersForSelection = [];
+    let currentCustomerPage = 1;
+    let selectedCustomerIds = new Set();
+    const customersPerPage = 20;
+    
+    // Function to load and display all customers for selection
+    function loadAndDisplayCustomersForSelection() {
+        if (!loadCustomersButton.length || !customerListContainer.length) {
+            if (loadCustomersButton.length && !customerListContainer.length) {
+                console.warn("loadCustomersButton exists, but customerListContainer does not. Cannot load customers.");
+            }
+            if (customerSyncInitialInfoDiv.length) {
+                customerSyncInitialInfoDiv.text('');
+            }
+            return;
+        }
+
+        if (loadCustomersButton.hasClass('disabled')) return;
+
+        const originalButtonText = loadCustomersButton.text();
+        loadCustomersButton.addClass('disabled').text(ecwid_sync_params.i18n.loading_customers || 'Loading Customers...');
+        
+        // Create enhanced loading interface
+        const loadingHtml = `
+            <div class="ecwid-loading-container" style="text-align: center; padding: 40px 20px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+                <div class="ecwid-loading-spinner" style="margin-bottom: 15px;">
+                    <span class="dashicons dashicons-update" style="font-size: 24px; animation: ecwid-spin 1s linear infinite; color: #0073aa;"></span>
+                </div>
+                <div class="ecwid-loading-title" style="font-size: 16px; font-weight: bold; margin-bottom: 8px; color: #333;">
+                    ⏳ Loading Customer Data
+                </div>
+                <div class="ecwid-loading-status" style="font-size: 14px; color: #666; margin-bottom: 10px;">
+                    Making API calls to fetch all customers...
+                </div>
+                <div class="ecwid-loading-progress" style="font-size: 12px; color: #999;">
+                    This may take a moment for large stores
+                </div>
+            </div>
+            <style>
+                @keyframes ecwid-spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+            </style>
+        `;
+        
+        customerListContainer.html(loadingHtml).show();
+        if (customerSyncInitialInfoDiv.length) {
+            customerSyncInitialInfoDiv.html(`
+                <div style="padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; margin: 10px 0;">
+                    <strong>⏳ Loading Customers...</strong><br>
+                    <span style="font-size: 12px; color: #666;">Fetching customer data from your Ecwid store...</span>
+                </div>
+            `);
+        }
+
+        // AJAX call to fetch customers
+        $.ajax({
+            url: ecwid_sync_params.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'ecwid_wc_fetch_customers_for_display',
+                nonce: ecwid_sync_params.nonce,
+            },
+            dataType: 'json',
+            timeout: 120000 // 2 minutes timeout for large stores
+        })
+        .done(function(response) {
+            if (response.success && response.data && response.data.customers) {
+                ecwidCustomersForSelection = response.data.customers;
+                const totalFound = parseInt(response.data.total_found) || 0;
+                const apiCalls = parseInt(response.data.api_calls_made) || 1;
+                const totalAvailable = parseInt(response.data.total_available) || totalFound;
+
+                // Enhanced status message
+                let statusMessage = `All ${totalFound} customers loaded`;
+                if (apiCalls > 1) {
+                    statusMessage += ` (${apiCalls} API calls)`;
+                }
+                if (totalAvailable && totalAvailable !== totalFound) {
+                    statusMessage += ` out of ${totalAvailable} available`;
+                }
+                statusMessage += '. Select individual customers to import.';
+
+                if (customerSyncInitialInfoDiv.length) {
+                    const styledStatusHtml = `
+                        <div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                            <p style="margin: 0 0 5px 0; font-weight: bold;">👥 Customer Loading Complete:</p>
+                            <p style="margin: 0; font-size: 12px; color: #666; font-style: normal;">${statusMessage}</p>
+                        </div>
+                    `;
+                    customerSyncInitialInfoDiv.html(styledStatusHtml);
+                }
+
+                // Reset pagination and selection state
+                currentCustomerPage = 1;
+                selectedCustomerIds.clear();
+
+                renderCustomerSelectionList(ecwidCustomersForSelection);
+                
+                // Show final success message with fade out
+                $('.ecwid-loading-status').html(`✅ ${totalFound} customers ready for import!`);
+                setTimeout(function() {
+                    $('.ecwid-loading-container').fadeOut(800);
+                }, 2000);
+
+                if (ecwidCustomersForSelection.length > 0) {
+                    importSelectedCustomersButton.show();
+                } else {
+                    customerListContainer.html('<p style="color: orange;">No customers found in your Ecwid store.</p>');
+                    importSelectedCustomersButton.hide();
+                }
+            } else {
+                $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
+                $('.ecwid-loading-title').html('❌ Loading Failed');
+                $('.ecwid-loading-status').html('Error: ' + (response.data && response.data.message ? response.data.message : 'Unknown error occurred'));
+                
+                console.log('=== CUSTOMER LOADING ERROR ===');
+                console.log('Response success:', response.success);
+                console.log('Response data:', response.data);
+                console.log('==============================');
+                
+                const errorMsg = response.data && response.data.message ? response.data.message : 'No customers found or failed to fetch.';
+                customerListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
+                if (customerSyncInitialInfoDiv.length) {
+                    customerSyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
+                }
+                
+                // Auto-hide error after 5 seconds
+                setTimeout(function() {
+                    $('.ecwid-loading-container').fadeOut(800);
+                }, 5000);
+            }
+        })
+        .fail(function(jqXHR, textStatus, errorThrown) {
+            console.error('Customer loading AJAX failed:', textStatus, errorThrown);
+            const errorMessage = `AJAX Error: ${textStatus}. ${errorThrown}`;
+            
+            $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
+            $('.ecwid-loading-title').html('❌ Connection Failed');
+            $('.ecwid-loading-status').html(errorMessage);
+            
+            customerListContainer.html('<p style="color:red;">Failed to load customers. Please check your connection and try again.</p>');
+            if (customerSyncInitialInfoDiv.length) {
+                customerSyncInitialInfoDiv.html('<span style="color:red;">Failed to load customers.</span>');
+            }
+            
+            setTimeout(function() {
+                $('.ecwid-loading-container').fadeOut(800);
+            }, 5000);
+        })
+        .always(function() {
+            loadCustomersButton.removeClass('disabled').text(originalButtonText);
+        });
+    }
+
+    // Function to render customer selection list with pagination
+    function renderCustomerSelectionList(customers, page = 1) {
+        currentCustomerPage = page;
+        
+        const totalCustomers = customers.length;
+        const totalPages = Math.ceil(totalCustomers / customersPerPage);
+        const startIndex = (page - 1) * customersPerPage;
+        const endIndex = Math.min(startIndex + customersPerPage, totalCustomers);
+        const customersForPage = customers.slice(startIndex, endIndex);
+        
+        // Create pagination container if it doesn't exist
+        let customerPaginationContainer = $('#customer-pagination-container');
+        if (!customerPaginationContainer.length) {
+            loadCustomersButton.after('<div id="customer-pagination-container" style="margin-top: 10px;"></div>');
+            customerPaginationContainer = $('#customer-pagination-container');
+        }
+        
+        // Render pagination controls
+        if (totalPages > 1) {
+            const paginationHtml = `
+                <div class="customer-pagination" style="text-align: center; margin-bottom: 15px; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 4px;">
+                    <button id="prev-customer-page-btn" class="button button-secondary" ${page <= 1 ? 'disabled' : ''} style="margin-right: 10px;">← Previous</button>
+                    <span style="margin: 0 15px; font-weight: bold;">Page ${page} of ${totalPages}</span>
+                    <button id="next-customer-page-btn" class="button button-secondary" ${page >= totalPages ? 'disabled' : ''} style="margin-left: 10px;">Next →</button>
+                    ${selectedCustomerIds.size > 0 ? `<div style="margin-top: 8px; font-size: 12px; color: #0073aa;">📋 ${selectedCustomerIds.size} customers selected across all pages</div>` : ''}
+                </div>
+            `;
+            customerPaginationContainer.html(paginationHtml);
+        } else {
+            customerPaginationContainer.html('');
+        }
+        
+        let html = `<div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">`;
+        html += `<p style="margin: 0 0 5px 0; font-weight: bold;">👥 Select Customers to Import:</p>`;
+        html += '<p style="margin: 0; font-size: 12px; color: #666;">✓ Check individual customers to import them, or select multiple customers for batch import.</p>';
+        if (totalPages > 1) {
+            html += `<p style="margin: 5px 0 0 0; font-size: 12px; color: #0073aa; font-weight: bold;">📄 Showing ${startIndex + 1}-${endIndex} of ${totalCustomers} customers (Page ${page} of ${totalPages})</p>`;
+        }
+        html += '</div>';
+        
+        html += '<ul style="list-style:none; margin:0; padding:0;">';
+        html += `<li style="padding-bottom: 8px; margin-bottom: 8px; border-bottom: 2px solid #0073aa; background: #f0f8ff; padding: 8px;">
+                    <label style="font-weight: bold; color: #0073aa;">
+                        <input type="checkbox" id="select-all-ecwid-customers" style="margin-right: 8px;" /> 
+                        Select All/None (${customersForPage.length} on this page${totalPages > 1 ? ` / ${totalCustomers} total` : ''})
+                    </label>
+                 </li>`;
+        
+        customersForPage.forEach(function(customer, index) {
+            const bgColor = index % 2 === 0 ? '#fff' : '#f9f9f9';
+            const isSelected = selectedCustomerIds.has(customer.id.toString());
+            const customerName = customer.name || 'N/A';
+            const customerEmail = customer.email || 'N/A';
+            const ordersCount = customer.stats && customer.stats.ordersCount ? customer.stats.ordersCount : 0;
+            const totalOrderValue = customer.stats && customer.stats.totalOrderValue ? customer.stats.totalOrderValue : 0;
+            const registeredDate = customer.registered ? new Date(customer.registered).toLocaleDateString() : 'N/A';
+            
+            html += `<li style="padding: 8px; border-bottom: 1px solid #eee; background: ${bgColor};">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" class="ecwid-customer-select" value="${customer.id}" ${isSelected ? 'checked' : ''} style="margin-right: 8px;" />
+                            <div>
+                                <strong>${sanitizeHTML(customerName)}</strong><br>
+                                <small style="color: #666;">
+                                    Email: ${sanitizeHTML(customerEmail)} | ID: ${customer.id} | 
+                                    Orders: ${ordersCount} | Total Value: $${totalOrderValue.toFixed(2)} | 
+                                    Registered: ${registeredDate}
+                                </small>
+                            </div>
+                        </label>
+                     </li>`;
+        });
+        html += '</ul>';
+        
+        customerListContainer.html(html);
+
+        // Enhanced Select All/None functionality
+        $('#select-all-ecwid-customers').on('change', function() {
+            const isChecked = $(this).prop('checked');
+            $('.ecwid-customer-select').each(function() {
+                const customerId = $(this).val();
+                $(this).prop('checked', isChecked);
+                if (isChecked) {
+                    selectedCustomerIds.add(customerId);
+                } else {
+                    selectedCustomerIds.delete(customerId);
+                }
+            });
+            updateCustomerImportButtonText();
+        });
+
+        // Individual customer selection
+        $('.ecwid-customer-select').on('change', function() {
+            const customerId = $(this).val();
+            const isChecked = $(this).prop('checked');
+            
+            if (isChecked) {
+                selectedCustomerIds.add(customerId);
+            } else {
+                selectedCustomerIds.delete(customerId);
+            }
+            updateCustomerImportButtonText();
+        });
+
+        // Pagination handlers
+        $('#prev-customer-page-btn').on('click', function() {
+            if (currentCustomerPage > 1) {
+                renderCustomerSelectionList(customers, currentCustomerPage - 1);
+            }
+        });
+
+        $('#next-customer-page-btn').on('click', function() {
+            if (currentCustomerPage < totalPages) {
+                renderCustomerSelectionList(customers, currentCustomerPage + 1);
+            }
+        });
+    }
+
+    // Function to update import button text
+    function updateCustomerImportButtonText() {
+        if (selectedCustomerIds.size > 0) {
+            importSelectedCustomersButton.text(`${ecwid_sync_params.i18n.import_selected_customers || 'Import Selected'} (${selectedCustomerIds.size})`).show();
+        } else {
+            importSelectedCustomersButton.text(ecwid_sync_params.i18n.import_selected_customers || 'Import Selected Customers').hide();
+        }
+    }
+
+    // Initialize customer sync functionality
+    if (loadCustomersButton.length) {
+        // Automatically load all customers when page loads
+        loadAndDisplayCustomersForSelection();
+
+        loadCustomersButton.on('click', function(e) {
+            e.preventDefault();
+            loadAndDisplayCustomersForSelection();
+        });
+    }
+
+    // Initialize page-specific functionality
+    if (window.location.href.indexOf('ecwid-sync-settings') !== -1) {
+        initializeSettingsPage();
+    }
     
 })(jQuery);

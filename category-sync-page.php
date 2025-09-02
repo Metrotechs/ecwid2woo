@@ -60,6 +60,12 @@ class Ecwid2Woo_Category_Sync {
             <a href="<?php echo esc_url(admin_url('admin.php?page=ecwid-sync-partial')); ?>" class="nav-link">
                 <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'ecwid2woo'); ?>
             </a>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=ecwid-sync-customers')); ?>" class="nav-link">
+                <span class="nav-icon">👥</span> <?php esc_html_e('Customer Sync', 'ecwid2woo'); ?>
+            </a>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=ecwid-sync-orders')); ?>" class="nav-link">
+                <span class="nav-icon">📦</span> <?php esc_html_e('Order Sync', 'ecwid2woo'); ?>
+            </a>
         </div>
 
         <div class="ecwid-sync-container">

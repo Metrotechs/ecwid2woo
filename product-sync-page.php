@@ -53,6 +53,12 @@ class Ecwid2Woo_Product_Sync {
             <span class="nav-link current">
                 <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'ecwid2woo'); ?>
             </span>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->customer_sync_slug)); ?>" class="nav-link">
+                <span class="nav-icon">👥</span> <?php esc_html_e('Customer Sync', 'ecwid2woo'); ?>
+            </a>
+            <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->order_sync_slug)); ?>" class="nav-link">
+                <span class="nav-icon">📦</span> <?php esc_html_e('Order Sync', 'ecwid2woo'); ?>
+            </a>
         </div>
 
         <div class="ecwid-sync-container">
