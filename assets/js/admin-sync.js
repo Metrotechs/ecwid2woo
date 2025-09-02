@@ -787,7 +787,7 @@
             $.ajax({
                 url: ajax_url,
                 method: 'POST',
-                timeout: 60000, // 60 second timeout
+                timeout: 300000, // 5 minutes timeout for full sync operations
                 data: { action: 'ecwid_wc_batch_sync', nonce: nonce, sync_type: syncType, offset: offset },
                 success: function(response) {
                     stopBatchStatusAnimation();
@@ -939,9 +939,16 @@
                         errorData.message = 'API rate limit exceeded. Will retry automatically.';
                         errorData.error_type = 'rate_limit';
                         shouldRetry = true;
+                    } else if (textStatus === 'timeout') {
+                        errorData.message = 'Request timed out. The server is taking too long to respond. This may be due to a large batch size or server load.';
+                        errorData.error_type = 'timeout';
+                        errorData.retry_recommended = true;
+                        shouldRetry = true;
                     } else if (jqXHR.status === 0) {
-                        errorData.message = 'Network connection error. Please check your internet connection.';
+                        errorData.message = 'Network connection error. Please check your internet connection and server settings.';
                         errorData.error_type = 'network_error';
+                        errorData.retry_recommended = true;
+                        shouldRetry = true; // Make network errors retryable
                     } else if (jqXHR.status >= 500) {
                         errorData.message = `Server error (${jqXHR.status}). This appears to be a temporary server issue.`;
                         errorData.retry_recommended = true;
@@ -1424,6 +1431,9 @@
                 logs: []
             };
             
+            // Initialize progress bar for multi-batch operation
+            updateProgressBar(selectiveSyncProgressBar, 0);
+            
             // Update activity info for batched import
             updateStatus(selectiveSyncStatusDiv, `Processing ${categoryIds.length} categories in ${totalBatches} batches...`);
             
@@ -1432,8 +1442,12 @@
                 const endIndex = Math.min(startIndex + batchSize, categoryIds.length);
                 const batchIds = categoryIds.slice(startIndex, endIndex);
                 
-                // Update activity display
+                // Update activity display and progress at start of batch
                 updateStatus(selectiveSyncStatusDiv, `Processing batch ${batchNumber} of ${totalBatches} (${batchIds.length} categories)...`);
+                
+                // Show progress at start of batch (previous batches completed + partial progress for current batch starting)
+                const startProgress = ((batchNumber - 1) / totalBatches) * 100;
+                updateProgressBar(selectiveSyncProgressBar, startProgress);
                 
                 processCategoryBatch(batchIds, importButton, originalButtonText, batchNumber, totalBatches, function(batchResults) {
                     // Accumulate results
@@ -1445,7 +1459,7 @@
                         allResults.logs = allResults.logs.concat(batchResults.logs);
                     }
                     
-                    // Update progress
+                    // Update progress - batch completed
                     const overallProgress = (batchNumber / totalBatches) * 100;
                     updateProgressBar(selectiveSyncProgressBar, overallProgress);
                     
@@ -1487,7 +1501,8 @@
             
             logMessage(selectiveSyncLogDiv, `Starting import of ${categoryIds.length} categories${totalBatches > 1 ? ` (batch ${batchNumber}/${totalBatches})` : ''}...`, 'info');
             
-            // Update progress bar to show processing
+            // Update progress bar to show processing - only for single batch operations
+            // For multi-batch operations, progress is handled by importCategoriesInBatches
             if (totalBatches === 1) {
                 updateProgressBar(selectiveSyncProgressBar, 10);
                 updateStatus(selectiveSyncStatusDiv, 'Processing categories...');
@@ -1516,6 +1531,8 @@
                     if (response.success) {
                         const data = response.data;
                         
+                        // Only update progress for single batch operations
+                        // Multi-batch progress is handled by importCategoriesInBatches
                         if (totalBatches === 1) {
                             updateProgressBar(selectiveSyncProgressBar, 100);
                             updateStatus(selectiveSyncStatusDiv, i18n.categories_import_complete || 'Selected categories import complete!');
@@ -2690,8 +2707,36 @@
                     beforeSend: function() {
                         updateProgressBar(selectiveSyncProgressBar, 10);
                         updateStatus(selectiveSyncStatusDiv, 'Fetching all categories from Ecwid...');
+                        
+                        // Start a progress animation to show activity
+                        let progressPercent = 10;
+                        const progressInterval = setInterval(function() {
+                            if (progressPercent < 90) {
+                                progressPercent += 2;
+                                updateProgressBar(selectiveSyncProgressBar, progressPercent);
+                                
+                                // Update status messages to show progress
+                                if (progressPercent < 30) {
+                                    updateStatus(selectiveSyncStatusDiv, 'Fetching categories from Ecwid...');
+                                } else if (progressPercent < 60) {
+                                    updateStatus(selectiveSyncStatusDiv, 'Processing categories...');
+                                } else if (progressPercent < 90) {
+                                    updateStatus(selectiveSyncStatusDiv, 'Importing categories to WooCommerce...');
+                                }
+                            } else {
+                                clearInterval(progressInterval);
+                            }
+                        }, 1000); // Update every second
+                        
+                        // Store interval ID so we can clear it
+                        window.categoryProgressInterval = progressInterval;
                     },
                     success: function(response) {
+                        // Clear the progress animation
+                        if (window.categoryProgressInterval) {
+                            clearInterval(window.categoryProgressInterval);
+                        }
+                        
                         if (response.success) {
                             const data = response.data;
                             updateProgressBar(selectiveSyncProgressBar, 100);
@@ -2733,6 +2778,11 @@
                         }
                     },
                     error: function(jqXHR, textStatus, errorThrown) {
+                        // Clear the progress animation
+                        if (window.categoryProgressInterval) {
+                            clearInterval(window.categoryProgressInterval);
+                        }
+                        
                         const errorText = `AJAX Error: ${textStatus}${errorThrown ? ' - ' + errorThrown : ''}`;
                         updateStatus(selectiveSyncStatusDiv, 'Import failed');
                         logMessage(selectiveSyncLogDiv, `Error: ${errorText}`, 'error');

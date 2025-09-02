@@ -1209,9 +1209,6 @@ class Ecwid2Woo_Product_Sync {
         $api_token = $this->options['api_token'] ?? '';
         
         if (empty($store_id) || empty($api_token)) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("Ecwid2Woo: Missing store_id or api_token for category fetch"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            }
             return false;
         }
         
@@ -1225,9 +1222,6 @@ class Ecwid2Woo_Product_Sync {
         ]);
         
         if (is_wp_error($response)) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("Ecwid2Woo: API request failed for category {$ecwid_category_id}: " . $response->get_error_message()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            }
             return false;
         }
         
@@ -1235,18 +1229,12 @@ class Ecwid2Woo_Product_Sync {
         $body = wp_remote_retrieve_body($response);
         
         if ($response_code !== 200) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("Ecwid2Woo: API returned code {$response_code} for category {$ecwid_category_id}. Response: " . substr($body, 0, 200)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            }
             return false;
         }
         
         $data = json_decode($body, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("Ecwid2Woo: JSON decode error for category {$ecwid_category_id}: " . json_last_error_msg()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            }
             return false;
         }
         

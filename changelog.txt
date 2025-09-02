@@ -1,4 +1,11 @@
-** Ecwid2Woo Product Sync Changelog **
+** Metrotechs E2W Sync Changelog **
+
+2025-09-02 - version 1.3.6
+* MAJOR CHANGE - PLUGIN RENAMED: Changed plugin display name from "Ecwid2Woo" to "Metrotechs E2W Sync" for WordPress repository compliance
+* Updated - Plugin display name and description updated for repository submission
+* Fixed - Reverted internal structure to original working version to maintain stability
+* Performance - Reduced category batch size to 10 for better server compatibility
+* Note - File names and internal class structure remain unchanged for maximum compatibility
 
 2025-09-02 - version 1.3.5
 * CRITICAL FIX - DISABLED PRODUCTS: Added check to skip disabled products that have incomplete data

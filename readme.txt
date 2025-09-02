@@ -1,21 +1,21 @@
-=== Ecwid2Woo - Complete E-commerce Migration Suite ===
+=== Metrotechs E2W Sync ===
 Contributors: Metrotechs, Richard Hunting
 Donate link: https://metrotechs.io/donate
 Tags: ecwid, woocommerce, migration, sync, ecommerce
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.2
-Stable tag: 1.3.5
+Stable tag: 1.3.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
 WC tested up to: 9.2
 
-Complete Ecwid to WooCommerce migration with Smart Skip Technology. Sync products, categories, customers, and orders efficiently.
+Professional Ecwid to WooCommerce migration with Smart Skip Technology. Sync products, categories, customers, and orders efficiently.
 
 == Description ==
 
-Ecwid2Woo Complete Migration Suite is the most comprehensive WordPress plugin for migrating your entire e-commerce store from Ecwid to WooCommerce.
+Metrotechs E2W Sync is the most comprehensive WordPress plugin for migrating your entire e-commerce store from Ecwid to WooCommerce.
 Go beyond basic product sync with full customer and order migration capabilities, plus revolutionary Smart Skip Technology for large-scale migrations.
 
 **NEW: Smart Skip Technology** - Revolutionary migration recovery system that intelligently skips already imported products, making large store migrations (1000+ products) resume seamlessly from interruptions.
