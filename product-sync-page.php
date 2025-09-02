@@ -488,6 +488,12 @@ class Ecwid2Woo_Product_Sync {
         $ecwid_id_for_log = $item['id'] ?? 'N/A';
         $sku_for_log = $item['sku'] ?? 'N/A';
 
+        // Skip disabled products - they often have incomplete data
+        if (isset($item['enabled']) && $item['enabled'] === false) {
+            $product_logs[] = sprintf(__("Skipping disabled product (Ecwid ID: %s). Disabled products are not synced to WooCommerce.", 'ecwid2woo'), $ecwid_id_for_log);
+            return ['status' => 'skipped', 'logs' => $product_logs, 'item_name' => $product_name_for_log, 'ecwid_id' => $ecwid_id_for_log, 'sku' => $sku_for_log];
+        }
+
         // Basic checks for essential data
         if (!class_exists('WC_Product_Factory')) {
             $product_logs[] = __("[CRITICAL] WooCommerce is not active or WC_Product_Factory class not found.", 'ecwid2woo');
@@ -541,6 +547,98 @@ class Ecwid2Woo_Product_Sync {
             $product = wc_get_product($product_id);
             if ($product) {
                 $product_logs[] = "Existing WC Product ID found: $product_id. Current type: " . $product->get_type();
+                
+                // --- SMART SKIP LOGIC: Check if product needs updating ---
+                $should_skip = false;
+                $ecwid_updated_timestamp = null;
+                $local_import_timestamp = get_post_meta($product_id, '_ecwid_last_import_time', true);
+                
+                // Check if Ecwid product has an updated/modified timestamp
+                if (isset($item['updated'])) {
+                    $ecwid_updated_timestamp = strtotime($item['updated']);
+                } elseif (isset($item['lastUpdated'])) {
+                    $ecwid_updated_timestamp = strtotime($item['lastUpdated']);
+                } elseif (isset($item['dateUpdated'])) {
+                    $ecwid_updated_timestamp = strtotime($item['dateUpdated']);
+                } elseif (isset($item['modifiedDate'])) {
+                    $ecwid_updated_timestamp = strtotime($item['modifiedDate']);
+                } elseif (isset($item['createTimestamp'])) {
+                    $ecwid_updated_timestamp = $item['createTimestamp']; // Already a timestamp
+                } elseif (isset($item['created'])) {
+                    $ecwid_updated_timestamp = strtotime($item['created']);
+                }
+                
+                // Debug: Log what timestamp fields are available
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    $available_dates = [];
+                    foreach (['updated', 'lastUpdated', 'dateUpdated', 'modifiedDate', 'createTimestamp', 'created'] as $field) {
+                        if (isset($item[$field])) {
+                            $available_dates[] = "$field: " . $item[$field];
+                        }
+                    }
+                    if (!empty($available_dates)) {
+                        $product_logs[] = "DEBUG: Available Ecwid timestamps: " . implode(', ', $available_dates);
+                    } else {
+                        $product_logs[] = "DEBUG: No Ecwid timestamp fields found in API response";
+                    }
+                }
+                
+                // If we have both timestamps, compare them
+                if ($ecwid_updated_timestamp && $local_import_timestamp) {
+                    if ($ecwid_updated_timestamp <= $local_import_timestamp) {
+                        $should_skip = true;
+                        $product_logs[] = "SKIPPING: Product has not been modified since last import. Ecwid updated: " . date('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", Last imported: " . date('Y-m-d H:i:s', $local_import_timestamp);
+                    } else {
+                        $product_logs[] = "UPDATE NEEDED: Product has been modified since last import. Ecwid updated: " . date('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", Last imported: " . date('Y-m-d H:i:s', $local_import_timestamp);
+                    }
+                } elseif ($local_import_timestamp) {
+                    // Product was imported before but no Ecwid timestamp - be more conservative about re-processing
+                    // Check if it was imported recently (within last 24 hours) - if so, likely safe to skip
+                    $hours_since_import = (time() - $local_import_timestamp) / 3600;
+                    if ($hours_since_import < 24) {
+                        $should_skip = true;
+                        $product_logs[] = "SKIPPING: Product was imported recently (" . round($hours_since_import, 1) . " hours ago) with no Ecwid timestamp. Likely unchanged.";
+                    } else {
+                        $product_logs[] = "Product was previously imported but no Ecwid update timestamp available. Will update to be safe.";
+                    }
+                } elseif ($product_id_by_ecwid_id) {
+                    // Product exists with Ecwid ID but no timestamp - this was imported before timestamp tracking
+                    // Skip it to avoid unnecessary re-processing unless we can confirm it needs updating
+                    if ($ecwid_updated_timestamp) {
+                        // We have Ecwid timestamp but no local timestamp - check product modification date as fallback
+                        $product_modified_time = strtotime($product->get_date_modified()->date('Y-m-d H:i:s'));
+                        if ($ecwid_updated_timestamp <= $product_modified_time) {
+                            $should_skip = true;
+                            $product_logs[] = "SKIPPING: Previously imported product with no changes. Ecwid updated: " . date('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", WC modified: " . date('Y-m-d H:i:s', $product_modified_time);
+                            // Set timestamp for future reference
+                            update_post_meta($product_id, '_ecwid_last_import_time', time());
+                        } else {
+                            $product_logs[] = "UPDATE NEEDED: Previously imported product needs updating. Ecwid updated: " . date('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", WC modified: " . date('Y-m-d H:i:s', $product_modified_time);
+                        }
+                    } else {
+                        // No timestamps available - skip to avoid unnecessary re-processing
+                        $should_skip = true;
+                        $product_logs[] = "SKIPPING: Previously imported product with no timestamp data available. Avoiding re-processing.";
+                        // Set timestamp for future reference
+                        update_post_meta($product_id, '_ecwid_last_import_time', time());
+                    }
+                } else {
+                    // No local timestamp - this is likely a first import or incomplete import
+                    $product_logs[] = "No previous import timestamp found. Will process product.";
+                }
+                
+                // Return early if skipping
+                if ($should_skip) {
+                    return [
+                        'status' => 'skipped',
+                        'logs' => $product_logs,
+                        'item_name' => $product_name_for_log,
+                        'ecwid_id' => $ecwid_id_for_log,
+                        'sku' => $sku_for_log,
+                        'wc_product_id' => $product_id
+                    ];
+                }
+                
                 // Handle product type change if necessary
                 $current_wc_type = $product->get_type();
                 if ($is_variable_from_ecwid && $current_wc_type !== 'variable') {
@@ -620,29 +718,54 @@ class Ecwid2Woo_Product_Sync {
 
             // --- CATEGORY ASSIGNMENT ---
             if (isset($item['categoryIds']) && is_array($item['categoryIds']) && !empty($item['categoryIds'])) {
+                $product_logs[] = "Product has " . count($item['categoryIds']) . " category IDs from Ecwid: " . implode(', ', $item['categoryIds']);
                 $wc_category_ids = [];
                 foreach ($item['categoryIds'] as $ecwid_category_id) {
-                    $existing_wc_categories = get_terms([
-                        'taxonomy' => 'product_cat',
-                        'meta_key' => '_ecwid_category_id',
-                        'meta_value' => $ecwid_category_id,
-                        'hide_empty' => false,
-                        'number' => 1
-                    ]);
-                    if (!empty($existing_wc_categories)) {
-                        $wc_category_ids[] = $existing_wc_categories[0]->term_id;
-                        $product_logs[] = "Assigned to category: " . $existing_wc_categories[0]->name . " (WC ID: " . $existing_wc_categories[0]->term_id . ")";
+                    $product_logs[] = "Looking for WooCommerce category with Ecwid ID: $ecwid_category_id";
+                    
+                    // Use the parent plugin's helper function for category lookup
+                    $wc_term_id = $this->parent_plugin->get_term_id_by_ecwid_id($ecwid_category_id, 'product_cat', true);
+                    
+                    if ($wc_term_id) {
+                        // Get the category details
+                        $category = get_term($wc_term_id, 'product_cat');
+                        if ($category && !is_wp_error($category)) {
+                            $wc_category_ids[] = $wc_term_id;
+                            $product_logs[] = "✓ FOUND and assigned to category: " . $category->name . " (WC ID: $wc_term_id)";
+                        } else {
+                            $product_logs[] = "✗ Found term ID $wc_term_id but couldn't load category details";
+                        }
                     } else {
-                        $product_logs[] = "Category with Ecwid ID $ecwid_category_id not found in WooCommerce. Skipping assignment.";
+                        $product_logs[] = "✗ Category with Ecwid ID $ecwid_category_id NOT FOUND via helper function";
+                        
+                        // Debug: Check total categories
+                        $all_imported_categories = get_terms([
+                            'taxonomy' => 'product_cat',
+                            'meta_key' => '_ecwid_category_id',
+                            'hide_empty' => false,
+                            'fields' => 'ids'
+                        ]);
+                        $total_categories = is_array($all_imported_categories) ? count($all_imported_categories) : 0;
+                        $product_logs[] = "Total imported categories: $total_categories";
+                        
+                        // Try to create it automatically
+                        $created_category = $this->auto_create_category($ecwid_category_id, $product_logs);
+                        if ($created_category) {
+                            $wc_category_ids[] = $created_category['term_id'];
+                            $product_logs[] = "AUTO-CREATED category: " . $created_category['name'] . " (WC ID: " . $created_category['term_id'] . ")";
+                        } else {
+                            $product_logs[] = "Category with Ecwid ID $ecwid_category_id not found in WooCommerce and could not be auto-created. Skipping assignment.";
+                        }
                     }
                 }
                 if (!empty($wc_category_ids)) {
                     $product->set_category_ids($wc_category_ids);
+                    $product_logs[] = "✓ ASSIGNED product to " . count($wc_category_ids) . " categories: " . implode(', ', $wc_category_ids);
                 } else {
-                    $product_logs[] = "No valid WooCommerce categories found for assignment.";
+                    $product_logs[] = "✗ No valid WooCommerce categories found for assignment - product will be UNCATEGORIZED.";
                 }
             } else {
-                $product_logs[] = "No categories assigned in Ecwid.";
+                $product_logs[] = "No categories assigned in Ecwid (categoryIds missing/empty).";
             }
 
             // --- PRODUCT ATTRIBUTES ---
@@ -675,11 +798,20 @@ class Ecwid2Woo_Product_Sync {
             // --- SAVE PRODUCT ---
             $product_id = $product->save();
             update_post_meta($product_id, '_ecwid_product_id', $ecwid_id_for_log);
+            update_post_meta($product_id, '_ecwid_last_import_time', time()); // Track import timestamp for smart skipping
             
             $product_logs[] = "Product saved with WC ID: $product_id";
 
             // --- HANDLE IMAGES ---
+            $product_logs[] = "=== STARTING IMAGE PROCESSING ===";
             $this->handle_product_images($product, $item, $product_logs);
+            
+            // Re-fetch product after image processing to verify
+            $product = wc_get_product($product_id);
+            $final_main_image_id = $product->get_image_id();
+            $final_gallery_ids = $product->get_gallery_image_ids();
+            $product_logs[] = "=== IMAGE PROCESSING COMPLETE ===";
+            $product_logs[] = "Final image status - Main image ID: " . ($final_main_image_id ?: 'NONE') . ", Gallery images: " . count($final_gallery_ids);
 
             // --- HANDLE VARIATIONS (if variable product) ---
             if ($is_variable_from_ecwid && isset($item['combinations']) && !empty($item['combinations'])) {
@@ -715,35 +847,163 @@ class Ecwid2Woo_Product_Sync {
     private function handle_product_images($product, $item, &$product_logs) {
         // Handle main product image
         if (isset($item['hdThumbnailUrl']) && !empty($item['hdThumbnailUrl'])) {
-            $attachment_id = $this->parent_plugin->attach_image_to_product_from_url($item['hdThumbnailUrl'], $product->get_id(), true);
-            if ($attachment_id) {
-                $product_logs[] = "Main product image imported and set.";
+            $current_main_image_id = $product->get_image_id();
+            $current_main_image_url = $current_main_image_id ? wp_get_attachment_url($current_main_image_id) : '';
+            
+            // Import if we have no main image OR if the image is different
+            $should_import_main = !$current_main_image_id || !$this->is_same_image_url($current_main_image_url, $item['hdThumbnailUrl']);
+            
+            if ($should_import_main) {
+                $product_logs[] = "Importing main product image from: " . $item['hdThumbnailUrl'];
+                $attachment_id = $this->parent_plugin->attach_image_to_product_from_url($item['hdThumbnailUrl'], $product->get_id(), 'Main product image');
+                if ($attachment_id && !is_wp_error($attachment_id)) {
+                    $product->set_image_id($attachment_id);
+                    $product->save();
+                    $product_logs[] = "✓ Main product image imported successfully (ID: $attachment_id).";
+                } else {
+                    $error_msg = is_wp_error($attachment_id) ? $attachment_id->get_error_message() : 'Unknown error';
+                    $product_logs[] = "✗ Failed to import main product image: " . $error_msg;
+                }
             } else {
-                $product_logs[] = "Failed to import main product image from: " . $item['hdThumbnailUrl'];
+                $product_logs[] = "Main product image already exists and matches Ecwid image, skipping.";
             }
+        } else {
+            $product_logs[] = "No main product image URL provided from Ecwid.";
         }
 
-        // Handle gallery images
+        // Handle gallery images - Import all gallery images if none exist
         if (isset($item['galleryImages']) && is_array($item['galleryImages'])) {
-            $gallery_ids = [];
-            $imported_gallery_count = 0;
+            // Get existing gallery images
+            $existing_gallery_ids = $product->get_gallery_image_ids();
             
-            foreach ($item['galleryImages'] as $gallery_image) {
-                if (isset($gallery_image['hdUrl']) && !empty($gallery_image['hdUrl'])) {
-                    $attachment_id = $this->parent_plugin->attach_image_to_product_from_url($gallery_image['hdUrl'], $product->get_id(), false);
-                    if ($attachment_id) {
-                        $gallery_ids[] = $attachment_id;
-                        $imported_gallery_count++;
+            $product_logs[] = "Processing " . count($item['galleryImages']) . " gallery images from Ecwid. Product currently has " . count($existing_gallery_ids) . " gallery images.";
+            
+            // If product has no gallery images, force import all gallery images
+            if (empty($existing_gallery_ids)) {
+                $product_logs[] = "Product has no gallery images - forcing import of all gallery images from Ecwid.";
+                $new_gallery_ids = [];
+                $imported_count = 0;
+                
+                foreach ($item['galleryImages'] as $index => $gallery_image) {
+                    // Use 'url' field as primary choice (confirmed from API testing), with fallbacks
+                    $image_url = null;
+                    if (isset($gallery_image['url']) && !empty($gallery_image['url'])) {
+                        $image_url = $gallery_image['url'];
+                    } elseif (isset($gallery_image['originalImageUrl']) && !empty($gallery_image['originalImageUrl'])) {
+                        $image_url = $gallery_image['originalImageUrl'];
+                    } elseif (isset($gallery_image['hdUrl']) && !empty($gallery_image['hdUrl'])) {
+                        $image_url = $gallery_image['hdUrl'];
+                    } elseif (isset($gallery_image['imageUrl']) && !empty($gallery_image['imageUrl'])) {
+                        $image_url = $gallery_image['imageUrl'];
+                    } else {
+                        $product_logs[] = "✗ No valid image URL found in gallery image " . ($index + 1);
+                        continue;
+                    }
+                    
+                    $product_logs[] = "Importing gallery image " . ($index + 1) . ": " . $image_url;
+                    $attachment_id = $this->parent_plugin->attach_image_to_product_from_url($image_url, $product->get_id(), 'Gallery image ' . ($index + 1));
+                    if ($attachment_id && !is_wp_error($attachment_id)) {
+                        $new_gallery_ids[] = $attachment_id;
+                        $imported_count++;
+                        $product_logs[] = "✓ Gallery image " . ($index + 1) . " imported successfully (ID: $attachment_id).";
+                    } else {
+                        $error_msg = is_wp_error($attachment_id) ? $attachment_id->get_error_message() : 'Unknown error';
+                        $product_logs[] = "✗ Failed to import gallery image " . ($index + 1) . ": " . $error_msg;
                     }
                 }
+                
+                if (!empty($new_gallery_ids)) {
+                    $product->set_gallery_image_ids($new_gallery_ids);
+                    $product->save();
+                    $product_logs[] = "✓ SET " . count($new_gallery_ids) . " gallery images on product.";
+                }
+            } else {
+                // Product has existing images - use smart preservation logic
+                $existing_gallery_urls = [];
+                
+                // Get URLs of existing images for comparison
+                foreach ($existing_gallery_ids as $existing_id) {
+                    $existing_url = wp_get_attachment_url($existing_id);
+                    if ($existing_url) {
+                        $existing_gallery_urls[$existing_id] = $existing_url;
+                    }
+                }
+                
+                $new_gallery_ids = $existing_gallery_ids; // Start with existing images
+                $imported_gallery_count = 0;
+                
+                foreach ($item['galleryImages'] as $index => $gallery_image) {
+                    // Use 'url' field as primary choice (confirmed from API testing), with fallbacks
+                    $image_url = null;
+                    if (isset($gallery_image['url']) && !empty($gallery_image['url'])) {
+                        $image_url = $gallery_image['url'];
+                    } elseif (isset($gallery_image['originalImageUrl']) && !empty($gallery_image['originalImageUrl'])) {
+                        $image_url = $gallery_image['originalImageUrl'];
+                    } elseif (isset($gallery_image['hdUrl']) && !empty($gallery_image['hdUrl'])) {
+                        $image_url = $gallery_image['hdUrl'];
+                    } elseif (isset($gallery_image['imageUrl']) && !empty($gallery_image['imageUrl'])) {
+                        $image_url = $gallery_image['imageUrl'];
+                    } else {
+                        $product_logs[] = "✗ No valid image URL found in gallery image " . ($index + 1);
+                        continue;
+                    }
+                    
+                    // Check if this image is already in the gallery
+                    $already_exists = false;
+                    foreach ($existing_gallery_urls as $existing_url) {
+                        if ($this->is_same_image_url($existing_url, $image_url)) {
+                            $already_exists = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!$already_exists) {
+                        $product_logs[] = "Importing new gallery image " . ($index + 1) . ": " . $image_url;
+                        $attachment_id = $this->parent_plugin->attach_image_to_product_from_url($image_url, $product->get_id(), 'Gallery image ' . ($index + 1));
+                        if ($attachment_id && !is_wp_error($attachment_id)) {
+                            $new_gallery_ids[] = $attachment_id;
+                            $imported_gallery_count++;
+                            $product_logs[] = "✓ New gallery image " . ($index + 1) . " imported successfully (ID: $attachment_id).";
+                        } else {
+                            $error_msg = is_wp_error($attachment_id) ? $attachment_id->get_error_message() : 'Unknown error';
+                            $product_logs[] = "✗ Failed to import gallery image " . ($index + 1) . ": " . $error_msg;
+                        }
+                    } else {
+                        $product_logs[] = "Gallery image " . ($index + 1) . " already exists, skipping: " . basename($image_url);
+                    }
+                }
+                
+                // Only update if we have changes
+                if ($imported_gallery_count > 0) {
+                    $product->set_gallery_image_ids($new_gallery_ids);
+                    $product->save();
+                    $product_logs[] = "✓ ADDED $imported_gallery_count new gallery images. Total gallery images: " . count($new_gallery_ids);
+                } else {
+                    $product_logs[] = "No new gallery images to import. Existing gallery preserved.";
+                }
             }
-            
-            if (!empty($gallery_ids)) {
-                $product->set_gallery_image_ids($gallery_ids);
-                $product->save();
-                $product_logs[] = "Imported $imported_gallery_count gallery images.";
-            }
+        } else {
+            $product_logs[] = "No gallery images provided from Ecwid.";
         }
+    }
+    
+    /**
+     * Compare two image URLs to see if they're the same image
+     */
+    private function is_same_image_url($url1, $url2) {
+        if (empty($url1) || empty($url2)) {
+            return false;
+        }
+        
+        // Extract the filename from both URLs
+        $filename1 = basename(parse_url($url1, PHP_URL_PATH));
+        $filename2 = basename(parse_url($url2, PHP_URL_PATH));
+        
+        // Remove common WordPress image size suffixes (e.g., -150x150, -300x200, etc.)
+        $filename1 = preg_replace('/-\d+x\d+(\.[a-zA-Z]{3,4})?$/', '$1', $filename1);
+        $filename2 = preg_replace('/-\d+x\d+(\.[a-zA-Z]{3,4})?$/', '$1', $filename2);
+        
+        return $filename1 === $filename2;
     }
 
     /**
@@ -902,5 +1162,85 @@ class Ecwid2Woo_Product_Sync {
         }
 
         return $result;
+    }
+    
+    /**
+     * Auto-create a category if it doesn't exist during product import
+     */
+    private function auto_create_category($ecwid_category_id, &$product_logs) {
+        // First, try to fetch the category data from Ecwid
+        $category_data = $this->fetch_ecwid_category($ecwid_category_id);
+        
+        if (!$category_data) {
+            $product_logs[] = "Could not fetch category data from Ecwid for ID: $ecwid_category_id";
+            return false;
+        }
+        
+        $category_name = sanitize_text_field($category_data['name'] ?? "Category $ecwid_category_id");
+        
+        // Create the category in WooCommerce
+        $term_result = wp_insert_term($category_name, 'product_cat', [
+            'description' => $category_data['description'] ?? '',
+            'slug' => sanitize_title($category_name . '-' . $ecwid_category_id)
+        ]);
+        
+        if (is_wp_error($term_result)) {
+            $product_logs[] = "Failed to create category '$category_name': " . $term_result->get_error_message();
+            return false;
+        }
+        
+        $term_id = $term_result['term_id'];
+        
+        // Store the Ecwid category ID mapping
+        update_term_meta($term_id, '_ecwid_category_id', $ecwid_category_id);
+        
+        return [
+            'term_id' => $term_id,
+            'name' => $category_name
+        ];
+    }
+    
+    /**
+     * Fetch category data from Ecwid API
+     */
+    private function fetch_ecwid_category($ecwid_category_id) {
+        $store_id = $this->options['store_id'] ?? '';
+        $api_token = $this->options['api_token'] ?? '';
+        
+        if (empty($store_id) || empty($api_token)) {
+            error_log("Ecwid2Woo: Missing store_id or api_token for category fetch");
+            return false;
+        }
+        
+        $api_url = "https://app.ecwid.com/api/v3/{$store_id}/categories/{$ecwid_category_id}?token={$api_token}";
+        
+        $response = wp_remote_get($api_url, [
+            'timeout' => 30,
+            'headers' => [
+                'Accept' => 'application/json',
+            ]
+        ]);
+        
+        if (is_wp_error($response)) {
+            error_log("Ecwid2Woo: API request failed for category {$ecwid_category_id}: " . $response->get_error_message());
+            return false;
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        
+        if ($response_code !== 200) {
+            error_log("Ecwid2Woo: API returned code {$response_code} for category {$ecwid_category_id}. Response: " . substr($body, 0, 200));
+            return false;
+        }
+        
+        $data = json_decode($body, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log("Ecwid2Woo: JSON decode error for category {$ecwid_category_id}: " . json_last_error_msg());
+            return false;
+        }
+        
+        return $data ?: false;
     }
 }

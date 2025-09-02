@@ -210,7 +210,7 @@ class Ecwid2Woo_Full_Sync {
         $query_params_for_url = ['limit' => $limit_per_api_call, 'offset' => $offset];
 
         if ($sync_type === 'products') {
-            $query_params_for_url['enabled'] = 'true';
+            // Removed enabled=true filter - sync all products regardless of enabled status
             $query_params_for_url['responseFields'] = 'items(id,sku,name,price,description,shortDescription,enabled,weight,quantity,unlimited,categoryIds,hdThumbnailUrl,imageUrl,galleryImages,options,combinations(id,sku,price,compareToPrice,defaultDisplayedPrice,defaultDisplayedCompareToPrice,options,quantity),productClassId,attributes,compareToPrice,dimensions,shipping)';
         } elseif ($sync_type === 'categories') {
             $query_params_for_url['responseFields'] = 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl)';
@@ -253,9 +253,9 @@ class Ecwid2Woo_Full_Sync {
             
             wp_send_json_error([
                 'message' => $error_message, 
-                'details' => $error_info['error_data'],
-                'is_server_error' => $error_info['is_server_error'],
-                'retry_recommended' => $error_info['retry_recommended']
+                'details' => $error_info['error_data'] ?? null,
+                'is_server_error' => $error_info['is_server_error'] ?? false,
+                'retry_recommended' => $error_info['retry_recommended'] ?? false
             ]); 
             return;
         }
@@ -304,6 +304,14 @@ class Ecwid2Woo_Full_Sync {
                 try {
                     switch ($sync_type) {
                         case 'products':
+                            // Enhanced debugging for gallery image issue
+                            if (defined('WP_DEBUG') && WP_DEBUG) {
+                                $gallery_count = isset($item_data['galleryImages']) && is_array($item_data['galleryImages']) ? count($item_data['galleryImages']) : 0;
+                                error_log("Ecwid Full Sync DEBUG: Product ID " . ($item_data['id'] ?? 'N/A') . " has $gallery_count gallery images in API data"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
+                                if ($gallery_count > 0) {
+                                    error_log("Ecwid Full Sync DEBUG: Gallery images data: " . json_encode($item_data['galleryImages'])); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
+                                }
+                            }
                             $result_array = $this->parent_plugin->product_sync_handler->import_product($item_data);
                             break;
                         case 'categories':
@@ -355,6 +363,10 @@ class Ecwid2Woo_Full_Sync {
             }
         } elseif ($offset === 0 && $limit_per_api_call > 0) {
              $batch_detailed_logs[] = "No items received from Ecwid API for $sync_type with offset $offset and limit $limit_per_api_call. This might be normal if there are no items of this type or all have been processed.";
+             $batch_detailed_logs[] = "API Response Debug: HTTP Code: $http_code, Total reported: $total_items_reported_by_api, Count in response: $count_in_current_api_response";
+             if (defined('WP_DEBUG') && WP_DEBUG) {
+                 error_log("Ecwid Sync: Empty items for $sync_type. API URL: $api_url, HTTP Code: $http_code, Raw Response: " . substr($raw_response_body, 0, 500)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
+             }
         }
 
         $new_offset = $offset + $count_in_current_api_response;

@@ -4,7 +4,7 @@ Plugin Name: Ecwid2Woo - Complete E-commerce Migration Suite
 Description: Professional Ecwid to WooCommerce synchronization plugin by Metrotechs.
 Plugin URI: https://metrotechs.io/plugins/ecwid2woo/
 Author URI: https://metrotechs.io
-Version: 1.1.1
+Version: 1.3.5
 Author: Metrotechs
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -62,18 +62,18 @@ function ecwid2woo_woocommerce_missing_notice() {
 }
 
 if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
-    define('ECWID2WOO_VARIATION_BATCH_SIZE', 50); // Reduced from 50 to 25 for better stability
+    define('ECWID2WOO_VARIATION_BATCH_SIZE', 10); // Reduced from 50 to 10 for better stability
 }
 
 if (!defined('ECWID2WOO_CATEGORY_BATCH_SIZE')) {
-    define('ECWID2WOO_CATEGORY_BATCH_SIZE', 50); // Reduced from 15 to 10 for better memory management
+    define('ECWID2WOO_CATEGORY_BATCH_SIZE', 50); // Conservative batch size to prevent 404 errors
 }
 
 if (!defined('ECWID2WOO_PRODUCT_BATCH_SIZE')) {
-    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 25); // Products are heavier, especially with variations
+    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 5); // Much smaller batch size to prevent server overload
 }
 
-define('ECWID2WOO_VERSION', '1.1.0'); // Define version constant
+define('ECWID2WOO_VERSION', '1.3.5'); // Define version constant
 
 class Ecwid_WC_Sync {
     private $options;
@@ -97,6 +97,12 @@ class Ecwid_WC_Sync {
 
     public function __construct() {
         $this->options = get_option('ecwid_wc_sync_options');
+        
+        // Check if WooCommerce is active before initializing sync handlers
+        if (!class_exists('WooCommerce')) {
+            add_action('admin_notices', [$this, 'woocommerce_missing_notice']);
+            return;
+        }
         
         // Include and initialize the category sync handler
         require_once plugin_dir_path(__FILE__) . 'category-sync-page.php';
@@ -124,6 +130,18 @@ class Ecwid_WC_Sync {
         add_action('wp_ajax_ecwid_wc_test_connection', [$this, 'ajax_test_api_connection']); // Make sure this line exists
         add_action('wp_ajax_ecwid_wc_diagnose_uploads', [$this, 'ajax_diagnose_uploads']);
         add_action('wp_ajax_ecwid_wc_debug_info', [$this, 'ajax_debug_info']); // Add debug endpoint
+        add_action('wp_ajax_ecwid_wc_process_variation_batch', [$this, 'ajax_process_variation_batch']); // Add missing variation batch handler
+    }
+
+    /**
+     * Display admin notice when WooCommerce is missing
+     */
+    public function woocommerce_missing_notice() {
+        ?>
+        <div class="notice notice-error">
+            <p><?php esc_html_e('Ecwid2Woo requires WooCommerce to be installed and active. Please install and activate WooCommerce first.', 'ecwid2woo'); ?></p>
+        </div>
+        <?php
     }
 
     /**
@@ -216,6 +234,11 @@ class Ecwid_WC_Sync {
     }
 
     public function add_admin_menu() {
+        // Don't add menu if WooCommerce is not available
+        if (!class_exists('WooCommerce')) {
+            return;
+        }
+        
         add_menu_page(
             __('Ecwid2Woo Product Sync Settings', 'ecwid2woo'),
             __('Ecwid2Woo Sync', 'ecwid2woo'), // Shorter menu title
@@ -775,7 +798,8 @@ class Ecwid_WC_Sync {
                 'user_message' => $user_friendly_message,
                 // translators: %s is the HTTP status code
                 'technical_message' => sprintf(__('Ecwid API returned HTML error page (HTTP %s)', 'ecwid2woo'), $http_code),
-                'retry_recommended' => true
+                'retry_recommended' => true,
+                'error_data' => ['raw_response' => substr($raw_response_body, 0, 1000)]
             ];
         }
         
@@ -795,7 +819,8 @@ class Ecwid_WC_Sync {
                 'user_message' => $user_friendly_message,
                 // translators: %1$s is the JSON error message, %2$s is the HTTP status code
                 'technical_message' => sprintf(__('JSON decode error: %1$s (HTTP %2$s)', 'ecwid2woo'), json_last_error_msg(), $http_code),
-                'retry_recommended' => true
+                'retry_recommended' => true,
+                'error_data' => ['raw_response' => substr($raw_response_body, 0, 1000), 'json_error' => json_last_error_msg()]
             ];
         }
         

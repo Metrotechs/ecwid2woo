@@ -787,6 +787,7 @@
             $.ajax({
                 url: ajax_url,
                 method: 'POST',
+                timeout: 60000, // 60 second timeout
                 data: { action: 'ecwid_wc_batch_sync', nonce: nonce, sync_type: syncType, offset: offset },
                 success: function(response) {
                     stopBatchStatusAnimation();
@@ -874,8 +875,17 @@
                     let errorData = { message: `${textStatus} ${errorThrown || ''}` };
                     let shouldRetry = false;
                     
+                    // Handle 404 errors specifically - often indicates AJAX handler not registered
+                    if (jqXHR.status === 404) {
+                        let errorMessage = 'AJAX Handler Not Found (404) - This usually indicates the WordPress AJAX handler is not properly registered or WordPress is not routing AJAX calls correctly.';
+                        errorData.message = errorMessage;
+                        shouldRetry = true; // Allow retry for 404s as they might be temporary
+                        
+                        // Add specific suggestions for 404 errors
+                        logMessage(fullSyncLogDiv, '[ERROR] Possible causes: Plugin not fully activated, WordPress permalinks issue, or server configuration problem', 'error');
+                    }
                     // Handle 500 Internal Server Errors specifically
-                    if (jqXHR.status === 500) {
+                    else if (jqXHR.status === 500) {
                         let errorMessage = 'Server Error (500) - This usually indicates a server memory limit, timeout, or processing issue.';
                         let suggestions = [];
                         
@@ -971,19 +981,27 @@
             if (fullSyncVariationQueue.length > 0) {
                 currentFullSyncVariationProductData = fullSyncVariationQueue.shift(); // Get and remove first item
                 logMessage(fullSyncLogDiv, `[INFO] Starting variation processing for ${currentFullSyncVariationProductData.item_name} (Full Sync Queue).`, 'info');
-                processFullSyncVariationBatchLoop(); // Start processing its variations
+                // Add small delay before processing variations to prevent rapid-fire requests
+                setTimeout(() => {
+                    processFullSyncVariationBatchLoop(); // Start processing its variations
+                }, 1000); // 1 second delay
             } else {
                 // Variation queue is empty, continue with parent items or next step
                 if (fullSyncParentContinuation.hasMore) {
                     // Pass the correct total for the parent step type
                     const totalForNextParentBatch = fullSyncParentContinuation.syncType === 'categories' ? totalCategoriesToSync : totalProductsToSync;
-                    processFullSyncBatch(fullSyncParentContinuation.syncType, fullSyncParentContinuation.nextOffset, totalForNextParentBatch);
+                    // Add delay before next batch to prevent server overload
+                    setTimeout(() => {
+                        processFullSyncBatch(fullSyncParentContinuation.syncType, fullSyncParentContinuation.nextOffset, totalForNextParentBatch);
+                    }, 2000); // 2 second delay between batches
                 } else {
                     // Current step is fully complete (no more parent items and variation queue is empty)
                     updateStatus(fullSyncStatusDiv, i18n[currentFullSyncStepType + '_step_complete'] || `Step ${capitalizeFirstLetter(currentFullSyncStepType)} complete!`);
                     updateOverallFullSyncProgress(100); // Ensure step progress is 100% for overall calculation
                     currentFullSyncStepIndex++; // Move to next step
-                    processNextFullSyncStep();
+                    setTimeout(() => {
+                        processNextFullSyncStep();
+                    }, 1500); // 1.5 second delay before next step
                 }
             }
         }
