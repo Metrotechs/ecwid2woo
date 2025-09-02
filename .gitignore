@@ -1,6 +1,17 @@
-# WordPress Plugin .gitignore
+# WordPress Plugin .gitignore for Production Release
 
-# WordPress core files
+# Development and build files
+node_modules/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# WordPress core files (shouldn't be in plugin anyway)
 wp-config.php
 wp-content/uploads/
 wp-content/blogs.dir/
@@ -11,90 +22,88 @@ wp-content/wp-cache-config.php
 wp-content/cache/
 wp-content/cache/supercache/
 
-# WordPress debugging and error logs
+# Logs and debugging
 debug.log
 error_log
 *.log
+php_errors.log
 
 # Temporary files
 *.tmp
 *.temp
-*~
-.DS_Store
-Thumbs.db
-
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
+*.bak
+*.backup
+*.old
 *~
 
-# Node.js dependencies (if using build tools)
-node_modules/
+# Build and compilation
+dist/
+build/
+*.min.js.map
+*.min.css.map
+
+# Package managers
+vendor/
+composer.lock
+package-lock.json
+yarn.lock
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Build directories
-dist/
-build/
-
-# Composer dependencies (if using)
-vendor/
-composer.lock
-
-# Environment files
+# Environment and config files
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+local-config.php
+test-config.php
 
-# Package managers
-package-lock.json
-yarn.lock
+# Development notes and documentation
+dev-notes.txt
+docs/generated/
+TODO.md
+DEVELOPMENT.md
 
-# Backup files
-*.bak
-*.backup
-*.old
+# Database files
+*.sqlite
+*.db
 
-# Archive files
+# SSL certificates
+*.pem
+*.key
+*.crt
+
+# Cache files
+cache/
+*.cache
+
+# Archive files that shouldn't be versioned
 *.zip
 *.tar.gz
 *.rar
 
 # System files
-.DS_Store
-.DS_Store?
-._*
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db
+._*
 
-# Windows specific
-Desktop.ini
+# Plugin development specific
+/tests/
+/phpunit.xml
+/phpcs.xml
+/.github/
+/webpack.config.js
+/gulpfile.js
+/Gruntfile.js
 
-# Plugin specific exclusions
-# Exclude any local development or test files
-local-config.php
-test-config.php
-dev-notes.txt
+# Version control
+.git/
+.gitmodules
 
-# Exclude any generated documentation that shouldn't be versioned
-docs/generated/
-
-# Exclude any local development databases
-*.sqlite
-*.db
-
-# Exclude any local SSL certificates
-*.pem
-*.key
-*.crt
-
-# Exclude any local cache files
-cache/
-*.cache
+# IDE project files
+*.sublime-project
+*.sublime-workspace
+*.code-workspace

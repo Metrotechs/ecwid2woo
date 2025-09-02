@@ -1,5 +1,23 @@
 ** Ecwid2Woo Product Sync Changelog **
 
+2025-09-01 - version 1.1.1
+* Added - MAJOR FEATURE: Customer Import Functionality - Complete customer profile synchronization from Ecwid to WooCommerce
+* Added - MAJOR FEATURE: Order Import Functionality - Full order history migration with customer association and status preservation
+* Added - Customer Sync Page: Dedicated interface for importing customer accounts with filtering and selection options
+* Added - Order Sync Page: Dedicated interface for importing order history with advanced filtering by status and date
+* Added - Full Sync Enhancement: 4-step sync process now includes Categories → Products → Customers → Orders
+* Added - Intelligent Customer Matching: Multi-tier matching system using email, ID, and name similarity for duplicate prevention
+* Added - Order-Customer Association: Automatic linking of imported orders to existing customer accounts
+* Added - Navigation Enhancement: Added Customer Sync and Order Sync buttons to all sync pages for unified navigation
+* Added - UI Consistency Enhancement: Full Sync page now matches polished interface of other sync pages
+* Added - Professional Loading Interface: Full Sync initial info container with loading states and success feedback
+* Added - Enhanced Status Display: 4-column grid showing Categories, Products, Customers, and Orders counts with visual icons
+* Added - Unified Experience: Consistent selective-sync-initial-info container pattern across all sync pages
+* Added - Professional Loading Animation: Yellow banner with spinner during data loading, blue success state with detailed metrics
+* Added - Error Handling Enhancement: Red error banners for API failures and connection issues with specific error messages
+* Added - Debug Information Panel: Expandable details section showing sync configuration and data source information
+* Fixed - Visual Consistency: Full Sync page now provides same professional user experience as Product/Category sync pages
+
 2025-08-30 - version 1.1.0
 * Added - MAJOR BREAKTHROUGH: Complete Product Loading System
 * Added - Handles stores with 6000+ products (previously limited to 100)

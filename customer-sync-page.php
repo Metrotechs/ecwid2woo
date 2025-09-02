@@ -129,9 +129,11 @@ class Ecwid2Woo_Customer_Sync {
             if ($customers_http_code === 200 && isset($customers_body['total'])) {
                 $customer_count = intval($customers_body['total']);
             } else {
+                // translators: %d is the HTTP status code
                 $errors[] = sprintf(__('Failed to fetch customer count (HTTP %d)', 'ecwid2woo'), $customers_http_code);
             }
         } else {
+            // translators: %s is the error message
             $errors[] = sprintf(__('Customer count request failed: %s', 'ecwid2woo'), $customers_response->get_error_message());
         }
 
@@ -200,6 +202,7 @@ class Ecwid2Woo_Customer_Sync {
                         'message' => __('Customer API access forbidden (HTTP 403). Your API token needs "Read customers" permission. Please regenerate your API token with customer permissions enabled in your Ecwid dashboard (Apps → My Apps → API).', 'ecwid2woo')
                     ]);
                 } else {
+                    // translators: %d is the HTTP status code
                     wp_send_json_error(['message' => sprintf(__('API request failed (HTTP %d)', 'ecwid2woo'), $http_code)]);
                 }
                 return;
@@ -226,6 +229,7 @@ class Ecwid2Woo_Customer_Sync {
             'total_found' => count($all_customers),
             'total_available' => $total_available,
             'api_calls_made' => $api_calls,
+            // translators: %d is the number of customers loaded
             'message' => sprintf(__('%d customers loaded successfully', 'ecwid2woo'), count($all_customers))
         ]);
     }
@@ -264,7 +268,8 @@ class Ecwid2Woo_Customer_Sync {
         }
 
         wp_send_json_success([
-            'message' => sprintf(__('Import complete. Success: %d, Failed: %d', 'ecwid2woo'), $imported_count, $failed_count),
+            // translators: %1$d is the number of successful imports, %2$d is the number of failed imports
+            'message' => sprintf(__('Import complete. Success: %1$d, Failed: %2$d', 'ecwid2woo'), $imported_count, $failed_count),
             'imported_count' => $imported_count,
             'failed_count' => $failed_count,
             'results' => $import_results
@@ -310,6 +315,7 @@ class Ecwid2Woo_Customer_Sync {
         return [
             'status' => 'success',
             'customer_id' => $customer_id,
+            // translators: %d is the customer ID
             'message' => sprintf(__('Customer %d imported successfully', 'ecwid2woo'), $customer_id)
         ];
     }

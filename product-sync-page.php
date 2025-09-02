@@ -397,6 +397,7 @@ class Ecwid2Woo_Product_Sync {
         ]);
 
         if (is_wp_error($response)) {
+            // translators: %s is the error message
             wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'ecwid2woo'), $response->get_error_message())]);
             return;
         }
@@ -405,6 +406,7 @@ class Ecwid2Woo_Product_Sync {
         $http_code = wp_remote_retrieve_response_code($response);
 
         if ($http_code !== 200 || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
+            // translators: %1$s is the HTTP status code, %2$s is the error message
             wp_send_json_error(['message' => sprintf(__('Ecwid API Error (HTTP %1$s): %2$s', 'ecwid2woo'), $http_code, ($body['errorMessage'] ?? 'Unknown error'))]);
             return;
         }

@@ -1,2 +1,80 @@
+# WordPress Plugin .gitattributes for Production Release
+
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Explicitly define text files for consistent line endings
+*.php text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.less text eol=lf
+*.html text eol=lf
+*.htm text eol=lf
+*.xml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.ini text eol=lf
+*.sql text eol=lf
+
+# Documentation files
+*.md text eol=lf
+README* text eol=lf
+LICENSE* text eol=lf
+CHANGELOG* text eol=lf
+changelog.txt text eol=lf
+readme.txt text eol=lf
+
+# Configuration files
+.gitignore text eol=lf
+.gitattributes text eol=lf
+.editorconfig text eol=lf
+
+# Binary files - explicitly mark as binary to prevent text processing
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.svg binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.rar binary
+
+# Archive export settings - exclude development files from archive downloads
+.gitignore export-ignore
+.gitattributes export-ignore
+.github/ export-ignore
+tests/ export-ignore
+phpunit.xml export-ignore
+phpcs.xml export-ignore
+webpack.config.js export-ignore
+gulpfile.js export-ignore
+Gruntfile.js export-ignore
+package.json export-ignore
+package-lock.json export-ignore
+yarn.lock export-ignore
+composer.json export-ignore
+composer.lock export-ignore
+node_modules/ export-ignore
+.vscode/ export-ignore
+.idea/ export-ignore
+*.log export-ignore
+dev-notes.txt export-ignore
+TODO.md export-ignore
+DEVELOPMENT.md export-ignore
+
+# Language detection for GitHub
+*.php linguist-language=PHP
+*.js linguist-language=JavaScript
+*.css linguist-language=CSS

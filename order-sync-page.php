@@ -167,9 +167,11 @@ class Ecwid2Woo_Order_Sync {
             if ($orders_http_code === 200 && isset($orders_body['total'])) {
                 $order_count = intval($orders_body['total']);
             } else {
+                // translators: %d is the HTTP status code
                 $errors[] = sprintf(__('Failed to fetch order count (HTTP %d)', 'ecwid2woo'), $orders_http_code);
             }
         } else {
+            // translators: %s is the error message
             $errors[] = sprintf(__('Order count request failed: %s', 'ecwid2woo'), $orders_response->get_error_message());
         }
 
@@ -204,9 +206,9 @@ class Ecwid2Woo_Order_Sync {
         }
 
         // Get filter parameters
-        $status_filter = isset($_POST['status_filter']) ? sanitize_text_field($_POST['status_filter']) : '';
-        $date_from = isset($_POST['date_from']) ? sanitize_text_field($_POST['date_from']) : '';
-        $date_to = isset($_POST['date_to']) ? sanitize_text_field($_POST['date_to']) : '';
+        $status_filter = isset($_POST['status_filter']) ? sanitize_text_field(wp_unslash($_POST['status_filter'])) : '';
+        $date_from = isset($_POST['date_from']) ? sanitize_text_field(wp_unslash($_POST['date_from'])) : '';
+        $date_to = isset($_POST['date_to']) ? sanitize_text_field(wp_unslash($_POST['date_to'])) : '';
 
         // Fetch all orders with enhanced data similar to product/customer sync
         $all_orders = [];
@@ -262,6 +264,7 @@ class Ecwid2Woo_Order_Sync {
                         'message' => __('Order API access forbidden (HTTP 403). Your API token needs "Read orders" permission. Please regenerate your API token with order permissions enabled in your Ecwid dashboard (Apps → My Apps → API).', 'ecwid2woo')
                     ]);
                 } else {
+                    // translators: %d is the HTTP status code
                     wp_send_json_error(['message' => sprintf(__('API request failed (HTTP %d)', 'ecwid2woo'), $http_code)]);
                 }
                 return;
@@ -301,6 +304,7 @@ class Ecwid2Woo_Order_Sync {
                 'date_from' => $date_from,
                 'date_to' => $date_to
             ],
+            // translators: %d is the number of orders loaded
             'message' => sprintf(__('%d orders loaded successfully', 'ecwid2woo'), count($enhanced_orders))
         ]);
     }
@@ -401,7 +405,7 @@ class Ecwid2Woo_Order_Sync {
             return;
         }
 
-        $order_numbers = isset($_POST['order_numbers']) ? array_map('sanitize_text_field', $_POST['order_numbers']) : [];
+        $order_numbers = isset($_POST['order_numbers']) ? array_map('sanitize_text_field', wp_unslash($_POST['order_numbers'])) : [];
         
         if (empty($order_numbers)) {
             wp_send_json_error(['message' => __('No orders selected', 'ecwid2woo')]);
@@ -424,7 +428,8 @@ class Ecwid2Woo_Order_Sync {
         }
 
         wp_send_json_success([
-            'message' => sprintf(__('Import complete. Success: %d, Failed: %d', 'ecwid2woo'), $imported_count, $failed_count),
+            // translators: %1$d is the number of successful imports, %2$d is the number of failed imports
+            'message' => sprintf(__('Import complete. Success: %1$d, Failed: %2$d', 'ecwid2woo'), $imported_count, $failed_count),
             'imported_count' => $imported_count,
             'failed_count' => $failed_count,
             'results' => $import_results
@@ -472,6 +477,7 @@ class Ecwid2Woo_Order_Sync {
         return [
             'status' => 'success',
             'order_number' => $order_number,
+            // translators: %s is the order number
             'message' => sprintf(__('Order %s imported successfully', 'ecwid2woo'), $order_number)
         ];
     }

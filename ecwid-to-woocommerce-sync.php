@@ -1,10 +1,10 @@
 <?php
 /*
-Plugin Name: Ecwid2Woo Product Sync
+Plugin Name: Ecwid2Woo - Complete E-commerce Migration Suite
 Description: Professional Ecwid to WooCommerce synchronization plugin by Metrotechs.
 Plugin URI: https://metrotechs.io/plugins/ecwid2woo/
 Author URI: https://metrotechs.io
-Version: 1.1.0
+Version: 1.1.1
 Author: Metrotechs
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html

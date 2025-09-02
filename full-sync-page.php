@@ -537,9 +537,11 @@ class Ecwid2Woo_Full_Sync {
                         $categories_preview = array_slice($categories_body['items'], 0, 5);
                     }
                 } else {
+                    // translators: %d is the HTTP status code
                     $errors[] = sprintf(__('Failed to fetch category count (HTTP %d)', 'ecwid2woo'), $categories_http_code);
                 }
             } else {
+                // translators: %s is the error message
                 $errors[] = sprintf(__('Category count request failed: %s', 'ecwid2woo'), $categories_response->get_error_message());
             }
 
@@ -565,9 +567,11 @@ class Ecwid2Woo_Full_Sync {
                         $products_preview = array_slice($products_body['items'], 0, 5);
                     }
                 } else {
+                    // translators: %d is the HTTP status code
                     $errors[] = sprintf(__('Failed to fetch product count (HTTP %d)', 'ecwid2woo'), $products_http_code);
                 }
             } else {
+                // translators: %s is the error message
                 $errors[] = sprintf(__('Product count request failed: %s', 'ecwid2woo'), $products_response->get_error_message());
             }
 
@@ -596,9 +600,11 @@ class Ecwid2Woo_Full_Sync {
                     $customer_count = 0;
                     $errors[] = __('Customer access requires "Read customers" permission in your Ecwid API token.', 'ecwid2woo');
                 } else {
+                    // translators: %d is the HTTP status code
                     $errors[] = sprintf(__('Failed to fetch customer count (HTTP %d)', 'ecwid2woo'), $customers_http_code);
                 }
             } else {
+                // translators: %s is the error message
                 $errors[] = sprintf(__('Customer count request failed: %s', 'ecwid2woo'), $customers_response->get_error_message());
             }
 
@@ -627,9 +633,11 @@ class Ecwid2Woo_Full_Sync {
                     $order_count = 0;
                     $errors[] = __('Order access requires "Read orders" permission in your Ecwid API token.', 'ecwid2woo');
                 } else {
+                    // translators: %d is the HTTP status code
                     $errors[] = sprintf(__('Failed to fetch order count (HTTP %d)', 'ecwid2woo'), $orders_http_code);
                 }
             } else {
+                // translators: %s is the error message
                 $errors[] = sprintf(__('Order count request failed: %s', 'ecwid2woo'), $orders_response->get_error_message());
             }
 

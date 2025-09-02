@@ -1,7 +1,7 @@
 === Ecwid2Woo - Complete E-commerce Migration Suite ===
 Contributors: Metrotechs, Richard Hunting
 Donate link: https://metrotechs.io/donate
-Tags: ecwid, woocommerce, sync, products, categories, customers, orders, migration
+Tags: ecwid, woocommerce, migration, sync, ecommerce
 Requires at least: 5.0
 Tested up to: 6.8
 Requires PHP: 7.2
