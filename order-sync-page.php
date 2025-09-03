@@ -43,29 +43,29 @@ class Ecwid2Woo_Order_Sync {
     public function render_order_sync_page() {
         ?>
         <div class="ecwid-page-header">
-            <h1><?php esc_html_e('Order Sync', 'ecwid2woo'); ?></h1>
-            <p><?php esc_html_e('Load orders from your Ecwid store and select which ones to import or update in WooCommerce.', 'ecwid2woo'); ?></p>
+            <h1><?php esc_html_e('Order Sync', 'metrotechs-e2w-sync'); ?></h1>
+            <p><?php esc_html_e('Load orders from your Ecwid store and select which ones to import or update in WooCommerce.', 'metrotechs-e2w-sync'); ?></p>
         </div>
 
         <!-- Navigation Bar -->
         <div class="ecwid-page-nav">
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->settings_slug)); ?>" class="nav-link">
-                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'ecwid2woo'); ?>
+                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->full_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->category_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->partial_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->customer_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">👥</span> <?php esc_html_e('Customer Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">👥</span> <?php esc_html_e('Customer Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <span class="nav-link current">
-                <span class="nav-icon">📦</span> <?php esc_html_e('Order Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">📦</span> <?php esc_html_e('Order Sync', 'metrotechs-e2w-sync'); ?>
             </span>
         </div>
 
@@ -76,52 +76,52 @@ class Ecwid2Woo_Order_Sync {
 
             <!-- Order Filtering Options -->
             <div class="order-sync-filters" style="margin: 15px 0; padding: 15px; background: #f5f5f5; border-radius: 5px;">
-                <h3><?php esc_html_e('Filter Options', 'ecwid2woo'); ?></h3>
+                <h3><?php esc_html_e('Filter Options', 'metrotechs-e2w-sync'); ?></h3>
                 <div style="display: flex; flex-wrap: wrap; gap: 15px; align-items: center;">
                     <div>
-                        <label for="order-status-filter" style="font-weight: bold; margin-right: 5px;"><?php esc_html_e('Order Status:', 'ecwid2woo'); ?></label>
+                        <label for="order-status-filter" style="font-weight: bold; margin-right: 5px;"><?php esc_html_e('Order Status:', 'metrotechs-e2w-sync'); ?></label>
                         <select id="order-status-filter">
-                            <option value=""><?php esc_html_e('All Orders', 'ecwid2woo'); ?></option>
+                            <option value=""><?php esc_html_e('All Orders', 'metrotechs-e2w-sync'); ?></option>
                             <optgroup label="Payment Status">
-                                <option value="PAID"><?php esc_html_e('Paid', 'ecwid2woo'); ?></option>
-                                <option value="CANCELLED"><?php esc_html_e('Cancelled', 'ecwid2woo'); ?></option>
-                                <option value="REFUNDED"><?php esc_html_e('Refunded', 'ecwid2woo'); ?></option>
-                                <option value="PARTIALLY_REFUNDED"><?php esc_html_e('Partially Refunded', 'ecwid2woo'); ?></option>
+                                <option value="PAID"><?php esc_html_e('Paid', 'metrotechs-e2w-sync'); ?></option>
+                                <option value="CANCELLED"><?php esc_html_e('Cancelled', 'metrotechs-e2w-sync'); ?></option>
+                                <option value="REFUNDED"><?php esc_html_e('Refunded', 'metrotechs-e2w-sync'); ?></option>
+                                <option value="PARTIALLY_REFUNDED"><?php esc_html_e('Partially Refunded', 'metrotechs-e2w-sync'); ?></option>
                             </optgroup>
                             <optgroup label="Fulfillment Status">
-                                <option value="AWAITING_PROCESSING"><?php esc_html_e('Awaiting Processing', 'ecwid2woo'); ?></option>
-                                <option value="PROCESSING"><?php esc_html_e('Processing', 'ecwid2woo'); ?></option>
-                                <option value="SHIPPED"><?php esc_html_e('Shipped', 'ecwid2woo'); ?></option>
-                                <option value="DELIVERED"><?php esc_html_e('Delivered', 'ecwid2woo'); ?></option>
-                                <option value="WILL_NOT_DELIVER"><?php esc_html_e('Will Not Deliver', 'ecwid2woo'); ?></option>
-                                <option value="RETURNED"><?php esc_html_e('Returned', 'ecwid2woo'); ?></option>
-                                <option value="READY_FOR_PICKUP"><?php esc_html_e('Ready for Pickup', 'ecwid2woo'); ?></option>
+                                <option value="AWAITING_PROCESSING"><?php esc_html_e('Awaiting Processing', 'metrotechs-e2w-sync'); ?></option>
+                                <option value="PROCESSING"><?php esc_html_e('Processing', 'metrotechs-e2w-sync'); ?></option>
+                                <option value="SHIPPED"><?php esc_html_e('Shipped', 'metrotechs-e2w-sync'); ?></option>
+                                <option value="DELIVERED"><?php esc_html_e('Delivered', 'metrotechs-e2w-sync'); ?></option>
+                                <option value="WILL_NOT_DELIVER"><?php esc_html_e('Will Not Deliver', 'metrotechs-e2w-sync'); ?></option>
+                                <option value="RETURNED"><?php esc_html_e('Returned', 'metrotechs-e2w-sync'); ?></option>
+                                <option value="READY_FOR_PICKUP"><?php esc_html_e('Ready for Pickup', 'metrotechs-e2w-sync'); ?></option>
                             </optgroup>
                         </select>
                     </div>
                     
                     <div>
-                        <label for="order-date-from" style="font-weight: bold; margin-right: 5px;"><?php esc_html_e('From Date:', 'ecwid2woo'); ?></label>
+                        <label for="order-date-from" style="font-weight: bold; margin-right: 5px;"><?php esc_html_e('From Date:', 'metrotechs-e2w-sync'); ?></label>
                         <input type="date" id="order-date-from" />
                     </div>
                     
                     <div>
-                        <label for="order-date-to" style="font-weight: bold; margin-right: 5px;"><?php esc_html_e('To Date:', 'ecwid2woo'); ?></label>
+                        <label for="order-date-to" style="font-weight: bold; margin-right: 5px;"><?php esc_html_e('To Date:', 'metrotechs-e2w-sync'); ?></label>
                         <input type="date" id="order-date-to" />
                     </div>
                 </div>
             </div>
 
-            <button id="load-ecwid-orders-button" class="button button-primary"><?php esc_html_e('Reload Orders', 'ecwid2woo'); ?></button>
+            <button id="load-ecwid-orders-button" class="button button-primary"><?php esc_html_e('Reload Orders', 'metrotechs-e2w-sync'); ?></button>
             <div id="selective-order-list-container" class="selective-order-list-container">
-                <?php esc_html_e('Order list will appear here...', 'ecwid2woo'); ?>
+                <?php esc_html_e('Order list will appear here...', 'metrotechs-e2w-sync'); ?>
             </div>
-            <button id="import-selected-orders-button" class="button button-primary import-selected-button"><?php esc_html_e('Import Selected Orders', 'ecwid2woo'); ?></button>
+            <button id="import-selected-orders-button" class="button button-primary import-selected-button"><?php esc_html_e('Import Selected Orders', 'metrotechs-e2w-sync'); ?></button>
             
             <!-- Bulk Actions -->
             <div class="order-bulk-actions" style="margin: 25px 0 15px 0; padding-top: 15px; border-top: 1px solid #ddd;">
-                <h3><?php esc_html_e('Bulk Actions', 'ecwid2woo'); ?></h3>
-                <button id="sync-all-orders-button" class="button button-primary"><?php esc_html_e('Import All Orders', 'ecwid2woo'); ?></button>
+                <h3><?php esc_html_e('Bulk Actions', 'metrotechs-e2w-sync'); ?></h3>
+                <button id="sync-all-orders-button" class="button button-primary"><?php esc_html_e('Import All Orders', 'metrotechs-e2w-sync'); ?></button>
             </div>
 
             <div id="selective-sync-status" class="sync-status margin-top-15"></div>
@@ -140,7 +140,7 @@ class Ecwid2Woo_Order_Sync {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
 
@@ -168,11 +168,11 @@ class Ecwid2Woo_Order_Sync {
                 $order_count = intval($orders_body['total']);
             } else {
                 // translators: %d is the HTTP status code
-                $errors[] = sprintf(__('Failed to fetch order count (HTTP %d)', 'ecwid2woo'), $orders_http_code);
+                $errors[] = sprintf(__('Failed to fetch order count (HTTP %d)', 'metrotechs-e2w-sync'), $orders_http_code);
             }
         } else {
             // translators: %s is the error message
-            $errors[] = sprintf(__('Order count request failed: %s', 'ecwid2woo'), $orders_response->get_error_message());
+            $errors[] = sprintf(__('Order count request failed: %s', 'metrotechs-e2w-sync'), $orders_response->get_error_message());
         }
 
         $response_data = [
@@ -195,7 +195,7 @@ class Ecwid2Woo_Order_Sync {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
 
@@ -261,11 +261,11 @@ class Ecwid2Woo_Order_Sync {
             if ($http_code !== 200) {
                 if ($http_code === 403) {
                     wp_send_json_error([
-                        'message' => __('Order API access forbidden (HTTP 403). Your API token needs "Read orders" permission. Please regenerate your API token with order permissions enabled in your Ecwid dashboard (Apps → My Apps → API).', 'ecwid2woo')
+                        'message' => __('Order API access forbidden (HTTP 403). Your API token needs "Read orders" permission. Please regenerate your API token with order permissions enabled in your Ecwid dashboard (Apps → My Apps → API).', 'metrotechs-e2w-sync')
                     ]);
                 } else {
                     // translators: %d is the HTTP status code
-                    wp_send_json_error(['message' => sprintf(__('API request failed (HTTP %d)', 'ecwid2woo'), $http_code)]);
+                    wp_send_json_error(['message' => sprintf(__('API request failed (HTTP %d)', 'metrotechs-e2w-sync'), $http_code)]);
                 }
                 return;
             }
@@ -305,7 +305,7 @@ class Ecwid2Woo_Order_Sync {
                 'date_to' => $date_to
             ],
             // translators: %d is the number of orders loaded
-            'message' => sprintf(__('%d orders loaded successfully', 'ecwid2woo'), count($enhanced_orders))
+            'message' => sprintf(__('%d orders loaded successfully', 'metrotechs-e2w-sync'), count($enhanced_orders))
         ]);
     }
 
@@ -401,14 +401,14 @@ class Ecwid2Woo_Order_Sync {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
 
         $order_numbers = isset($_POST['order_numbers']) ? array_map('sanitize_text_field', wp_unslash($_POST['order_numbers'])) : [];
         
         if (empty($order_numbers)) {
-            wp_send_json_error(['message' => __('No orders selected', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('No orders selected', 'metrotechs-e2w-sync')]);
             return;
         }
 
@@ -429,7 +429,7 @@ class Ecwid2Woo_Order_Sync {
 
         wp_send_json_success([
             // translators: %1$d is the number of successful imports, %2$d is the number of failed imports
-            'message' => sprintf(__('Import complete. Success: %1$d, Failed: %2$d', 'ecwid2woo'), $imported_count, $failed_count),
+            'message' => sprintf(__('Import complete. Success: %1$d, Failed: %2$d', 'metrotechs-e2w-sync'), $imported_count, $failed_count),
             'imported_count' => $imported_count,
             'failed_count' => $failed_count,
             'results' => $import_results
@@ -443,14 +443,14 @@ class Ecwid2Woo_Order_Sync {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
 
         // This is a placeholder for bulk order sync
         // In a real implementation, this would handle large datasets with pagination
         wp_send_json_success([
-            'message' => __('Bulk order sync is not yet implemented', 'ecwid2woo')
+            'message' => __('Bulk order sync is not yet implemented', 'metrotechs-e2w-sync')
         ]);
     }
 
@@ -478,7 +478,7 @@ class Ecwid2Woo_Order_Sync {
             'status' => 'success',
             'order_number' => $order_number,
             // translators: %s is the order number
-            'message' => sprintf(__('Order %s imported successfully', 'ecwid2woo'), $order_number)
+            'message' => sprintf(__('Order %s imported successfully', 'metrotechs-e2w-sync'), $order_number)
         ];
     }
 }

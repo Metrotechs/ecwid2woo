@@ -35,29 +35,29 @@ class Ecwid2Woo_Full_Sync {
     public function render_full_sync_page() {
         ?>
         <div class="ecwid-page-header">
-            <h1><?php esc_html_e('Full Data Sync', 'ecwid2woo'); ?></h1>
-            <p class="description"><?php esc_html_e('This will sync all categories, products, customers, and orders from Ecwid to WooCommerce. The sync happens in order: Categories → Products → Customers → Orders. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'ecwid2woo'); ?></p>
+            <h1><?php esc_html_e('Full Data Sync', 'metrotechs-e2w-sync'); ?></h1>
+            <p class="description"><?php esc_html_e('This will sync all categories, products, customers, and orders from Ecwid to WooCommerce. The sync happens in order: Categories → Products → Customers → Orders. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'metrotechs-e2w-sync'); ?></p>
         </div>
 
         <!-- Navigation Bar -->
         <div class="ecwid-page-nav">
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->settings_slug)); ?>" class="nav-link">
-                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'ecwid2woo'); ?>
+                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'metrotechs-e2w-sync'); ?>
             </a>
             <span class="nav-link current">
-                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'metrotechs-e2w-sync'); ?>
             </span>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->category_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->partial_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->customer_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">👥</span> <?php esc_html_e('Customer Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">👥</span> <?php esc_html_e('Customer Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->order_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">📦</span> <?php esc_html_e('Order Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">📦</span> <?php esc_html_e('Order Sync', 'metrotechs-e2w-sync'); ?>
             </a>
         </div>
 
@@ -66,37 +66,37 @@ class Ecwid2Woo_Full_Sync {
                 <!-- This will be populated by JavaScript -->
             </div>
 
-            <button id="load-full-sync-preview-button" class="button button-primary"><?php esc_html_e('Reload Sync Data', 'ecwid2woo'); ?></button>
+            <button id="load-full-sync-preview-button" class="button button-primary"><?php esc_html_e('Reload Sync Data', 'metrotechs-e2w-sync'); ?></button>
 
             <div id="full-sync-preview-container" class="sync-preview-container">
                 <div class="sync-preview-grid">
                     <div class="sync-preview-column">
-                        <h3><?php esc_html_e('Categories to be Synced:', 'ecwid2woo'); ?></h3>
+                        <h3><?php esc_html_e('Categories to be Synced:', 'metrotechs-e2w-sync'); ?></h3>
                         <div id="full-sync-category-preview-list" class="sync-preview-list"></div>
                     </div>
                     <div class="sync-preview-column">
-                        <h3><?php esc_html_e('Products to be Synced:', 'ecwid2woo'); ?></h3>
+                        <h3><?php esc_html_e('Products to be Synced:', 'metrotechs-e2w-sync'); ?></h3>
                         <div id="full-sync-product-preview-list" class="sync-preview-list"></div>
                     </div>
                     <div class="sync-preview-column">
-                        <h3><?php esc_html_e('Customers to be Synced:', 'ecwid2woo'); ?></h3>
+                        <h3><?php esc_html_e('Customers to be Synced:', 'metrotechs-e2w-sync'); ?></h3>
                         <div id="full-sync-customer-preview-list" class="sync-preview-list"></div>
                     </div>
                     <div class="sync-preview-column">
-                        <h3><?php esc_html_e('Orders to be Synced:', 'ecwid2woo'); ?></h3>
+                        <h3><?php esc_html_e('Orders to be Synced:', 'metrotechs-e2w-sync'); ?></h3>
                         <div id="full-sync-order-preview-list" class="sync-preview-list"></div>
                     </div>
                 </div>
             </div>
             
-            <button id="full-sync-button" class="button button-primary sync-button-primary"><?php esc_html_e('Start Full Sync', 'ecwid2woo'); ?></button>
-            <button id="stop-full-sync-button" class="button button-secondary sync-button-stop"><?php esc_html_e('STOP SYNC', 'ecwid2woo'); ?></button>
+            <button id="full-sync-button" class="button button-primary sync-button-primary"><?php esc_html_e('Start Full Sync', 'metrotechs-e2w-sync'); ?></button>
+            <button id="stop-full-sync-button" class="button button-secondary sync-button-stop"><?php esc_html_e('STOP SYNC', 'metrotechs-e2w-sync'); ?></button>
             
             <div id="full-sync-status" class="sync-status margin-top-15"></div>
-            <div id="full-sync-counts-info" class="sync-counts-info"><?php esc_html_e('Item counts will be displayed here.', 'ecwid2woo'); ?></div>
+            <div id="full-sync-counts-info" class="sync-counts-info"><?php esc_html_e('Item counts will be displayed here.', 'metrotechs-e2w-sync'); ?></div>
             
             <div class="sync-progress-wrapper">
-                <label for="full-sync-bar" class="sync-progress-label"><?php esc_html_e('Overall Progress:', 'ecwid2woo'); ?></label>
+                <label for="full-sync-bar" class="sync-progress-label"><?php esc_html_e('Overall Progress:', 'metrotechs-e2w-sync'); ?></label>
                 <div id="full-sync-progress-container" class="sync-progress-container">
                     <div id="full-sync-bar" class="sync-progress-bar">0%</div>
                 </div>
@@ -114,7 +114,7 @@ class Ecwid2Woo_Full_Sync {
         // Check WooCommerce availability first
         if (!class_exists('WooCommerce')) {
             wp_send_json_error([
-                'message' => __('WooCommerce is not installed or activated. Please install WooCommerce to use this plugin.', 'ecwid2woo'),
+                'message' => __('WooCommerce is not installed or activated. Please install WooCommerce to use this plugin.', 'metrotechs-e2w-sync'),
                 'error_type' => 'missing_dependency'
             ]);
             return;
@@ -125,7 +125,7 @@ class Ecwid2Woo_Full_Sync {
         
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo')]); return;
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]); return;
         }
         
         // Enhanced resource management with more aggressive limits
@@ -144,7 +144,7 @@ class Ecwid2Woo_Full_Sync {
         $memory_in_bytes = wp_convert_hr_to_bytes($current_memory);
         if ($memory_in_bytes < $minimum_memory) {
             wp_send_json_error([
-                'message' => __('Server memory limit too low for category sync. Current: ', 'ecwid2woo') . $current_memory . __(' Minimum required: 128M', 'ecwid2woo'),
+                'message' => __('Server memory limit too low for category sync. Current: ', 'metrotechs-e2w-sync') . $current_memory . __(' Minimum required: 128M', 'metrotechs-e2w-sync'),
                 'error_type' => 'memory_limit',
                 'current_limit' => $current_memory,
                 'minimum_limit' => '128M'
@@ -202,7 +202,7 @@ class Ecwid2Woo_Full_Sync {
 
         $endpoints = ['products' => '/products', 'categories' => '/categories', 'customers' => '/customers', 'orders' => '/orders'];
         if (!isset($endpoints[$sync_type])) {
-            wp_send_json_error(['message' => __('Invalid sync type for full sync.', 'ecwid2woo')]); return;
+            wp_send_json_error(['message' => __('Invalid sync type for full sync.', 'metrotechs-e2w-sync')]); return;
         }
 
         $endpoint = $endpoints[$sync_type];
@@ -230,7 +230,7 @@ class Ecwid2Woo_Full_Sync {
                 error_log("Ecwid Sync: API Request WP_Error for $sync_type: " . $response->get_error_message()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
             }
             // translators: %s is the error message from the WordPress HTTP API
-            wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'ecwid2woo'), $response->get_error_message())]); return;
+            wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'metrotechs-e2w-sync'), $response->get_error_message())]); return;
         }
 
         $raw_response_body = wp_remote_retrieve_body($response);
@@ -248,7 +248,7 @@ class Ecwid2Woo_Full_Sync {
             // Provide user-friendly error message with retry suggestion for server errors
             $error_message = $error_info['user_message'];
             if ($error_info['retry_recommended']) {
-                $error_message .= ' ' . __('This appears to be a temporary issue. You can try again in a few minutes.', 'ecwid2woo');
+                $error_message .= ' ' . __('This appears to be a temporary issue. You can try again in a few minutes.', 'metrotechs-e2w-sync');
             }
             
             wp_send_json_error([
@@ -384,7 +384,7 @@ class Ecwid2Woo_Full_Sync {
 
         wp_send_json_success([
             // translators: %1$s is the sync type, %2$d is items processed, %3$d is imported count, %4$d is updated count, %5$d is skipped count, %6$d is failed count, %7$d is total items
-            'message' => sprintf(__('%1$s: Processed %2$d items fetched in this API call (Imported: %3$d, Updated: %4$d, Skipped: %5$d, Failed: %6$d). Total items for this type (Ecwid reported): %7$d.', 'ecwid2woo'), ucfirst($sync_type), count($items_from_api), $imported_count, $updated_count, $skipped_count, $failed_count, $total_items_reported_by_api),
+            'message' => sprintf(__('%1$s: Processed %2$d items fetched in this API call (Imported: %3$d, Updated: %4$d, Skipped: %5$d, Failed: %6$d). Total items for this type (Ecwid reported): %7$d.', 'metrotechs-e2w-sync'), ucfirst($sync_type), count($items_from_api), $imported_count, $updated_count, $skipped_count, $failed_count, $total_items_reported_by_api),
             'next_offset' => $new_offset,
             'total_items' => $total_items_reported_by_api,
             'has_more' => $has_more,
@@ -403,7 +403,7 @@ class Ecwid2Woo_Full_Sync {
                 error_log("Ecwid Sync: Fatal Error in ajax_batch_sync: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
             }
             wp_send_json_error([
-                'message' => __('A critical error occurred during sync. Please check your server error logs or try again with a smaller batch size.', 'ecwid2woo'),
+                'message' => __('A critical error occurred during sync. Please check your server error logs or try again with a smaller batch size.', 'metrotechs-e2w-sync'),
                 'error_type' => 'fatal_error',
                 'error_details' => WP_DEBUG ? $e->getMessage() : 'Enable WP_DEBUG for details'
             ]);
@@ -413,7 +413,7 @@ class Ecwid2Woo_Full_Sync {
                 error_log("Ecwid Sync: Exception in ajax_batch_sync: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
             }
             wp_send_json_error([
-                'message' => __('An error occurred during sync: ', 'ecwid2woo') . $e->getMessage(),
+                'message' => __('An error occurred during sync: ', 'metrotechs-e2w-sync') . $e->getMessage(),
                 'error_type' => 'exception',
                 'error_details' => WP_DEBUG ? $e->getTraceAsString() : 'Enable WP_DEBUG for details'
             ]);
@@ -451,13 +451,13 @@ class Ecwid2Woo_Full_Sync {
             ];
             
             if ($is_memory_error) {
-                $response['data']['message'] = __('Sync failed due to insufficient server memory. Try reducing the batch size or increase server memory limit.', 'ecwid2woo');
+                $response['data']['message'] = __('Sync failed due to insufficient server memory. Try reducing the batch size or increase server memory limit.', 'metrotechs-e2w-sync');
                 $response['data']['suggested_action'] = 'increase_memory_or_reduce_batch';
             } elseif ($is_time_error) {
-                $response['data']['message'] = __('Sync failed due to server time limit. Try reducing the batch size or increase server execution time.', 'ecwid2woo');
+                $response['data']['message'] = __('Sync failed due to server time limit. Try reducing the batch size or increase server execution time.', 'metrotechs-e2w-sync');
                 $response['data']['suggested_action'] = 'reduce_batch_size';
             } else {
-                $response['data']['message'] = __('A critical server error occurred during sync. Check server logs for details.', 'ecwid2woo');
+                $response['data']['message'] = __('A critical server error occurred during sync. Check server logs for details.', 'metrotechs-e2w-sync');
                 $response['data']['suggested_action'] = 'check_server_logs';
             }
             
@@ -478,7 +478,7 @@ class Ecwid2Woo_Full_Sync {
         // Check WooCommerce availability first
         if (!class_exists('WooCommerce')) {
             wp_send_json_error([
-                'message' => __('WooCommerce is not installed or activated. Please install WooCommerce to use this plugin.', 'ecwid2woo'),
+                'message' => __('WooCommerce is not installed or activated. Please install WooCommerce to use this plugin.', 'metrotechs-e2w-sync'),
                 'error_type' => 'missing_dependency'
             ]);
             return;
@@ -490,7 +490,7 @@ class Ecwid2Woo_Full_Sync {
         try {
             check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
             if (!current_user_can('manage_options')) {
-                wp_send_json_error(['message' => __('You do not have permission to perform this action.', 'ecwid2woo')], 403);
+                wp_send_json_error(['message' => __('You do not have permission to perform this action.', 'metrotechs-e2w-sync')], 403);
                 return;
             }
             set_time_limit(300); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Legitimate use for bulk category processing
@@ -506,7 +506,7 @@ class Ecwid2Woo_Full_Sync {
                 
                 if ($current_bytes < $minimum_bytes) {
                     wp_send_json_error([
-                        'message' => __('Server memory limit too low for sync operation. Current: ', 'ecwid2woo') . $current_memory . __(' Minimum required: 128M', 'ecwid2woo'),
+                        'message' => __('Server memory limit too low for sync operation. Current: ', 'metrotechs-e2w-sync') . $current_memory . __(' Minimum required: 128M', 'metrotechs-e2w-sync'),
                         'error_type' => 'memory_limit',
                         'current_limit' => $current_memory,
                         'minimum_limit' => '128M'
@@ -550,11 +550,11 @@ class Ecwid2Woo_Full_Sync {
                     }
                 } else {
                     // translators: %d is the HTTP status code
-                    $errors[] = sprintf(__('Failed to fetch category count (HTTP %d)', 'ecwid2woo'), $categories_http_code);
+                    $errors[] = sprintf(__('Failed to fetch category count (HTTP %d)', 'metrotechs-e2w-sync'), $categories_http_code);
                 }
             } else {
                 // translators: %s is the error message
-                $errors[] = sprintf(__('Category count request failed: %s', 'ecwid2woo'), $categories_response->get_error_message());
+                $errors[] = sprintf(__('Category count request failed: %s', 'metrotechs-e2w-sync'), $categories_response->get_error_message());
             }
 
             // Fetch product count and preview  
@@ -580,11 +580,11 @@ class Ecwid2Woo_Full_Sync {
                     }
                 } else {
                     // translators: %d is the HTTP status code
-                    $errors[] = sprintf(__('Failed to fetch product count (HTTP %d)', 'ecwid2woo'), $products_http_code);
+                    $errors[] = sprintf(__('Failed to fetch product count (HTTP %d)', 'metrotechs-e2w-sync'), $products_http_code);
                 }
             } else {
                 // translators: %s is the error message
-                $errors[] = sprintf(__('Product count request failed: %s', 'ecwid2woo'), $products_response->get_error_message());
+                $errors[] = sprintf(__('Product count request failed: %s', 'metrotechs-e2w-sync'), $products_response->get_error_message());
             }
 
             // Fetch customer count and preview
@@ -610,14 +610,14 @@ class Ecwid2Woo_Full_Sync {
                 } elseif ($customers_http_code === 403) {
                     // Handle permission error gracefully for customers
                     $customer_count = 0;
-                    $errors[] = __('Customer access requires "Read customers" permission in your Ecwid API token.', 'ecwid2woo');
+                    $errors[] = __('Customer access requires "Read customers" permission in your Ecwid API token.', 'metrotechs-e2w-sync');
                 } else {
                     // translators: %d is the HTTP status code
-                    $errors[] = sprintf(__('Failed to fetch customer count (HTTP %d)', 'ecwid2woo'), $customers_http_code);
+                    $errors[] = sprintf(__('Failed to fetch customer count (HTTP %d)', 'metrotechs-e2w-sync'), $customers_http_code);
                 }
             } else {
                 // translators: %s is the error message
-                $errors[] = sprintf(__('Customer count request failed: %s', 'ecwid2woo'), $customers_response->get_error_message());
+                $errors[] = sprintf(__('Customer count request failed: %s', 'metrotechs-e2w-sync'), $customers_response->get_error_message());
             }
 
             // Fetch order count and preview
@@ -643,14 +643,14 @@ class Ecwid2Woo_Full_Sync {
                 } elseif ($orders_http_code === 403) {
                     // Handle permission error gracefully for orders
                     $order_count = 0;
-                    $errors[] = __('Order access requires "Read orders" permission in your Ecwid API token.', 'ecwid2woo');
+                    $errors[] = __('Order access requires "Read orders" permission in your Ecwid API token.', 'metrotechs-e2w-sync');
                 } else {
                     // translators: %d is the HTTP status code
-                    $errors[] = sprintf(__('Failed to fetch order count (HTTP %d)', 'ecwid2woo'), $orders_http_code);
+                    $errors[] = sprintf(__('Failed to fetch order count (HTTP %d)', 'metrotechs-e2w-sync'), $orders_http_code);
                 }
             } else {
                 // translators: %s is the error message
-                $errors[] = sprintf(__('Order count request failed: %s', 'ecwid2woo'), $orders_response->get_error_message());
+                $errors[] = sprintf(__('Order count request failed: %s', 'metrotechs-e2w-sync'), $orders_response->get_error_message());
             }
 
             // Send response
@@ -693,7 +693,7 @@ class Ecwid2Woo_Full_Sync {
             }
             
             wp_send_json_error([
-                'message' => __('An error occurred while fetching sync counts: ', 'ecwid2woo') . $e->getMessage(),
+                'message' => __('An error occurred while fetching sync counts: ', 'metrotechs-e2w-sync') . $e->getMessage(),
                 'error_type' => 'exception'
             ], 500);
         }

@@ -43,29 +43,29 @@ class Ecwid2Woo_Customer_Sync {
     public function render_customer_sync_page() {
         ?>
         <div class="ecwid-page-header">
-            <h1><?php esc_html_e('Customer Sync', 'ecwid2woo'); ?></h1>
-            <p><?php esc_html_e('Load customers from your Ecwid store and select which ones to import or update in WooCommerce.', 'ecwid2woo'); ?></p>
+            <h1><?php esc_html_e('Customer Sync', 'metrotechs-e2w-sync'); ?></h1>
+            <p><?php esc_html_e('Load customers from your Ecwid store and select which ones to import or update in WooCommerce.', 'metrotechs-e2w-sync'); ?></p>
         </div>
 
         <!-- Navigation Bar -->
         <div class="ecwid-page-nav">
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->settings_slug)); ?>" class="nav-link">
-                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'ecwid2woo'); ?>
+                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->full_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->category_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->partial_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <span class="nav-link current">
-                <span class="nav-icon">👥</span> <?php esc_html_e('Customer Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">👥</span> <?php esc_html_e('Customer Sync', 'metrotechs-e2w-sync'); ?>
             </span>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->order_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">📦</span> <?php esc_html_e('Order Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">📦</span> <?php esc_html_e('Order Sync', 'metrotechs-e2w-sync'); ?>
             </a>
         </div>
 
@@ -74,16 +74,16 @@ class Ecwid2Woo_Customer_Sync {
                 <!-- This will be populated by JavaScript -->
             </div>
 
-            <button id="load-ecwid-customers-button" class="button button-primary"><?php esc_html_e('Reload Customers', 'ecwid2woo'); ?></button>
+            <button id="load-ecwid-customers-button" class="button button-primary"><?php esc_html_e('Reload Customers', 'metrotechs-e2w-sync'); ?></button>
             <div id="selective-customer-list-container" class="selective-customer-list-container">
-                <?php esc_html_e('Customer list will appear here...', 'ecwid2woo'); ?>
+                <?php esc_html_e('Customer list will appear here...', 'metrotechs-e2w-sync'); ?>
             </div>
-            <button id="import-selected-customers-button" class="button button-primary import-selected-button"><?php esc_html_e('Import Selected Customers', 'ecwid2woo'); ?></button>
+            <button id="import-selected-customers-button" class="button button-primary import-selected-button"><?php esc_html_e('Import Selected Customers', 'metrotechs-e2w-sync'); ?></button>
             
             <!-- Bulk Actions -->
             <div class="customer-bulk-actions" style="margin: 25px 0 15px 0; padding-top: 15px; border-top: 1px solid #ddd;">
-                <h3><?php esc_html_e('Bulk Actions', 'ecwid2woo'); ?></h3>
-                <button id="sync-all-customers-button" class="button button-primary"><?php esc_html_e('Import All Customers', 'ecwid2woo'); ?></button>
+                <h3><?php esc_html_e('Bulk Actions', 'metrotechs-e2w-sync'); ?></h3>
+                <button id="sync-all-customers-button" class="button button-primary"><?php esc_html_e('Import All Customers', 'metrotechs-e2w-sync'); ?></button>
             </div>
 
             <div id="selective-sync-status" class="sync-status margin-top-15"></div>
@@ -102,7 +102,7 @@ class Ecwid2Woo_Customer_Sync {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
 
@@ -130,11 +130,11 @@ class Ecwid2Woo_Customer_Sync {
                 $customer_count = intval($customers_body['total']);
             } else {
                 // translators: %d is the HTTP status code
-                $errors[] = sprintf(__('Failed to fetch customer count (HTTP %d)', 'ecwid2woo'), $customers_http_code);
+                $errors[] = sprintf(__('Failed to fetch customer count (HTTP %d)', 'metrotechs-e2w-sync'), $customers_http_code);
             }
         } else {
             // translators: %s is the error message
-            $errors[] = sprintf(__('Customer count request failed: %s', 'ecwid2woo'), $customers_response->get_error_message());
+            $errors[] = sprintf(__('Customer count request failed: %s', 'metrotechs-e2w-sync'), $customers_response->get_error_message());
         }
 
         $response_data = [
@@ -157,7 +157,7 @@ class Ecwid2Woo_Customer_Sync {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
 
@@ -199,11 +199,11 @@ class Ecwid2Woo_Customer_Sync {
             if ($http_code !== 200) {
                 if ($http_code === 403) {
                     wp_send_json_error([
-                        'message' => __('Customer API access forbidden (HTTP 403). Your API token needs "Read customers" permission. Please regenerate your API token with customer permissions enabled in your Ecwid dashboard (Apps → My Apps → API).', 'ecwid2woo')
+                        'message' => __('Customer API access forbidden (HTTP 403). Your API token needs "Read customers" permission. Please regenerate your API token with customer permissions enabled in your Ecwid dashboard (Apps → My Apps → API).', 'metrotechs-e2w-sync')
                     ]);
                 } else {
                     // translators: %d is the HTTP status code
-                    wp_send_json_error(['message' => sprintf(__('API request failed (HTTP %d)', 'ecwid2woo'), $http_code)]);
+                    wp_send_json_error(['message' => sprintf(__('API request failed (HTTP %d)', 'metrotechs-e2w-sync'), $http_code)]);
                 }
                 return;
             }
@@ -230,7 +230,7 @@ class Ecwid2Woo_Customer_Sync {
             'total_available' => $total_available,
             'api_calls_made' => $api_calls,
             // translators: %d is the number of customers loaded
-            'message' => sprintf(__('%d customers loaded successfully', 'ecwid2woo'), count($all_customers))
+            'message' => sprintf(__('%d customers loaded successfully', 'metrotechs-e2w-sync'), count($all_customers))
         ]);
     }
 
@@ -241,14 +241,14 @@ class Ecwid2Woo_Customer_Sync {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
 
         $customer_ids = isset($_POST['customer_ids']) ? array_map('intval', $_POST['customer_ids']) : [];
         
         if (empty($customer_ids)) {
-            wp_send_json_error(['message' => __('No customers selected', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('No customers selected', 'metrotechs-e2w-sync')]);
             return;
         }
 
@@ -269,7 +269,7 @@ class Ecwid2Woo_Customer_Sync {
 
         wp_send_json_success([
             // translators: %1$d is the number of successful imports, %2$d is the number of failed imports
-            'message' => sprintf(__('Import complete. Success: %1$d, Failed: %2$d', 'ecwid2woo'), $imported_count, $failed_count),
+            'message' => sprintf(__('Import complete. Success: %1$d, Failed: %2$d', 'metrotechs-e2w-sync'), $imported_count, $failed_count),
             'imported_count' => $imported_count,
             'failed_count' => $failed_count,
             'results' => $import_results
@@ -283,14 +283,14 @@ class Ecwid2Woo_Customer_Sync {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
 
         // This is a placeholder for bulk customer sync
         // In a real implementation, this would handle large datasets with pagination
         wp_send_json_success([
-            'message' => __('Bulk customer sync is not yet implemented', 'ecwid2woo')
+            'message' => __('Bulk customer sync is not yet implemented', 'metrotechs-e2w-sync')
         ]);
     }
 
@@ -316,7 +316,7 @@ class Ecwid2Woo_Customer_Sync {
             'status' => 'success',
             'customer_id' => $customer_id,
             // translators: %d is the customer ID
-            'message' => sprintf(__('Customer %d imported successfully', 'ecwid2woo'), $customer_id)
+            'message' => sprintf(__('Customer %d imported successfully', 'metrotechs-e2w-sync'), $customer_id)
         ];
     }
 }

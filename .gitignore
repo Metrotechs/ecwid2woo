@@ -1,5 +1,30 @@
 # WordPress Plugin .gitignore for Production Release
 
+# Development documentation and notes
+*.md
+!README.md
+AI_ASSISTANT_INSTRUCTIONS.md
+AJAX_ERROR_FIX.md
+CATEGORY_SYNC_REFACTOR_SUMMARY.md
+CUSTOMER_ORDER_SYNC_SETUP.md
+FULL_SYNC_REFACTOR_SUMMARY.md
+MAIN_FILE_CLEANUP_SUMMARY.md
+PRODUCTION_RELEASE_*.md
+PRODUCT_SYNC_REFACTOR_SUMMARY.md
+RELEASE_NOTES_*.md
+SKU_CONFLICT_FIX.md
+SYNC_ERROR_FIXES.md
+UI_ENHANCEMENT_SUMMARY.md
+
+# Development backup files and archives
+*.zip
+*.tar.gz
+*.rar
+*-v*.zip
+*-complete.zip
+*-backup.*
+*-old.*
+
 # Development and build files
 node_modules/
 .vscode/

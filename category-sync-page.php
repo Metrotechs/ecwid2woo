@@ -1,11 +1,11 @@
 <?php
 /**
- * Category Sync Page - Ecwid2Woo Plugin
+ * Category Sync Page - Metrotechs E2W Sync Plugin
  * 
  * This file contains all the functionality for the Category Sync page,
  * including the page rendering, AJAX handlers, and category import logic.
  * 
- * @package Ecwid2Woo
+ * @package Metrotechs E2W Sync
  * @since 1.1.0
  */
 
@@ -42,29 +42,29 @@ class Ecwid2Woo_Category_Sync {
     public function render_category_sync_page() {
         ?>
         <div class="ecwid-page-header">
-            <h1><?php esc_html_e('Partial Category Sync', 'ecwid2woo'); ?></h1>
-            <p><?php esc_html_e('Load categories from your Ecwid store and select which ones to import or update in WooCommerce.', 'ecwid2woo'); ?></p>
+            <h1><?php esc_html_e('Partial Category Sync', 'metrotechs-e2w-sync'); ?></h1>
+            <p><?php esc_html_e('Load categories from your Ecwid store and select which ones to import or update in WooCommerce.', 'metrotechs-e2w-sync'); ?></p>
         </div>
 
         <!-- Navigation Bar -->
         <div class="ecwid-page-nav">
             <a href="<?php echo esc_url(admin_url('admin.php?page=ecwid-sync-settings')); ?>" class="nav-link">
-                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'ecwid2woo'); ?>
+                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=ecwid-sync-full')); ?>" class="nav-link">
-                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <span class="nav-link current">
-                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'metrotechs-e2w-sync'); ?>
             </span>
             <a href="<?php echo esc_url(admin_url('admin.php?page=ecwid-sync-partial')); ?>" class="nav-link">
-                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=ecwid-sync-customers')); ?>" class="nav-link">
-                <span class="nav-icon">👥</span> <?php esc_html_e('Customer Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">👥</span> <?php esc_html_e('Customer Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=ecwid-sync-orders')); ?>" class="nav-link">
-                <span class="nav-icon">📦</span> <?php esc_html_e('Order Sync', 'ecwid2woo'); ?>
+                <span class="nav-icon">📦</span> <?php esc_html_e('Order Sync', 'metrotechs-e2w-sync'); ?>
             </a>
         </div>
 
@@ -73,17 +73,17 @@ class Ecwid2Woo_Category_Sync {
                 <!-- This will be populated by JavaScript -->
             </div>
 
-            <button id="load-ecwid-categories-button" class="button button-primary"><?php esc_html_e('Reload Categories', 'ecwid2woo'); ?></button>
+            <button id="load-ecwid-categories-button" class="button button-primary"><?php esc_html_e('Reload Categories', 'metrotechs-e2w-sync'); ?></button>
             <div id="selective-category-list-container" class="selective-category-list-container">
-                <?php esc_html_e('Category list will appear here...', 'ecwid2woo'); ?>
+                <?php esc_html_e('Category list will appear here...', 'metrotechs-e2w-sync'); ?>
             </div>
-            <button id="import-selected-categories-button" class="button button-primary import-selected-button"><?php esc_html_e('Import Selected Categories', 'ecwid2woo'); ?></button>
+            <button id="import-selected-categories-button" class="button button-primary import-selected-button"><?php esc_html_e('Import Selected Categories', 'metrotechs-e2w-sync'); ?></button>
             
             <!-- Bulk Actions -->
             <div class="category-bulk-actions" style="margin: 25px 0 15px 0; padding-top: 15px; border-top: 1px solid #ddd;">
-                <h3><?php esc_html_e('Bulk Actions', 'ecwid2woo'); ?></h3>
-                <button id="sync-all-categories-button" class="button button-primary"><?php esc_html_e('Import All Categories', 'ecwid2woo'); ?></button>
-                <button id="stop-sync-categories-button" class="button button-secondary" style="margin-left: 10px; display: none;"><?php esc_html_e('Stop Sync', 'ecwid2woo'); ?></button>
+                <h3><?php esc_html_e('Bulk Actions', 'metrotechs-e2w-sync'); ?></h3>
+                <button id="sync-all-categories-button" class="button button-primary"><?php esc_html_e('Import All Categories', 'metrotechs-e2w-sync'); ?></button>
+                <button id="stop-sync-categories-button" class="button button-secondary" style="margin-left: 10px; display: none;"><?php esc_html_e('Stop Sync', 'metrotechs-e2w-sync'); ?></button>
             </div>
 
             <div id="selective-sync-status" class="sync-status margin-top-15"></div>
@@ -541,7 +541,7 @@ class Ecwid2Woo_Category_Sync {
      */
     private function attach_image_to_category_from_url($image_url, $term_id, $desc = null) {
         if (empty($image_url) || empty($term_id)) {
-            return new WP_Error('missing_params', __('Image URL or term ID is missing.', 'ecwid2woo'));
+            return new WP_Error('missing_params', __('Image URL or term ID is missing.', 'metrotechs-e2w-sync'));
         }
         
         // Use the parent plugin's image attachment function to download and create the attachment
@@ -557,7 +557,7 @@ class Ecwid2Woo_Category_Sync {
         if ($meta_update_result === false) {
             // If meta update failed, clean up the attachment
             wp_delete_attachment($attachment_id, true);
-            return new WP_Error('meta_update_failed', __('Failed to set category thumbnail.', 'ecwid2woo'));
+            return new WP_Error('meta_update_failed', __('Failed to set category thumbnail.', 'metrotechs-e2w-sync'));
         }
         
         return $attachment_id;
@@ -626,7 +626,7 @@ class Ecwid2Woo_Category_Sync {
     public function fix_category_hierarchy() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
 
@@ -639,7 +639,7 @@ class Ecwid2Woo_Category_Sync {
 
             if (!$parent_wc_term_id) {
                 // translators: %s is the Ecwid category ID
-                $logs[] = sprintf(__('Parent Ecwid ID %s still missing, cannot fix its children.', 'ecwid2woo'), $parent_ecwid_id);
+                $logs[] = sprintf(__('Parent Ecwid ID %s still missing, cannot fix its children.', 'metrotechs-e2w-sync'), $parent_ecwid_id);
                 continue;
             }
 
@@ -648,7 +648,7 @@ class Ecwid2Woo_Category_Sync {
 
                 if (!$child_wc_term_id) {
                     // translators: %s is the Ecwid category ID
-                    $logs[] = sprintf(__('Child term for Ecwid ID %s not found.', 'ecwid2woo'), $child_ecwid_id);
+                    $logs[] = sprintf(__('Child term for Ecwid ID %s not found.', 'metrotechs-e2w-sync'), $child_ecwid_id);
                     continue;
                 }
 
@@ -656,11 +656,11 @@ class Ecwid2Woo_Category_Sync {
 
                 if (is_wp_error($update_result)) {
                     // translators: %1$s is the term ID, %2$s is the error message
-                    $logs[] = sprintf(__('Failed to update parent for term %1$s: %2$s', 'ecwid2woo'), $child_wc_term_id, $update_result->get_error_message());
+                    $logs[] = sprintf(__('Failed to update parent for term %1$s: %2$s', 'metrotechs-e2w-sync'), $child_wc_term_id, $update_result->get_error_message());
                 } else {
                     $fixed_count++;
                     // translators: %1$s is the term ID, %2$s is the parent term ID
-                    $logs[] = sprintf(__('Fixed parent for term %1$s, now under parent %2$s', 'ecwid2woo'), $child_wc_term_id, $parent_wc_term_id);
+                    $logs[] = sprintf(__('Fixed parent for term %1$s, now under parent %2$s', 'metrotechs-e2w-sync'), $child_wc_term_id, $parent_wc_term_id);
                 }
             }
         }
@@ -671,7 +671,7 @@ class Ecwid2Woo_Category_Sync {
             'fixed_count' => $fixed_count,
             'logs' => $logs,
             // translators: %d is the number of hierarchies fixed
-            'message' => sprintf(_n('%d hierarchy fixed.', '%d hierarchies fixed.', $fixed_count, 'ecwid2woo'), $fixed_count)
+            'message' => sprintf(_n('%d hierarchy fixed.', '%d hierarchies fixed.', $fixed_count, 'metrotechs-e2w-sync'), $fixed_count)
         ]);
     }
 
@@ -681,7 +681,7 @@ class Ecwid2Woo_Category_Sync {
     public function ajax_fetch_categories_for_display() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
         set_time_limit(300); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Legitimate use for category fetch operations
@@ -718,7 +718,7 @@ class Ecwid2Woo_Category_Sync {
 
             if (is_wp_error($response)) {
                 // translators: %s is the error message from the WordPress HTTP API
-                wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'ecwid2woo'), $response->get_error_message())]);
+                wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'metrotechs-e2w-sync'), $response->get_error_message())]);
                 return;
             }
 
@@ -733,7 +733,7 @@ class Ecwid2Woo_Category_Sync {
                 // Provide user-friendly error message with retry suggestion for server errors
                 $error_message = $error_info['user_message'];
                 if ($error_info['retry_recommended']) {
-                    $error_message .= ' ' . __('This appears to be a temporary issue. You can try again in a few minutes.', 'ecwid2woo');
+                    $error_message .= ' ' . __('This appears to be a temporary issue. You can try again in a few minutes.', 'metrotechs-e2w-sync');
                 }
                 
                 wp_send_json_error([
@@ -777,7 +777,7 @@ class Ecwid2Woo_Category_Sync {
     public function ajax_import_selected_categories() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
         set_time_limit(300); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Legitimate use for selected category import operations
@@ -785,7 +785,7 @@ class Ecwid2Woo_Category_Sync {
         $selected_category_ids = isset($_POST['category_ids']) ? array_map('intval', $_POST['category_ids']) : [];
 
         if (empty($selected_category_ids)) {
-            wp_send_json_error(['message' => __('No categories selected for import.', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('No categories selected for import.', 'metrotechs-e2w-sync')]);
             return;
         }
 
@@ -884,7 +884,7 @@ class Ecwid2Woo_Category_Sync {
 
         $summary_message = sprintf(
             // translators: %1$d is imported count, %2$d is updated count, %3$d is skipped count, %4$d is failed count
-            __('Selective category import completed. Imported: %1$d, Updated: %2$d, Skipped: %3$d, Failed: %4$d', 'ecwid2woo'),
+            __('Selective category import completed. Imported: %1$d, Updated: %2$d, Skipped: %3$d, Failed: %4$d', 'metrotechs-e2w-sync'),
             $imported_count,
             $updated_count,
             $skipped_count,
@@ -912,7 +912,7 @@ class Ecwid2Woo_Category_Sync {
     public function ajax_sync_all_categories() {
         // Verify nonce for security
         if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'ecwid_wc_sync_nonce')) {
-            wp_send_json_error(['message' => __('Security check failed. Please refresh the page and try again.', 'ecwid2woo')]);
+            wp_send_json_error(['message' => __('Security check failed. Please refresh the page and try again.', 'metrotechs-e2w-sync')]);
         }
 
         // Check for required API credentials
@@ -1014,7 +1014,7 @@ class Ecwid2Woo_Category_Sync {
 
             if ($total_categories === 0) {
                 wp_send_json_success([
-                    'message' => __('No categories found in your Ecwid store.', 'ecwid2woo'),
+                    'message' => __('No categories found in your Ecwid store.', 'metrotechs-e2w-sync'),
                     'imported_count' => 0,
                     'updated_count' => 0,
                     'skipped_count' => 0,
@@ -1060,7 +1060,7 @@ class Ecwid2Woo_Category_Sync {
 
             $summary_message = sprintf(
                 // translators: %1$d is imported count, %2$d is updated count, %3$d is skipped count, %4$d is failed count
-                __('Full category sync completed. Imported: %1$d, Updated: %2$d, Skipped: %3$d, Failed: %4$d', 'ecwid2woo'),
+                __('Full category sync completed. Imported: %1$d, Updated: %2$d, Skipped: %3$d, Failed: %4$d', 'metrotechs-e2w-sync'),
                 $imported_count,
                 $updated_count,
                 $skipped_count,
@@ -1084,7 +1084,7 @@ class Ecwid2Woo_Category_Sync {
         } catch (Exception $e) {
             $detailed_logs[] = "[FATAL EXCEPTION] " . $e->getMessage();
             wp_send_json_error([
-                'message' => __('A fatal error occurred during category sync. Please check the logs.', 'ecwid2woo'),
+                'message' => __('A fatal error occurred during category sync. Please check the logs.', 'metrotechs-e2w-sync'),
                 'logs' => $detailed_logs
             ]);
         }
