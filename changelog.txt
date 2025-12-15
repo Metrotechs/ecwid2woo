@@ -1,5 +1,28 @@
 ** Metrotechs E2W Sync Changelog **
 
+2025-12-15 - version 1.4.3
+* ENHANCED RELIABILITY - EXPONENTIAL BACKOFF RETRY: Smart retry delays (3s→6s→12s) for better server recovery during 500 errors
+* IMPROVED - Category Batch Loading: Categories now load in batches with full retry logic, matching product sync reliability
+* CRITICAL FIX - FULL SYNC RETRY BUG: Fixed bug where retry counter was not reset after successful batches
+* ENHANCED - Cloudflare 524 Handling: Explicit handling for Cloudflare timeout errors with automatic retry
+* UX - Better Status Messages: Users see retry countdown and server status during transient errors
+* Performance - Increased Batch Delays: 3-second delays between batches to reduce server load
+* REFACTOR - Text Domain Update: Changed text domain from 'ecwid2woo' to 'metrotechs-e2w-sync' for WordPress compliance
+* CLEANUP - Repository Cleanup: Removed development documentation files for cleaner production releases
+
+2025-12-15 - version 1.4.2
+* NEW FEATURE - BATCH LOADING SYSTEM: Products load in manageable batches with progress tracking
+* ENHANCED - Retry Logic: Automatic 3-attempt retry on transient 500 errors
+* UX - Progress Display: Real-time batch progress with item counts
+* Performance - Memory Optimization: Prevents browser and server memory issues with large catalogs
+* REFACTOR - Server-side Pagination: Product sync now uses server-side pagination to avoid memory exhaustion
+
+2025-12-15 - version 1.4.1
+* ENHANCED - Output Buffering: Added output buffering to prevent PHP notices from corrupting JSON responses
+* FIXED - API Category Fetch: Fixed category API calls to use proper authorization headers
+* IMPROVED - Error Handling: Better error handling throughout product sync operations
+* STABILITY - Debug Mode Improvements: Enhanced debug logging wrapped in WP_DEBUG checks
+
 2025-09-02 - version 1.4.0
 * NEW FEATURE - STOP SYNC BUTTON FOR CATEGORIES: Added "Stop Sync" button to cancel bulk category imports in progress
 * UX - Users can now cancel long-running category imports without waiting for completion
