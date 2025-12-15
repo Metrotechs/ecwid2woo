@@ -59,14 +59,17 @@ Revolutionary migration recovery system that intelligently skips already importe
 - **Batch Interruption** – Product imports stop cleanly between batches
 - **Universal Coverage** – Available on both Product and Category sync pages
 
-### ⚡ Enhanced Performance & Reliability (v1.3.8-1.4.0)
+### ⚡ Enhanced Performance & Reliability (v1.3.8-1.4.3)
 
+- **Exponential Backoff Retry** – Smart retry logic with increasing delays (3s→6s→12s) for server recovery
+- **Batch Loading System** – Products, categories, and sync operations load in manageable batches
+- **Cloudflare Timeout Handling** – Explicit handling for 524 timeout errors with automatic retry
 - **Timeout Prevention** – Ultra-small batch sizes (5 products) prevent server timeouts
 - **Batch Processing** – Automatic continuation through all products (fixed bulk import bug)
 - **Progress Tracking** – Real-time progress bars showing current batch and total progress
 - **Server Compatibility** – Works with restrictive hosting environments
 - **Memory Optimization** – Conservative batch sizes prevent memory exhaustion
-- **Network Resilience** – Enhanced retry logic and error handling
+- **Network Resilience** – Enhanced retry logic and error handling with status feedback
 
 ### 🔄 Complete Migration Suite
 
@@ -220,6 +223,7 @@ Revolutionary migration recovery system that intelligently skips already importe
 **Perfect for:** Setting up category structure before product import
 
 #### Features:
+- **Batch Loading with Retry** – Categories load in batches with automatic retry on 500/524 errors (v1.4.3)
 - **Enhanced UI Design** – Professional interface with bordered information panels and status messages
 - **Stop Sync Control** – Cancel bulk category imports instantly with confirmation dialog
 - **Automatic Category Loading** – Categories load immediately when page opens with "📁 Category Loading Complete" confirmation
@@ -507,6 +511,17 @@ Revolutionary migration recovery system that intelligently skips already importe
 - **Import/Export Settings** – Backup and restore plugin configurations
 
 ### Version History
+- **v1.4.3** – **ENHANCED RELIABILITY**: Improved retry logic and batch loading across all sync pages
+  - 🔄 **Exponential Backoff Retry** – Smart retry delays (3s→6s→12s) for better server recovery
+  - 📦 **Category Batch Loading** – Categories now load in batches with retry logic like products
+  - 🔁 **Full Sync Retry Fix** – Fixed retry counter reset bug ensuring each batch gets full retry attempts
+  - ⏱️ **Cloudflare 524 Handling** – Explicit handling for Cloudflare timeout errors
+  - 💬 **Better Status Messages** – Users see retry countdown and server status during errors
+  - ⏸️ **Increased Batch Delays** – 3-second delays between batches to reduce server load
+- **v1.4.2** – **BATCH LOADING SYSTEM**: Robust product/category loading with retry logic
+  - ✅ **Batch Loading** – Products and categories load in manageable batches
+  - ✅ **Retry Logic** – Automatic 3-attempt retry on transient 500 errors
+  - ✅ **Progress Tracking** – Real-time batch progress display
 - **v1.1.4** – **CRITICAL IMAGE PRESERVATION FIX**: Complete image safety during migrations
   - 🛡️ **Image Preservation** – Fixed critical bug where existing product images were deleted during updates
   - 🔍 **Smart Image Detection** – Intelligently checks if images already exist before importing

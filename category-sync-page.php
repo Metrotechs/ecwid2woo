@@ -677,14 +677,39 @@ class Ecwid2Woo_Category_Sync {
 
     /**
      * AJAX handler to fetch categories for display in the sync page
+     * Supports batch loading with pagination parameters
      */
     public function ajax_fetch_categories_for_display() {
-        check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
+        // Start output buffering to prevent PHP notices/warnings from corrupting JSON response
+        ob_start();
+        
+        // Verify nonce
+        if (!check_ajax_referer('ecwid_wc_sync_nonce', 'nonce', false)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Category Sync: Nonce verification failed"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
+            ob_end_clean();
+            wp_send_json_error(['message' => __('Security check failed. Please refresh the page and try again.', 'metrotechs-e2w-sync')]);
+            return;
+        }
+        
         if (!current_user_can('manage_options')) {
+            ob_end_clean();
             wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
-        set_time_limit(300); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Legitimate use for category fetch operations
+        
+        // Raise memory limit for this operation
+        wp_raise_memory_limit('admin');
+        
+        // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Needed for long-running sync operations
+        set_time_limit(120);
+
+        // Verify parent plugin is available
+        if (!$this->parent_plugin || !method_exists($this->parent_plugin, '_get_api_essentials')) {
+            wp_send_json_error(['message' => __('Plugin initialization error. Please refresh the page and try again.', 'metrotechs-e2w-sync')]);
+            return;
+        }
 
         $api_essentials = $this->parent_plugin->_get_api_essentials();
         if (is_wp_error($api_essentials)) {
@@ -692,82 +717,82 @@ class Ecwid2Woo_Category_Sync {
             return;
         }
 
-        // Load all categories at once
-        $all_categories = [];
-        $offset = 0;
-        $limit = 100;
-        $api_calls_made = 0;
-
-        do {
-            $api_calls_made++;
-            $query_params = [
-                'limit' => $limit,
-                'offset' => $offset,
-                'responseFields' => 'items(id,name,parentId),total'
-            ];
-            $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories');
-
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("Ecwid Category Sync: API call #$api_calls_made - Fetching categories with offset: $offset, limit: $limit"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
-            }
-
-            $response = wp_remote_get($api_url, [
-                'timeout' => 120, // Increased timeout for large stores
-                'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
-            ]);
-
-            if (is_wp_error($response)) {
-                // translators: %s is the error message from the WordPress HTTP API
-                wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'metrotechs-e2w-sync'), $response->get_error_message())]);
-                return;
-            }
-
-            $raw_response_body = wp_remote_retrieve_body($response);
-            $body = json_decode($raw_response_body, true);
-            $http_code = wp_remote_retrieve_response_code($response);
-
-            if ($http_code !== 200 || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
-                // Use enhanced error handling
-                $error_info = $this->parent_plugin->handle_api_error_response($response, $raw_response_body, $http_code, 'categories');
-                
-                // Provide user-friendly error message with retry suggestion for server errors
-                $error_message = $error_info['user_message'];
-                if ($error_info['retry_recommended']) {
-                    $error_message .= ' ' . __('This appears to be a temporary issue. You can try again in a few minutes.', 'metrotechs-e2w-sync');
-                }
-                
-                wp_send_json_error([
-                    'message' => $error_message,
-                    'details' => $error_info['error_data'],
-                    'is_server_error' => $error_info['is_server_error'],
-                    'retry_recommended' => $error_info['retry_recommended']
-                ]);
-                return;
-            }
-
-            $items_from_api = $body['items'] ?? [];
-            $all_categories = array_merge($all_categories, $items_from_api);
-
-            $count_in_response = $body['count'] ?? count($items_from_api);
-            $total_from_api = $body['total'] ?? count($items_from_api);
-            
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("Ecwid Category Sync: API call #$api_calls_made - Got $count_in_response categories, total available: $total_from_api, current offset: $offset"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
-            }
-            
-            $offset += $count_in_response;
-
-        } while ($count_in_response > 0 && $offset < $total_from_api);
-
+        // Get pagination parameters from request (for progressive loading)
+        $page_offset = isset($_POST['page_offset']) ? intval($_POST['page_offset']) : 0;
+        $page_limit = isset($_POST['page_limit']) ? intval($_POST['page_limit']) : 100; // Load 100 categories per batch
+        
+        // Cap the limit to prevent memory issues
+        $page_limit = min($page_limit, 100);
+        
         if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log("Ecwid Category Sync: Complete! Made $api_calls_made API calls, loaded " . count($all_categories) . " total categories"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
+            error_log("Ecwid Category Sync: Fetching categories - offset: $page_offset, limit: $page_limit"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
         }
 
+        $query_params = [
+            'limit' => $page_limit,
+            'offset' => $page_offset,
+            'responseFields' => 'items(id,name,parentId),total,count,offset,limit'
+        ];
+        $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories');
+
+        $response = wp_remote_get($api_url, [
+            'timeout' => 60,
+            'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
+        ]);
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'metrotechs-e2w-sync'), $response->get_error_message())]);
+            return;
+        }
+
+        $raw_response_body = wp_remote_retrieve_body($response);
+        $body = json_decode($raw_response_body, true);
+        $http_code = wp_remote_retrieve_response_code($response);
+
+        if ($http_code !== 200 || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
+            $error_info = $this->parent_plugin->handle_api_error_response($response, $raw_response_body, $http_code, 'categories');
+            wp_send_json_error([
+                'message' => $error_info['user_message'],
+                'is_server_error' => $error_info['is_server_error'],
+                'retry_recommended' => $error_info['retry_recommended']
+            ]);
+            return;
+        }
+
+        $items_from_api = $body['items'] ?? [];
+        $total_from_api = $body['total'] ?? 0;
+        
+        // Process and transform the items
+        $categories = [];
+        foreach ($items_from_api as $item) {
+            $categories[] = [
+                'id' => $item['id'] ?? null,
+                'name' => $item['name'] ?? 'N/A',
+                'parentId' => $item['parentId'] ?? null
+            ];
+        }
+
+        $count_in_response = count($categories);
+        $new_offset = $page_offset + $count_in_response;
+        $has_more = ($new_offset < $total_from_api);
+
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("Ecwid Category Sync: Got $count_in_response categories, total: $total_from_api, has_more: " . ($has_more ? 'yes' : 'no')); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+        }
+
+        // Clean output buffer before sending JSON response
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+        
         wp_send_json_success([
-            'categories' => $all_categories,
-            'total_found' => count($all_categories),
-            'api_calls_made' => $api_calls_made,
-            'total_available' => $total_from_api
+            'categories' => $categories,
+            'total_found' => $count_in_response,
+            'total_available' => $total_from_api,
+            'current_offset' => $page_offset,
+            'next_offset' => $new_offset,
+            'has_more' => $has_more,
+            'batch_size' => $page_limit
         ]);
     }
 
@@ -775,8 +800,12 @@ class Ecwid2Woo_Category_Sync {
      * AJAX handler to import selected categories
      */
     public function ajax_import_selected_categories() {
+        // Start output buffering to prevent PHP notices/warnings from corrupting JSON response
+        ob_start();
+        
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
+            ob_end_clean();
             wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
@@ -894,6 +923,11 @@ class Ecwid2Woo_Category_Sync {
         $detailed_logs[] = "=== IMPORT SUMMARY ===";
         $detailed_logs[] = $summary_message;
 
+        // Clean output buffer before sending JSON response
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+        
         wp_send_json_success([
             'message' => $summary_message,
             'imported_count' => $imported_count,

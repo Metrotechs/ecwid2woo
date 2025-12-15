@@ -3,9 +3,9 @@ Contributors: Metrotechs, Richard Hunting
 Donate link: https://metrotechs.io/donate
 Tags: ecwid, woocommerce, migration, sync, ecommerce
 Requires at least: 5.0
-Tested up to: 6.8
+Tested up to: 6.9
 Requires PHP: 7.2
-Stable tag: 1.4.0
+Stable tag: 1.4.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
@@ -241,6 +241,32 @@ The plugin uses intelligent multi-tier matching:
 
 == Changelog ==
 
+= 1.4.3 =
+**Enhanced Reliability & Retry Logic**
+
+**Major Improvements:**
+* **Exponential Backoff Retry** - Smart retry delays (3s→6s→12s) for better server recovery during 500 errors
+* **Category Batch Loading** - Categories now load in batches with full retry logic, matching product sync reliability
+* **Full Sync Retry Fix** - Fixed critical bug where retry counter was not reset after successful batches
+* **Cloudflare 524 Handling** - Explicit handling for Cloudflare timeout errors with automatic retry
+* **Better Status Messages** - Users see retry countdown and server status during transient errors
+* **Increased Batch Delays** - 3-second delays between batches to reduce server load
+
+**Technical Enhancements:**
+* Reset retry counter immediately after each successful AJAX response
+* Added explicit HTTP 524 status code handling for Cloudflare-hosted sites
+* Improved user feedback during retry attempts with countdown display
+* Extended batch delay from 2 to 3 seconds for server breathing room
+
+= 1.4.2 =
+**Batch Loading System**
+
+**Major Features:**
+* **Product Batch Loading** - Products load in manageable batches with progress tracking
+* **Retry Logic** - Automatic 3-attempt retry on transient 500 errors
+* **Progress Display** - Real-time batch progress with item counts
+* **Memory Optimization** - Prevents browser and server memory issues with large catalogs
+
 = 1.1.4 =
 **Critical Image Preservation Fix**
 
@@ -400,6 +426,12 @@ The plugin uses intelligent multi-tier matching:
 * Responsive design for all screen sizes
 
 == Upgrade Notice ==
+
+= 1.4.3 =
+Enhanced reliability update! Adds exponential backoff retry logic, fixes retry counter bug in full sync, adds Cloudflare 524 timeout handling, and improves category batch loading. Recommended for all users experiencing intermittent 500 errors during sync.
+
+= 1.4.2 =
+Batch loading system for products and categories with automatic retry on transient errors. Improves reliability for large store migrations.
 
 = 1.0.5 =
 Critical reliability update! Fixes 500 errors during sync, adds dynamic batch sizing for faster category processing, and automatic SKU conflict resolution. Strongly recommended for users experiencing sync failures or timeouts.

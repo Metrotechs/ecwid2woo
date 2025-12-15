@@ -111,8 +111,12 @@ class Ecwid2Woo_Full_Sync {
      * AJAX handler for batch sync operations
      */
     public function ajax_batch_sync() {
+        // Start output buffering to prevent PHP notices/warnings from corrupting JSON response
+        ob_start();
+        
         // Check WooCommerce availability first
         if (!class_exists('WooCommerce')) {
+            ob_end_clean(); // Discard any output
             wp_send_json_error([
                 'message' => __('WooCommerce is not installed or activated. Please install WooCommerce to use this plugin.', 'metrotechs-e2w-sync'),
                 'error_type' => 'missing_dependency'
@@ -125,6 +129,7 @@ class Ecwid2Woo_Full_Sync {
         
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
+            ob_end_clean(); // Discard any output
             wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]); return;
         }
         
@@ -382,6 +387,11 @@ class Ecwid2Woo_Full_Sync {
             $has_more = false;
         }
 
+        // Clean output buffer before sending JSON response
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+        
         wp_send_json_success([
             // translators: %1$s is the sync type, %2$d is items processed, %3$d is imported count, %4$d is updated count, %5$d is skipped count, %6$d is failed count, %7$d is total items
             'message' => sprintf(__('%1$s: Processed %2$d items fetched in this API call (Imported: %3$d, Updated: %4$d, Skipped: %5$d, Failed: %6$d). Total items for this type (Ecwid reported): %7$d.', 'metrotechs-e2w-sync'), ucfirst($sync_type), count($items_from_api), $imported_count, $updated_count, $skipped_count, $failed_count, $total_items_reported_by_api),
@@ -398,6 +408,10 @@ class Ecwid2Woo_Full_Sync {
         ]);
         
         } catch (Error $e) {
+            // Clean output buffer before sending error response
+            if (ob_get_level()) {
+                ob_end_clean();
+            }
             // Handle fatal errors (PHP 7+)
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log("Ecwid Sync: Fatal Error in ajax_batch_sync: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
@@ -408,6 +422,10 @@ class Ecwid2Woo_Full_Sync {
                 'error_details' => WP_DEBUG ? $e->getMessage() : 'Enable WP_DEBUG for details'
             ]);
         } catch (Exception $e) {
+            // Clean output buffer before sending error response
+            if (ob_get_level()) {
+                ob_end_clean();
+            }
             // Handle regular exceptions
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log("Ecwid Sync: Exception in ajax_batch_sync: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
@@ -475,8 +493,12 @@ class Ecwid2Woo_Full_Sync {
      * AJAX handler to fetch full sync counts
      */
     public function ajax_fetch_full_sync_counts() {
+        // Start output buffering to prevent PHP notices/warnings from corrupting JSON response
+        ob_start();
+        
         // Check WooCommerce availability first
         if (!class_exists('WooCommerce')) {
+            ob_end_clean();
             wp_send_json_error([
                 'message' => __('WooCommerce is not installed or activated. Please install WooCommerce to use this plugin.', 'metrotechs-e2w-sync'),
                 'error_type' => 'missing_dependency'
@@ -490,6 +512,7 @@ class Ecwid2Woo_Full_Sync {
         try {
             check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
             if (!current_user_can('manage_options')) {
+                ob_end_clean();
                 wp_send_json_error(['message' => __('You do not have permission to perform this action.', 'metrotechs-e2w-sync')], 403);
                 return;
             }
@@ -685,9 +708,19 @@ class Ecwid2Woo_Full_Sync {
                 $response_data['message'] = implode(' ', $errors);
             }
 
+            // Clean output buffer before sending JSON response
+            if (ob_get_level()) {
+                ob_end_clean();
+            }
+            
             wp_send_json_success($response_data);
 
         } catch (Exception $e) {
+            // Clean output buffer before sending error response
+            if (ob_get_level()) {
+                ob_end_clean();
+            }
+            
             if ($debug_mode) {
                 error_log('Ecwid2Woo: Exception in ajax_fetch_full_sync_counts: ' . $e->getMessage()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             }

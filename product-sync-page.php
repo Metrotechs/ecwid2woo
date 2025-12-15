@@ -11,6 +11,12 @@
  * @package Ecwid2Woo
  */
 
+// Temporary error display for debugging - REMOVE AFTER FIXING
+if (defined('WP_DEBUG') && WP_DEBUG) {
+    @ini_set('display_errors', 1);
+    @error_reporting(E_ALL);
+}
+
 // Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
@@ -89,16 +95,45 @@ class Ecwid2Woo_Product_Sync {
     }
 
     /**
-     * AJAX handler to fetch products for selection
+     * AJAX handler to fetch products for selection - uses server-side pagination
+     * to avoid memory exhaustion on large stores
      */
     public function ajax_fetch_products_for_selection() {
-        check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
+        // Start output buffering to prevent PHP notices/warnings from corrupting JSON response
+        ob_start();
+        
+        // Debug: Log that we entered the function
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log("=== Ecwid Product Sync: ajax_fetch_products_for_selection STARTED ==="); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+        }
+        
+        // Verify nonce
+        if (!check_ajax_referer('ecwid_wc_sync_nonce', 'nonce', false)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Product Sync: Nonce verification failed"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
+            ob_end_clean();
+            wp_send_json_error(['message' => __('Security check failed. Please refresh the page and try again.', 'metrotechs-e2w-sync')]);
+            return;
+        }
+        
         if (!current_user_can('manage_options')) {
+            ob_end_clean();
             wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
+        
+        // Raise memory limit for this operation
+        wp_raise_memory_limit('admin');
+        
         // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Needed for long-running sync operations
-        set_time_limit(300);
+        set_time_limit(120);
+
+        // Verify parent plugin is available
+        if (!$this->parent_plugin || !method_exists($this->parent_plugin, '_get_api_essentials')) {
+            wp_send_json_error(['message' => __('Plugin initialization error. Please refresh the page and try again.', 'metrotechs-e2w-sync')]);
+            return;
+        }
 
         $api_essentials = $this->parent_plugin->_get_api_essentials();
         if (is_wp_error($api_essentials)) {
@@ -106,136 +141,67 @@ class Ecwid2Woo_Product_Sync {
             return;
         }
 
-        // Load all products at once
-        $all_products = [];
-        $offset = 0;
-        $limit = 100;
-        $api_calls_made = 0;
-        $max_api_calls = 100; // Safety limit to prevent infinite loops
+        // Get pagination parameters from request (for progressive loading)
+        $page_offset = isset($_POST['page_offset']) ? intval($_POST['page_offset']) : 0;
+        $page_limit = isset($_POST['page_limit']) ? intval($_POST['page_limit']) : 100; // Load 100 products per batch
         
-        // Variables to capture first API response for debugging
-        $first_count = null;
-        $first_total = null;
-        $first_http_code = null;
-
+        // Cap the limit to prevent memory issues
+        $page_limit = min($page_limit, 100);
+        
         if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log("=== Ecwid Product Sync: STARTING NEW PAGINATION LOGIC (v1.0.3) ==="); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            error_log("Ecwid Product Sync: Fetching products - offset: $page_offset, limit: $page_limit"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
         }
 
-        do {
-            $api_calls_made++;
-            
-            // Safety check to prevent infinite loops
-            if ($api_calls_made > $max_api_calls) {
-                if (defined('WP_DEBUG') && WP_DEBUG) {
-                    error_log("Ecwid Product Sync: WARNING - Reached maximum API calls limit ($max_api_calls). Stopping to prevent infinite loop."); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                }
-                break;
-            }
-            
-            $query_params = [
-                'limit' => $limit,
-                'offset' => $offset,
-                // Remove 'enabled' => 'true' to load ALL products (enabled + disabled)
-                'responseFields' => 'items(id,sku,name,enabled,options,combinations(id)),total' 
-            ];
-            $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/products');
+        $query_params = [
+            'limit' => $page_limit,
+            'offset' => $page_offset,
+            'responseFields' => 'items(id,sku,name,enabled,options,combinations(id)),total,count,offset,limit' 
+        ];
+        $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/products');
 
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("Ecwid Product Sync: API call #$api_calls_made - Fetching products with offset: $offset, limit: $limit"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                error_log("Ecwid Product Sync: API URL: " . $api_url); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            }
+        $response = wp_remote_get($api_url, [
+            'timeout' => 60,
+            'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
+        ]);
 
-            $response = wp_remote_get($api_url, [
-                'timeout' => 120, // Increased timeout for large stores
-                'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
+        if (is_wp_error($response)) {
+            wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'metrotechs-e2w-sync'), $response->get_error_message())]);
+            return;
+        }
+
+        $raw_response_body = wp_remote_retrieve_body($response);
+        $body = json_decode($raw_response_body, true);
+        $http_code = wp_remote_retrieve_response_code($response);
+
+        if ($http_code !== 200 || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
+            $error_info = $this->parent_plugin->handle_api_error_response($response, $raw_response_body, $http_code, 'products');
+            wp_send_json_error([
+                'message' => $error_info['user_message'],
+                'is_server_error' => $error_info['is_server_error'],
+                'retry_recommended' => $error_info['retry_recommended']
             ]);
-
-            if (is_wp_error($response)) {
-                // translators: %s is the error message from the WordPress HTTP API
-                wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'metrotechs-e2w-sync'), $response->get_error_message())]);
-                return;
-            }
-
-            $raw_response_body = wp_remote_retrieve_body($response);
-            $body = json_decode($raw_response_body, true);
-            $http_code = wp_remote_retrieve_response_code($response);
-
-            // Debug the raw API response
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("Ecwid Product Sync: API call #$api_calls_made - HTTP Code: $http_code"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                error_log("Ecwid Product Sync: API call #$api_calls_made - Raw response: " . substr($raw_response_body, 0, 500) . "..."); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                if (json_last_error() !== JSON_ERROR_NONE) {
-                    error_log("Ecwid Product Sync: JSON parsing error: " . json_last_error_msg()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                }
-            }
-
-            if ($http_code !== 200 || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
-                $error_info = $this->parent_plugin->handle_api_error_response($response, $raw_response_body, $http_code, 'products');
-                
-                $error_message = $error_info['user_message'];
-                if ($error_info['retry_recommended']) {
-                    $error_message .= ' ' . __('This appears to be a temporary issue. You can try again in a few minutes.', 'metrotechs-e2w-sync');
-                }
-                
-                wp_send_json_error([
-                    'message' => $error_message,
-                    'details' => $error_info['error_data'],
-                    'is_server_error' => $error_info['is_server_error'],
-                    'retry_recommended' => $error_info['retry_recommended']
-                ]);
-                return;
-            }
-
-            $items_from_api = $body['items'] ?? [];
-            
-            // Process and transform the items
-            foreach ($items_from_api as $item) {
-                $all_products[] = [
-                    'id' => $item['id'] ?? null,
-                    'name' => $item['name'] ?? 'N/A',
-                    'sku' => $item['sku'] ?? 'N/A',
-                    'enabled' => $item['enabled'] ?? false,
-                    'options' => $item['options'] ?? [],
-                    'combinations' => $item['combinations'] ?? []
-                ];
-            }
-
-            // Get count from actual items returned, not API count field (which may not exist with custom responseFields)
-            $count_in_response = count($items_from_api);
-            $total_from_api = $body['total'] ?? 0;
-            
-            // Capture first API response values for debugging
-            if ($api_calls_made === 1) {
-                $first_count = $count_in_response;
-                $first_total = $total_from_api;
-                $first_http_code = $http_code;
-            }
-            
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log("Ecwid Product Sync: API call #$api_calls_made - Got $count_in_response products, total available: $total_from_api, current offset: $offset"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                error_log("Ecwid Product Sync: API response keys: " . implode(', ', array_keys($body))); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                if (isset($body['items'])) {
-                    error_log("Ecwid Product Sync: Actual items in response: " . count($body['items'])); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                }
-                error_log("Ecwid Product Sync: Loop will continue? " . ($count_in_response > 0 && $offset < $total_from_api ? 'YES' : 'NO')); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                error_log("Ecwid Product Sync: - count_in_response > 0: " . ($count_in_response > 0 ? 'true' : 'false') . " ($count_in_response)"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-                error_log("Ecwid Product Sync: - offset < total_from_api: " . ($offset < $total_from_api ? 'true' : 'false') . " ($offset < $total_from_api)"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-            }
-            
-            $offset += $count_in_response;
-
-        } while ($count_in_response > 0 && $offset < $total_from_api);
-
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log("Ecwid Product Sync: Complete! Made $api_calls_made API calls, loaded " . count($all_products) . " total products"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            return;
         }
 
-        // Separate enabled and disabled products
+        $items_from_api = $body['items'] ?? [];
+        $total_from_api = $body['total'] ?? 0;
+        
+        // Process and transform the items
+        $products = [];
         $enabled_products = [];
         $disabled_products = [];
         
-        foreach ($all_products as $product) {
+        foreach ($items_from_api as $item) {
+            $product = [
+                'id' => $item['id'] ?? null,
+                'name' => $item['name'] ?? 'N/A',
+                'sku' => $item['sku'] ?? 'N/A',
+                'enabled' => $item['enabled'] ?? false,
+                'options' => $item['options'] ?? [],
+                'combinations' => $item['combinations'] ?? []
+            ];
+            $products[] = $product;
+            
             if ($product['enabled']) {
                 $enabled_products[] = $product;
             } else {
@@ -243,22 +209,31 @@ class Ecwid2Woo_Product_Sync {
             }
         }
 
+        $count_in_response = count($products);
+        $new_offset = $page_offset + $count_in_response;
+        $has_more = ($new_offset < $total_from_api);
+
         if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log("Ecwid Product Sync: Separated products - Enabled: " . count($enabled_products) . ", Disabled: " . count($disabled_products)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            error_log("Ecwid Product Sync: Got $count_in_response products, total: $total_from_api, has_more: " . ($has_more ? 'yes' : 'no')); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
         }
 
+        // Clean output buffer before sending JSON response
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+        
         wp_send_json_success([
-            'products' => $all_products, // Keep full list for backward compatibility
+            'products' => $products,
             'enabled_products' => $enabled_products,
             'disabled_products' => $disabled_products,
-            'total_found' => count($all_products),
+            'total_found' => $count_in_response,
             'enabled_count' => count($enabled_products),
             'disabled_count' => count($disabled_products),
-            'api_calls_made' => $api_calls_made,
             'total_available' => $total_from_api,
-            'debug_info' => "New pagination logic v1.0.3 - Made $api_calls_made API calls, Loop condition: count>0 && offset<total - " . gmdate('Y-m-d H:i:s') . 
-                             " | First API response: count=$first_count, total=$first_total, offset=0, HTTP=$first_http_code | Products array: " . count($all_products),
-            'raw_first_response' => $api_calls_made === 1 ? substr($raw_response_body ?? '', 0, 500) : 'N/A'
+            'current_offset' => $page_offset,
+            'next_offset' => $new_offset,
+            'has_more' => $has_more,
+            'batch_size' => $page_limit
         ]);
     }
 
@@ -266,8 +241,12 @@ class Ecwid2Woo_Product_Sync {
      * AJAX handler to import selected products
      */
     public function ajax_import_selected_products() {
+        // Start output buffering to prevent PHP notices/warnings from corrupting JSON response
+        ob_start();
+        
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
+            ob_end_clean();
             wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
@@ -324,6 +303,11 @@ class Ecwid2Woo_Product_Sync {
 
         $result_array = $this->import_product($item_data);
 
+        // Clean output buffer before sending JSON response
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+        
         if (isset($result_array['status']) && $result_array['status'] === 'imported_parent_pending_variations') {
             wp_send_json_success([
                 'status'           => 'variations_pending', // New status for JS
@@ -361,8 +345,12 @@ class Ecwid2Woo_Product_Sync {
      * AJAX handler to sync all products
      */
     public function ajax_sync_all_products() {
+        // Start output buffering to prevent PHP notices/warnings from corrupting JSON response
+        ob_start();
+        
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
+            ob_end_clean();
             wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
@@ -463,6 +451,11 @@ class Ecwid2Woo_Product_Sync {
         $new_offset = $offset + count($items_from_api);
         $has_more = $new_offset < $total_items;
 
+        // Clean output buffer before sending JSON response
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+        
         wp_send_json_success([
             // translators: %1$d is items processed, %2$d is imported count, %3$d is updated count, %4$d is skipped count, %5$d is failed count, %6$d is total items
             'message' => sprintf(__('Processed %1$d products (Imported: %2$d, Updated: %3$d, Skipped: %4$d, Failed: %5$d). Total products: %6$d.', 'metrotechs-e2w-sync'), count($items_from_api), $imported_count, $updated_count, $skipped_count, $failed_count, $total_items),
@@ -1206,19 +1199,25 @@ class Ecwid2Woo_Product_Sync {
      * Fetch category data from Ecwid API
      */
     private function fetch_ecwid_category($ecwid_category_id) {
-        $store_id = $this->options['store_id'] ?? '';
-        $api_token = $this->options['api_token'] ?? '';
+        $api_essentials = $this->parent_plugin->_get_api_essentials();
+        if (is_wp_error($api_essentials)) {
+            return false;
+        }
+        
+        $store_id = $api_essentials['store_id'];
+        $api_token = $api_essentials['token'];
         
         if (empty($store_id) || empty($api_token)) {
             return false;
         }
         
-        $api_url = "https://app.ecwid.com/api/v3/{$store_id}/categories/{$ecwid_category_id}?token={$api_token}";
+        $api_url = "https://app.ecwid.com/api/v3/{$store_id}/categories/{$ecwid_category_id}";
         
         $response = wp_remote_get($api_url, [
             'timeout' => 30,
             'headers' => [
                 'Accept' => 'application/json',
+                'Authorization' => 'Bearer ' . $api_token,
             ]
         ]);
         
