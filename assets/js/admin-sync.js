@@ -3244,50 +3244,119 @@
                 success: function(response) {
                     if (response.success) {
                         const diag = response.data.diagnostics;
-                        let html = '<h4>Upload Directory Diagnostics</h4>';
                         
-                        // Basic directory info
-                        html += '<div class="diagnostic-section">';
-                        html += '<h5>Directory Information:</h5>';
-                        html += '<ul>';
-                        html += '<li><strong>Upload Directory:</strong> ' + diag.upload_dir_info.path + '</li>';
-                        html += '<li><strong>Base Directory:</strong> ' + diag.upload_dir_info.basedir + '</li>';
-                        html += '<li><strong>URL:</strong> ' + diag.upload_dir_info.url + '</li>';
-                        html += '</ul>';
+                        // Helper function for status indicator
+                        function getStatusIcon(isGood) {
+                            return isGood ? '✅' : '❌';
+                        }
+                        
+                        // Helper function for progress bar
+                        function getProgressBar(percent, status) {
+                            const color = status === 'good' ? '#00a32a' : (status === 'warning' ? '#dba617' : '#d63638');
+                            return '<div style="background:#e1e1e1;border-radius:4px;height:8px;margin:5px 0;overflow:hidden;">' +
+                                   '<div style="background:' + color + ';height:100%;width:' + Math.min(percent, 100) + '%;border-radius:4px;"></div></div>';
+                        }
+                        
+                        // Determine status levels
+                        const memoryStatus = diag.memory_percent < 70 ? 'good' : (diag.memory_percent < 90 ? 'warning' : 'critical');
+                        const diskStatus = diag.disk_percent < 80 ? 'good' : (diag.disk_percent < 95 ? 'warning' : 'critical');
+                        
+                        let html = '<h4>🔍 System Diagnostics</h4>';
+                        html += '<p style="color:#666;font-size:12px;">Generated: ' + diag.server_time + ' (' + diag.timezone + ')</p>';
+                        
+                        // Memory & Performance Section
+                        html += '<div class="diagnostic-section" style="background:#f8f9fa;padding:15px;border-radius:8px;margin:10px 0;">';
+                        html += '<h5 style="margin-top:0;">💾 Memory & Performance</h5>';
+                        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;">';
+                        
+                        // Memory Usage
+                        html += '<div style="background:#fff;padding:12px;border-radius:6px;border-left:4px solid ' + (memoryStatus === 'good' ? '#00a32a' : memoryStatus === 'warning' ? '#dba617' : '#d63638') + ';">';
+                        html += '<strong>Memory Usage</strong>';
+                        html += getProgressBar(diag.memory_percent, memoryStatus);
+                        html += '<span style="font-size:13px;">' + diag.memory_usage_formatted + ' / ' + diag.php_memory_limit + ' (' + diag.memory_percent + '%)</span><br>';
+                        html += '<span style="font-size:11px;color:#888;">Peak: ' + diag.memory_peak_formatted + '</span>';
                         html += '</div>';
-
-                        // Permission checks
-                        html += '<div class="diagnostic-section">';
-                        html += '<h5>Permission Checks:</h5>';
-                        html += '<ul>';
-                        html += '<li><strong>Base directory exists:</strong> ' + (diag.basedir_exists ? '✅ Yes' : '❌ No') + '</li>';
-                        html += '<li><strong>Base directory writable:</strong> ' + (diag.basedir_writable ? '✅ Yes' : '❌ No') + '</li>';
-                        html += '<li><strong>Upload path exists:</strong> ' + (diag.path_exists ? '✅ Yes' : '❌ No') + '</li>';
-                        html += '<li><strong>Upload path writable:</strong> ' + (diag.path_writable ? '✅ Yes' : '❌ No') + '</li>';
-                        html += '<li><strong>Test file write:</strong> ' + (diag.test_write_success ? '✅ Success' : '❌ Failed') + '</li>';
-                        html += '</ul>';
+                        
+                        // Disk Space
+                        html += '<div style="background:#fff;padding:12px;border-radius:6px;border-left:4px solid ' + (diskStatus === 'good' ? '#00a32a' : diskStatus === 'warning' ? '#dba617' : '#d63638') + ';">';
+                        html += '<strong>Disk Space</strong>';
+                        html += getProgressBar(diag.disk_percent, diskStatus);
+                        if (diag.disk_free_space) {
+                            html += '<span style="font-size:13px;">' + Math.round(diag.disk_free_space / 1024 / 1024 / 1024 * 10) / 10 + ' GB free</span><br>';
+                            html += '<span style="font-size:11px;color:#888;">Used: ' + diag.disk_percent + '%</span>';
+                        } else {
+                            html += '<span style="font-size:13px;color:#888;">Unable to determine</span>';
+                        }
                         html += '</div>';
-
-                        // Server info
-                        html += '<div class="diagnostic-section">';
-                        html += '<h5>Server Information:</h5>';
-                        html += '<ul>';
-                        html += '<li><strong>Free disk space:</strong> ' + (diag.disk_free_space ? Math.round(diag.disk_free_space / 1024 / 1024) + ' MB' : 'Unknown') + '</li>';
-                        html += '<li><strong>PHP upload limit:</strong> ' + diag.php_upload_max_filesize + '</li>';
-                        html += '<li><strong>PHP post limit:</strong> ' + diag.php_post_max_size + '</li>';
-                        html += '<li><strong>WP max upload:</strong> ' + Math.round(diag.wp_max_upload_size / 1024 / 1024) + ' MB</li>';
-                        html += '<li><strong>PHP memory limit:</strong> ' + diag.php_memory_limit + '</li>';
-                        html += '</ul>';
+                        
+                        html += '</div>'; // End grid
+                        
+                        // Execution Limits
+                        html += '<div style="margin-top:10px;display:flex;gap:20px;flex-wrap:wrap;">';
+                        html += '<span>⏱️ Max Execution: <strong>' + (diag.max_execution_time == 0 ? 'Unlimited' : diag.max_execution_time + 's') + '</strong></span>';
+                        html += '<span>📤 Upload Limit: <strong>' + diag.php_upload_max_filesize + '</strong></span>';
+                        html += '<span>📥 POST Limit: <strong>' + diag.php_post_max_size + '</strong></span>';
                         html += '</div>';
-
-                        // User info
-                        html += '<div class="diagnostic-section">';
-                        html += '<h5>User Information:</h5>';
-                        html += '<ul>';
-                        html += '<li><strong>WordPress user:</strong> ' + diag.current_user + '</li>';
-                        html += '<li><strong>PHP/System user:</strong> ' + diag.php_user + '</li>';
-                        html += '<li><strong>Server software:</strong> ' + diag.server_software + '</li>';
-                        html += '</ul>';
+                        html += '</div>';
+                        
+                        // Environment Section
+                        html += '<div class="diagnostic-section" style="background:#f0f6fc;padding:15px;border-radius:8px;margin:10px 0;">';
+                        html += '<h5 style="margin-top:0;">🖥️ Environment</h5>';
+                        html += '<div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">';
+                        html += '<div><span style="color:#666;">PHP Version:</span><br><strong>' + diag.php_version + '</strong></div>';
+                        html += '<div><span style="color:#666;">WordPress:</span><br><strong>' + diag.wp_version + '</strong></div>';
+                        html += '<div><span style="color:#666;">WooCommerce:</span><br><strong>' + diag.wc_version + '</strong></div>';
+                        html += '<div><span style="color:#666;">Plugin Version:</span><br><strong>' + diag.plugin_version + '</strong></div>';
+                        html += '<div><span style="color:#666;">PHP SAPI:</span><br><strong>' + diag.php_sapi + '</strong></div>';
+                        html += '<div><span style="color:#666;">Debug Mode:</span><br><strong>' + (diag.wp_debug ? '🟢 Enabled' : '⚪ Disabled') + '</strong></div>';
+                        html += '</div>';
+                        html += '</div>';
+                        
+                        // WooCommerce Stats Section
+                        html += '<div class="diagnostic-section" style="background:#f0fff4;padding:15px;border-radius:8px;margin:10px 0;">';
+                        html += '<h5 style="margin-top:0;">🛒 WooCommerce Stats</h5>';
+                        html += '<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:10px;text-align:center;">';
+                        html += '<div style="background:#fff;padding:10px;border-radius:6px;"><div style="font-size:24px;font-weight:bold;color:#0073aa;">' + diag.wc_product_count + '</div><div style="font-size:11px;color:#666;">Products</div></div>';
+                        html += '<div style="background:#fff;padding:10px;border-radius:6px;"><div style="font-size:24px;font-weight:bold;color:#0073aa;">' + diag.wc_category_count + '</div><div style="font-size:11px;color:#666;">Categories</div></div>';
+                        html += '<div style="background:#fff;padding:10px;border-radius:6px;"><div style="font-size:24px;font-weight:bold;color:#0073aa;">' + diag.wc_order_count + '</div><div style="font-size:11px;color:#666;">Orders</div></div>';
+                        html += '<div style="background:#fff;padding:10px;border-radius:6px;"><div style="font-size:24px;font-weight:bold;color:#0073aa;">' + diag.wc_currency + '</div><div style="font-size:11px;color:#666;">Currency</div></div>';
+                        html += '</div>';
+                        html += '</div>';
+                        
+                        // Database Section
+                        html += '<div class="diagnostic-section" style="background:#fff5eb;padding:15px;border-radius:8px;margin:10px 0;">';
+                        html += '<h5 style="margin-top:0;">🗄️ Database</h5>';
+                        html += '<div style="display:flex;gap:30px;">';
+                        html += '<span>Database Size: <strong>' + diag.db_size_formatted + '</strong></span>';
+                        html += '<span>Table Prefix: <strong>' + diag.db_prefix + '</strong></span>';
+                        html += '<span>Multisite: <strong>' + (diag.multisite ? 'Yes' : 'No') + '</strong></span>';
+                        html += '</div>';
+                        html += '</div>';
+                        
+                        // Upload Directory Section
+                        html += '<div class="diagnostic-section" style="background:#f5f5f5;padding:15px;border-radius:8px;margin:10px 0;">';
+                        html += '<h5 style="margin-top:0;">📁 Upload Directory</h5>';
+                        html += '<div style="font-size:12px;word-break:break-all;">';
+                        html += '<p><strong>Path:</strong> ' + diag.upload_dir_info.path + '</p>';
+                        html += '<p><strong>URL:</strong> ' + diag.upload_dir_info.url + '</p>';
+                        html += '</div>';
+                        html += '<div style="margin-top:10px;display:flex;gap:15px;flex-wrap:wrap;">';
+                        html += '<span>' + getStatusIcon(diag.basedir_exists) + ' Base Dir Exists</span>';
+                        html += '<span>' + getStatusIcon(diag.basedir_writable) + ' Base Dir Writable</span>';
+                        html += '<span>' + getStatusIcon(diag.path_exists) + ' Path Exists</span>';
+                        html += '<span>' + getStatusIcon(diag.path_writable) + ' Path Writable</span>';
+                        html += '<span>' + getStatusIcon(diag.test_write_success) + ' Write Test</span>';
+                        html += '</div>';
+                        html += '</div>';
+                        
+                        // Server Info Section
+                        html += '<div class="diagnostic-section" style="background:#f8f8f8;padding:15px;border-radius:8px;margin:10px 0;">';
+                        html += '<h5 style="margin-top:0;">🌐 Server Info</h5>';
+                        html += '<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px;">';
+                        html += '<span>User: <strong>' + diag.current_user + '</strong></span>';
+                        html += '<span>PHP User: <strong>' + diag.php_user + '</strong></span>';
+                        html += '<span>Server: <strong>' + diag.server_software + '</strong></span>';
+                        html += '</div>';
                         html += '</div>';
 
                         // Issues detection
@@ -3298,18 +3367,20 @@
                         if (!diag.path_writable) issues.push('Upload path is not writable');
                         if (!diag.test_write_success) issues.push('Cannot write test files');
                         if (diag.disk_free_space && diag.disk_free_space < 100 * 1024 * 1024) issues.push('Low disk space (less than 100MB)');
+                        if (diag.memory_percent > 90) issues.push('High memory usage (' + diag.memory_percent + '%)');
+                        if (diag.max_execution_time > 0 && diag.max_execution_time < 60) issues.push('Low max execution time (' + diag.max_execution_time + 's) - may cause timeout during sync');
 
                         if (issues.length > 0) {
-                            html += '<div class="diagnostic-issues">';
-                            html += '<h5 style="color: red;">⚠️ Issues Detected:</h5>';
-                            html += '<ul style="color: red;">';
+                            html += '<div class="diagnostic-issues" style="background:#fff5f5;padding:15px;border-radius:8px;margin:10px 0;border-left:4px solid #d63638;">';
+                            html += '<h5 style="color:#d63638;margin-top:0;">⚠️ Issues Detected</h5>';
+                            html += '<ul style="color:#d63638;margin:0;padding-left:20px;">';
                             issues.forEach(issue => {
                                 html += '<li>' + issue + '</li>';
                             });
                             html += '</ul>';
                             html += '</div>';
                         } else {
-                            html += '<div style="color: green;"><h5>✅ No obvious issues detected</h5></div>';
+                            html += '<div style="background:#f0fff4;padding:15px;border-radius:8px;margin:10px 0;border-left:4px solid #00a32a;color:#00a32a;"><strong>✅ All checks passed - No issues detected</strong></div>';
                         }
 
                         resultDiv.addClass('success').html(html).show();

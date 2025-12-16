@@ -1,5 +1,17 @@
 ** Metrotechs E2W Sync Changelog **
 
+2025-12-16 - version 1.4.4
+* ENHANCED - SYSTEM DIAGNOSTICS: Expanded diagnostics panel with comprehensive server information
+* NEW - Memory Usage: Shows current PHP memory usage with visual progress bar and peak usage
+* NEW - Disk Space: Displays available/used disk space with percentage and visual indicator
+* NEW - Execution Limits: Shows max execution time and max input time settings
+* NEW - Environment Info: Displays PHP version, WordPress version, WooCommerce version, plugin version
+* NEW - WooCommerce Stats: Shows product count, category count, order count, and currency
+* NEW - Database Info: Displays database size, table prefix, and multisite status
+* NEW - Issue Detection: Automatically detects high memory usage and low execution time limits
+* UX - Visual Progress Bars: Color-coded bars (green/yellow/red) for memory and disk usage
+* UX - Modern Card Layout: Professional grid-based display with color-coded sections
+
 2025-12-15 - version 1.4.3
 * ENHANCED RELIABILITY - EXPONENTIAL BACKOFF RETRY: Smart retry delays (3s→6s→12s) for better server recovery during 500 errors
 * IMPROVED - Category Batch Loading: Categories now load in batches with full retry logic, matching product sync reliability

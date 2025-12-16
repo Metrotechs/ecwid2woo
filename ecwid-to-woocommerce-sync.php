@@ -4,7 +4,7 @@ Plugin Name: Metrotechs E2W Sync
 Description: Professional Ecwid to WooCommerce synchronization plugin by Metrotechs.
 Plugin URI: https://metrotechs.io/plugins/ecwid2woo/
 Author URI: https://metrotechs.io
-Version: 1.4.3
+Version: 1.4.4
 Author: Metrotechs
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -549,7 +549,7 @@ class Ecwid_WC_Sync {
                     <div class="settings-actions">
                         <button type="submit" class="button button-primary button-large"><?php esc_html_e('Save Settings', 'metrotechs-e2w-sync'); ?></button>
                         <button type="button" id="test-api-connection" class="button button-secondary button-large"><?php esc_html_e('Test Connection', 'metrotechs-e2w-sync'); ?></button>
-                        <button type="button" id="upload-diagnostics-button" class="button button-secondary button-large" style="margin-left: 10px;"><?php esc_html_e('Upload Diagnostics', 'metrotechs-e2w-sync'); ?></button>
+                        <button type="button" id="upload-diagnostics-button" class="button button-secondary button-large" style="margin-left: 10px;"><?php esc_html_e('System Diagnostics', 'metrotechs-e2w-sync'); ?></button>
                     </div>
                 </form>
                 
@@ -2433,17 +2433,96 @@ class Ecwid_WC_Sync {
         WP_Filesystem();
         
         $upload_dir = wp_upload_dir();
+        
+        // Memory info
+        $memory_limit = ini_get('memory_limit');
+        $memory_limit_bytes = wp_convert_hr_to_bytes($memory_limit);
+        $memory_usage = memory_get_usage(true);
+        $memory_peak = memory_get_peak_usage(true);
+        $memory_percent = $memory_limit_bytes > 0 ? round(($memory_usage / $memory_limit_bytes) * 100, 1) : 0;
+        
+        // Disk space info
+        $disk_free = function_exists('disk_free_space') ? @disk_free_space($upload_dir['basedir']) : false;
+        $disk_total = function_exists('disk_total_space') ? @disk_total_space($upload_dir['basedir']) : false;
+        $disk_used = ($disk_total && $disk_free) ? $disk_total - $disk_free : false;
+        $disk_percent = ($disk_total && $disk_total > 0) ? round(($disk_used / $disk_total) * 100, 1) : 0;
+        
+        // Execution limits
+        $max_execution_time = ini_get('max_execution_time');
+        $max_input_time = ini_get('max_input_time');
+        
+        // WooCommerce stats
+        $product_count = 0;
+        $category_count = 0;
+        $order_count = 0;
+        if (function_exists('wc_get_product')) {
+            $product_count = wp_count_posts('product')->publish;
+            $category_count = wp_count_terms('product_cat');
+            if (is_wp_error($category_count)) {
+                $category_count = 0;
+            }
+            $order_count = wp_count_posts('shop_order')->{'wc-completed'} + wp_count_posts('shop_order')->{'wc-processing'};
+        }
+        
+        // Database info
+        global $wpdb;
+        $db_size = 0;
+        $table_results = $wpdb->get_results("SHOW TABLE STATUS", ARRAY_A);
+        if ($table_results) {
+            foreach ($table_results as $table) {
+                $db_size += isset($table['Data_length']) ? $table['Data_length'] : 0;
+                $db_size += isset($table['Index_length']) ? $table['Index_length'] : 0;
+            }
+        }
+        
         $debug_info = [
             'upload_dir_info' => $upload_dir,
             'basedir_exists' => $wp_filesystem->is_dir($upload_dir['basedir']),
             'basedir_writable' => $wp_filesystem->is_writable($upload_dir['basedir']),
             'path_exists' => $wp_filesystem->is_dir($upload_dir['path']),
             'path_writable' => $wp_filesystem->is_writable($upload_dir['path']),
-            'disk_free_space' => function_exists('disk_free_space') ? disk_free_space($upload_dir['basedir']) : 'unknown',
+            // Disk info
+            'disk_free_space' => $disk_free,
+            'disk_total_space' => $disk_total,
+            'disk_used_space' => $disk_used,
+            'disk_percent' => $disk_percent,
+            // PHP limits
             'php_upload_max_filesize' => ini_get('upload_max_filesize'),
             'php_post_max_size' => ini_get('post_max_size'),
-            'php_memory_limit' => ini_get('memory_limit'),
+            'php_memory_limit' => $memory_limit,
             'wp_max_upload_size' => wp_max_upload_size(),
+            // Memory usage
+            'memory_usage' => $memory_usage,
+            'memory_usage_formatted' => size_format($memory_usage),
+            'memory_peak' => $memory_peak,
+            'memory_peak_formatted' => size_format($memory_peak),
+            'memory_percent' => $memory_percent,
+            // Execution limits
+            'max_execution_time' => $max_execution_time,
+            'max_input_time' => $max_input_time,
+            // PHP info
+            'php_version' => phpversion(),
+            'php_sapi' => php_sapi_name(),
+            // WordPress info
+            'wp_version' => get_bloginfo('version'),
+            'wp_debug' => defined('WP_DEBUG') && WP_DEBUG,
+            'wp_debug_log' => defined('WP_DEBUG_LOG') && WP_DEBUG_LOG,
+            'multisite' => is_multisite(),
+            // WooCommerce info
+            'wc_version' => defined('WC_VERSION') ? WC_VERSION : 'N/A',
+            'wc_product_count' => $product_count,
+            'wc_category_count' => $category_count,
+            'wc_order_count' => $order_count,
+            'wc_currency' => function_exists('get_woocommerce_currency') ? get_woocommerce_currency() : 'N/A',
+            // Database info
+            'db_size' => $db_size,
+            'db_size_formatted' => size_format($db_size),
+            'db_prefix' => $wpdb->prefix,
+            // Plugin info
+            'plugin_version' => defined('METROTECHS_E2W_VERSION') ? METROTECHS_E2W_VERSION : '1.4.3',
+            // Timestamps
+            'server_time' => current_time('Y-m-d H:i:s'),
+            'timezone' => wp_timezone_string(),
         ];
 
         if (defined('WP_DEBUG') && WP_DEBUG) {
