@@ -171,6 +171,7 @@
         const fullSyncOrderPreviewList = $('#full-sync-order-preview-list');
         const fullSyncProgressContainer = $('#full-sync-progress-container');
         const stopFullSyncButton = $('#stop-full-sync-button'); // ADDED
+        const pauseFullSyncButton = $('#pause-full-sync-button'); // ADDED: Pause button
         const fullSyncInitialInfoDiv = $('#full-sync-initial-info'); // ADDED
 
         // Category Sync Page UI Elements
@@ -238,6 +239,8 @@
         let fullSyncVariationQueue = [];
         let currentFullSyncVariationProductData = null;
         let isSyncCancelledByUser = false; // ADDED: Flag to control sync cancellation
+        let isSyncPaused = false; // ADDED: Flag to control sync pause state
+        let pausedSyncState = null; // ADDED: Store state when paused for resume
         let isProductSyncCancelled = false; // Flag to control product sync cancellation
         let isCategorySyncCancelled = false; // Flag to control category sync cancellation
         let categorySyncRequest = null; // Store AJAX request for cancellation
@@ -697,6 +700,9 @@
                 logMessage(fullSyncLogDiv, i18n.sync_starting || 'Sync starting...', 'info');
                 fullSyncButton.prop('disabled', true).text(i18n.syncing_button || 'Syncing...');
                 stopFullSyncButton.show(); // Show STOP button
+                pauseFullSyncButton.show().removeClass('is-paused').text(i18n.pause_sync || 'PAUSE'); // Show PAUSE button
+                isSyncPaused = false; // Reset pause state
+                pausedSyncState = null; // Clear any saved pause state
                 loadFullSyncPreviewButton.prop('disabled', true); // Disable reload preview during sync
 
                 currentFullSyncStepIndex = 0;
@@ -712,13 +718,84 @@
             });
         }
 
+        if (pauseFullSyncButton.length) { // ADDED: Pause button handler
+            pauseFullSyncButton.on('click', function() {
+                if (!isSyncPaused) {
+                    // PAUSE the sync
+                    isSyncPaused = true;
+                    
+                    // Save current state for resume
+                    pausedSyncState = {
+                        stepIndex: currentFullSyncStepIndex,
+                        stepType: currentFullSyncStepType,
+                        offset: currentFullSyncStepOffset,
+                        overallProgress: fullSyncOverallProgress,
+                        variationQueue: [...fullSyncVariationQueue],
+                        variationProductData: currentFullSyncVariationProductData ? {...currentFullSyncVariationProductData} : null,
+                        parentContinuation: {...fullSyncParentContinuation}
+                    };
+                    
+                    logMessage(fullSyncLogDiv, '⏸️ SYNC PAUSED - Click RESUME to continue from where you left off.', 'warning');
+                    updateStatus(fullSyncStatusDiv, 'Sync paused. Click RESUME to continue.');
+                    
+                    // Update button to show Resume
+                    pauseFullSyncButton.addClass('is-paused').text(i18n.resume_sync || 'RESUME');
+                    stopBatchStatusAnimation();
+                    
+                } else {
+                    // RESUME the sync
+                    isSyncPaused = false;
+                    
+                    logMessage(fullSyncLogDiv, '▶️ SYNC RESUMED - Continuing from saved position.', 'success');
+                    updateStatus(fullSyncStatusDiv, 'Resuming sync...');
+                    
+                    // Update button back to Pause
+                    pauseFullSyncButton.removeClass('is-paused').text(i18n.pause_sync || 'PAUSE');
+                    
+                    // Resume from saved state
+                    if (pausedSyncState) {
+                        // Restore state
+                        currentFullSyncStepIndex = pausedSyncState.stepIndex;
+                        currentFullSyncStepType = pausedSyncState.stepType;
+                        currentFullSyncStepOffset = pausedSyncState.offset;
+                        fullSyncOverallProgress = pausedSyncState.overallProgress;
+                        fullSyncVariationQueue = pausedSyncState.variationQueue;
+                        currentFullSyncVariationProductData = pausedSyncState.variationProductData;
+                        fullSyncParentContinuation = pausedSyncState.parentContinuation;
+                        
+                        // Continue processing
+                        if (currentFullSyncVariationProductData) {
+                            // Was in the middle of variation processing
+                            logMessage(fullSyncLogDiv, `[INFO] Resuming variation processing for ${currentFullSyncVariationProductData.item_name}`, 'info');
+                            processFullSyncVariationBatchLoop();
+                        } else if (fullSyncParentContinuation.hasMore) {
+                            // Was in the middle of a batch
+                            logMessage(fullSyncLogDiv, `[INFO] Resuming ${fullSyncParentContinuation.syncType} sync at offset ${fullSyncParentContinuation.nextOffset}`, 'info');
+                            processFullSyncBatch(
+                                fullSyncParentContinuation.syncType, 
+                                fullSyncParentContinuation.nextOffset, 
+                                fullSyncParentContinuation.totalItems
+                            );
+                        } else {
+                            // Move to next step
+                            currentFullSyncStepIndex++;
+                            processNextFullSyncStep();
+                        }
+                    }
+                }
+            });
+        }
+
         if (stopFullSyncButton.length) { // ADDED: Stop button handler
             stopFullSyncButton.on('click', function() {
                 isSyncCancelledByUser = true;
+                isSyncPaused = false; // Reset pause state
+                pausedSyncState = null; // Clear saved state
                 logMessage(fullSyncLogDiv, i18n.sync_stopped_by_user_log || 'SYNC HAS BEEN STOPPED BY THE USER.', 'warning');
                 updateStatus(fullSyncStatusDiv, i18n.sync_stopped_by_user_status || 'Sync stopped by user.');
                 
                 stopFullSyncButton.hide();
+                pauseFullSyncButton.hide().removeClass('is-paused').text(i18n.pause_sync || 'PAUSE'); // Hide and reset pause button
                 fullSyncButton.text(i18n.start_sync || 'Start Full Sync').prop('disabled', false);
                 loadFullSyncPreviewButton.prop('disabled', false); // Re-enable reload preview
 
@@ -740,6 +817,10 @@
         function processNextFullSyncStep() {
             if (isSyncCancelledByUser) { // ADDED: Check cancellation
                 logMessage(fullSyncLogDiv, i18n.sync_cancelled_log_message || 'Sync cancelled, not proceeding to next step.', 'info');
+                return;
+            }
+            if (isSyncPaused) { // ADDED: Check if paused
+                logMessage(fullSyncLogDiv, '⏸️ Sync paused at step boundary. Click RESUME to continue.', 'info');
                 return;
             }
 
@@ -768,8 +849,11 @@
                 logMessage(fullSyncLogDiv, '✅ Full synchronization completed successfully! All categories and products have been processed.', 'success');
                 fullSyncButton.text(i18n.start_sync || 'Start Full Sync').prop('disabled', false);
                 stopFullSyncButton.hide(); // Hide STOP button on completion
+                pauseFullSyncButton.hide().removeClass('is-paused').text(i18n.pause_sync || 'PAUSE'); // Hide pause button on completion
                 loadFullSyncPreviewButton.prop('disabled', false); // Re-enable reload preview
                 updateOverallFullSyncProgress(100); // Ensure it hits 100%
+                isSyncPaused = false; // Reset pause state
+                pausedSyncState = null; // Clear saved state
                 return;
             }
         }
@@ -777,6 +861,20 @@
         function processFullSyncBatch(syncType, offset, totalKnownItems) {
             if (isSyncCancelledByUser) { // ADDED: Check cancellation
                 logMessage(fullSyncLogDiv, i18n.sync_cancelled_log_message || 'Sync cancelled, aborting batch processing.', 'info');
+                return;
+            }
+            if (isSyncPaused) { // ADDED: Check if paused
+                // Save state for resume
+                pausedSyncState = {
+                    stepIndex: currentFullSyncStepIndex,
+                    stepType: syncType,
+                    offset: offset,
+                    overallProgress: fullSyncOverallProgress,
+                    variationQueue: [...fullSyncVariationQueue],
+                    variationProductData: currentFullSyncVariationProductData ? {...currentFullSyncVariationProductData} : null,
+                    parentContinuation: { hasMore: true, nextOffset: offset, syncType: syncType, totalItems: totalKnownItems }
+                };
+                logMessage(fullSyncLogDiv, `⏸️ Sync paused at ${syncType} offset ${offset}. Click RESUME to continue.`, 'info');
                 return;
             }
             currentFullSyncStepType = syncType; 
@@ -988,6 +1086,20 @@
                 logMessage(fullSyncLogDiv, i18n.sync_cancelled_log_message || 'Sync cancelled, not continuing.', 'info');
                 return;
             }
+            if (isSyncPaused) { // ADDED: Check if paused
+                // Save state for resume
+                pausedSyncState = {
+                    stepIndex: currentFullSyncStepIndex,
+                    stepType: fullSyncParentContinuation.syncType,
+                    offset: fullSyncParentContinuation.nextOffset,
+                    overallProgress: fullSyncOverallProgress,
+                    variationQueue: [...fullSyncVariationQueue],
+                    variationProductData: currentFullSyncVariationProductData ? {...currentFullSyncVariationProductData} : null,
+                    parentContinuation: {...fullSyncParentContinuation}
+                };
+                logMessage(fullSyncLogDiv, '⏸️ Sync paused. Click RESUME to continue.', 'info');
+                return;
+            }
 
             // If there are items in the variation queue, process them first
             if (fullSyncVariationQueue.length > 0) {
@@ -1024,6 +1136,20 @@
                 logMessage(fullSyncLogDiv, i18n.sync_cancelled_log_message || 'Sync cancelled, stopping variation loop.', 'info');
                 currentFullSyncVariationProductData = null; // Clear current product data
                 fullSyncVariationQueue = []; // Clear the queue
+                return;
+            }
+            if (isSyncPaused) { // ADDED: Check if paused
+                // Save state for resume
+                pausedSyncState = {
+                    stepIndex: currentFullSyncStepIndex,
+                    stepType: fullSyncParentContinuation.syncType,
+                    offset: fullSyncParentContinuation.nextOffset,
+                    overallProgress: fullSyncOverallProgress,
+                    variationQueue: [...fullSyncVariationQueue],
+                    variationProductData: currentFullSyncVariationProductData ? {...currentFullSyncVariationProductData} : null,
+                    parentContinuation: {...fullSyncParentContinuation}
+                };
+                logMessage(fullSyncLogDiv, `⏸️ Sync paused during variation processing for ${currentFullSyncVariationProductData ? currentFullSyncVariationProductData.item_name : 'unknown'}. Click RESUME to continue.`, 'info');
                 return;
             }
 
@@ -1136,7 +1262,7 @@
 
         // --- Category Sync Page Logic ---
 
-        // New function to load and display categories
+        // New function to load and display categories with batch fetching
         function loadAndDisplayCategories() {
             // Ensure the button and container exist before proceeding
             if (!loadCategoriesButton.length || !categoryListContainer.length) {
@@ -1163,11 +1289,11 @@
                     <div class="ecwid-loading-title" style="font-size: 18px; font-weight: bold; color: #23282d; margin-bottom: 10px;">
                         📁 Loading Categories from Ecwid
                     </div>
-                    <div class="ecwid-loading-status" style="font-size: 14px; color: #666; margin-bottom: 15px;">
+                    <div class="ecwid-loading-status" id="category-loading-status" style="font-size: 14px; color: #666; margin-bottom: 15px;">
                         Making API calls to fetch all categories...
                     </div>
-                    <div class="ecwid-loading-progress" style="font-size: 12px; color: #999;">
-                        This may take a moment for large stores (700+ categories require ~8 API calls)
+                    <div class="ecwid-loading-progress" id="category-loading-progress" style="font-size: 12px; color: #999;">
+                        This may take a moment for large stores
                     </div>
                 </div>
                 <style>
@@ -1199,90 +1325,133 @@
             currentCategoryPage = 1;
             selectedCategoryIds.clear(); // Reset category selection across all pages
 
-            $.ajax({
-                url: ajax_url,
-                method: 'POST',
-                data: {
-                    action: 'ecwid_wc_fetch_categories_for_display',
-                    nonce: nonce
-                },
-                success: function(response) {
-                    if (response.success && response.data.categories) {
-                        ecwidCategoriesForSelection = response.data.categories;
-                        const totalFound = parseInt(response.data.total_found) || 0;
-                        const apiCalls = parseInt(response.data.api_calls_made) || 1;
-                        const totalAvailable = parseInt(response.data.total_available) || totalFound;
-                        totalCategoriesForCategoryPageSync = totalFound;
+            // Batch loading variables
+            let allCategories = [];
+            let currentOffset = 0;
+            const batchSize = 100;
+            let apiCallCount = 0;
+            let totalAvailable = 0;
 
-                        // Enhanced status message with debugging info
-                        let statusMessage = `All ${totalFound} categories loaded`;
-                        if (apiCalls > 1) {
-                            statusMessage += ` (${apiCalls} API calls)`;
-                        }
-                        if (totalAvailable && totalAvailable !== totalFound) {
-                            statusMessage += ` out of ${totalAvailable} available`;
-                        }
-                        statusMessage += '. Select individual categories or multiple categories to import.';
-
-                        if (categorySyncInitialInfoDiv.length) {
-                            // Create styled info box matching the Product Sync page
-                            const styledStatusHtml = `
-                                <div style="background: #f9f9f9; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px;">
-                                    <p style="margin: 0 0 5px 0; font-weight: bold;">📁 Category Loading Complete:</p>
-                                    <p style="margin: 0; font-size: 12px; color: #666; font-style: normal;">${statusMessage}</p>
-                                </div>
-                            `;
-                            categorySyncInitialInfoDiv.html(styledStatusHtml);
-                        }
-
-                        // Category loading complete
-                        if (window.ecwidDebugMode) {
-                            console.log('Category loading debug:', {
-                                categoriesReceived: totalFound,
-                                apiCallsMade: apiCalls,
-                                totalAvailable: totalAvailable,
-                                actualArrayLength: ecwidCategoriesForSelection.length
-                            });
-                        }
-
-                        renderCategorySelectionList(ecwidCategoriesForSelection);
-                        if (ecwidCategoriesForSelection.length > 0) {
-                            importSelectedCategoriesButton.show();
-                        } else {
-                            categoryListContainer.html('<p>' + i18n.no_categories_found + '</p>');
-                            if (categorySyncInitialInfoDiv.length && totalFound === 0) {
-                                categorySyncInitialInfoDiv.text(i18n.no_categories_found);
-                            }
-                        }
-                    } else {
-                        const errorMsg = response.data && response.data.message ? response.data.message : i18n.no_categories_found;
-                        categoryListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
-                        if (categorySyncInitialInfoDiv.length) {
-                            categorySyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
-                        }
-                        // Clear pagination on error
-                        const categoryPaginationContainer = $('#category-pagination-container');
-                        if (categoryPaginationContainer.length) {
-                            categoryPaginationContainer.html('');
-                        }
-                    }
-                },
-                error: function(jqXHR, textStatus, errorThrown) {
-                    const errorText = 'AJAX Error: ' + sanitizeHTML(textStatus) + (errorThrown ? ' - ' + sanitizeHTML(errorThrown) : '');
-                    categoryListContainer.html('<p style="color:red;">' + errorText + '</p>');
-                    if (categorySyncInitialInfoDiv.length) {
-                         categorySyncInitialInfoDiv.html('<span style="color:red;">' + errorText + '</span>');
-                    }
-                    // Clear pagination on error
-                    const categoryPaginationContainer = $('#category-pagination-container');
-                    if (categoryPaginationContainer.length) {
-                        categoryPaginationContainer.html('');
-                    }
-                },
-                complete: function() {
-                    loadCategoriesButton.removeClass('disabled').html(originalButtonText);
+            // Recursive function to fetch all batches
+            function fetchCategoryBatch() {
+                apiCallCount++;
+                
+                // Update loading status
+                const loadingStatusEl = $('#category-loading-status');
+                const loadingProgressEl = $('#category-loading-progress');
+                if (loadingStatusEl.length) {
+                    loadingStatusEl.text(`Fetching batch ${apiCallCount}... (${allCategories.length} categories loaded so far)`);
                 }
-            });
+                if (loadingProgressEl.length && totalAvailable > 0) {
+                    const percent = Math.round((allCategories.length / totalAvailable) * 100);
+                    loadingProgressEl.text(`Progress: ${allCategories.length} / ${totalAvailable} categories (${percent}%)`);
+                }
+
+                $.ajax({
+                    url: ajax_url,
+                    method: 'POST',
+                    data: {
+                        action: 'ecwid_wc_fetch_categories_for_display',
+                        nonce: nonce,
+                        page_offset: currentOffset,
+                        page_limit: batchSize
+                    },
+                    success: function(response) {
+                        if (response.success && response.data.categories) {
+                            const batchCategories = response.data.categories;
+                            allCategories = allCategories.concat(batchCategories);
+                            totalAvailable = parseInt(response.data.total_available) || totalAvailable;
+                            
+                            if (window.ecwidDebugMode) {
+                                console.log(`Category batch ${apiCallCount}:`, {
+                                    batchSize: batchCategories.length,
+                                    totalLoaded: allCategories.length,
+                                    totalAvailable: totalAvailable,
+                                    hasMore: response.data.has_more
+                                });
+                            }
+
+                            // Check if there are more categories to fetch
+                            if (response.data.has_more) {
+                                currentOffset = response.data.next_offset;
+                                // Add a small delay to avoid overwhelming the server
+                                setTimeout(fetchCategoryBatch, 500);
+                            } else {
+                                // All categories loaded - finalize
+                                finalizeCategoryLoading(allCategories, apiCallCount, totalAvailable);
+                            }
+                        } else {
+                            // Error in response
+                            const errorMsg = response.data && response.data.message ? response.data.message : i18n.no_categories_found;
+                            handleCategoryLoadError(errorMsg);
+                        }
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        const errorText = 'AJAX Error: ' + sanitizeHTML(textStatus) + (errorThrown ? ' - ' + sanitizeHTML(errorThrown) : '');
+                        handleCategoryLoadError(errorText);
+                    }
+                });
+            }
+
+            function finalizeCategoryLoading(categories, apiCalls, total) {
+                ecwidCategoriesForSelection = categories;
+                totalCategoriesForCategoryPageSync = categories.length;
+
+                // Enhanced status message with debugging info
+                let statusMessage = `All ${categories.length} categories loaded`;
+                if (apiCalls > 1) {
+                    statusMessage += ` (${apiCalls} API calls)`;
+                }
+                statusMessage += '. Select individual categories or multiple categories to import.';
+
+                if (categorySyncInitialInfoDiv.length) {
+                    // Create styled info box matching the Product Sync page
+                    const styledStatusHtml = `
+                        <div style="background: #d4edda; padding: 10px; margin-bottom: 10px; border: 1px solid #c3e6cb; border-radius: 4px;">
+                            <p style="margin: 0 0 5px 0; font-weight: bold; color: #155724;">✅ Category Loading Complete:</p>
+                            <p style="margin: 0; font-size: 12px; color: #155724; font-style: normal;">${statusMessage}</p>
+                        </div>
+                    `;
+                    categorySyncInitialInfoDiv.html(styledStatusHtml);
+                }
+
+                // Category loading complete
+                if (window.ecwidDebugMode) {
+                    console.log('Category loading complete:', {
+                        totalCategories: categories.length,
+                        apiCallsMade: apiCalls,
+                        totalAvailable: total
+                    });
+                }
+
+                renderCategorySelectionList(ecwidCategoriesForSelection);
+                if (ecwidCategoriesForSelection.length > 0) {
+                    importSelectedCategoriesButton.show();
+                } else {
+                    categoryListContainer.html('<p>' + i18n.no_categories_found + '</p>');
+                    if (categorySyncInitialInfoDiv.length) {
+                        categorySyncInitialInfoDiv.text(i18n.no_categories_found);
+                    }
+                }
+                
+                loadCategoriesButton.removeClass('disabled').html(originalButtonText);
+            }
+
+            function handleCategoryLoadError(errorMsg) {
+                categoryListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
+                if (categorySyncInitialInfoDiv.length) {
+                    categorySyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
+                }
+                // Clear pagination on error
+                const categoryPaginationContainer = $('#category-pagination-container');
+                if (categoryPaginationContainer.length) {
+                    categoryPaginationContainer.html('');
+                }
+                loadCategoriesButton.removeClass('disabled').html(originalButtonText);
+            }
+
+            // Start fetching the first batch
+            fetchCategoryBatch();
         }
 
         if (loadCategoriesButton.length) {
@@ -1837,11 +2006,11 @@
                     <div class="ecwid-loading-title" style="font-size: 18px; font-weight: bold; color: #23282d; margin-bottom: 10px;">
                         🔄 Loading Products from Ecwid
                     </div>
-                    <div class="ecwid-loading-status" style="font-size: 14px; color: #666; margin-bottom: 15px;">
+                    <div class="ecwid-loading-status" id="product-loading-status" style="font-size: 14px; color: #666; margin-bottom: 15px;">
                         Making API calls to fetch all products...
                     </div>
-                    <div class="ecwid-loading-progress" style="font-size: 12px; color: #999;">
-                        This may take a moment for large stores (6000+ products require ~70 API calls)
+                    <div class="ecwid-loading-progress" id="product-loading-progress" style="font-size: 12px; color: #999;">
+                        This may take a moment for large stores
                     </div>
                 </div>
                 <style>
@@ -1864,204 +2033,229 @@
             importSelectedButton.hide();
             ecwidProductsForSelection = [];
 
-            $.ajax({
-                url: ajax_url,
-                method: 'POST',
-                cache: false,
-                data: { 
-                    action: 'ecwid_wc_fetch_products_for_selection', 
-                    nonce: nonce,
-                    cache_bust: Date.now()
-                },
-                success: function(response) {
-                    // Show completion animation
-                    $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-yes-alt');
-                    $('.ecwid-loading-title').html('✅ Products Loaded Successfully!');
-                    $('.ecwid-loading-status').html('Processing product data...');
-                    
-                    if (response.success && response.data.products) {
-                        ecwidProductsForSelection = response.data.products;
-                        const totalFound = parseInt(response.data.total_found) || 0;
-                        const apiCalls = parseInt(response.data.api_calls_made) || 1;
-                        const totalAvailable = parseInt(response.data.total_available) || totalFound;
-                        
-                        // Get enabled and disabled products from response
-                        const enabledProducts = response.data.enabled_products || [];
-                        const disabledProducts = response.data.disabled_products || [];
-                        const enabledCount = parseInt(response.data.enabled_count) || 0;
-                        const disabledCount = parseInt(response.data.disabled_count) || 0;
+            // Batch loading variables
+            let allProducts = [];
+            let allEnabledProducts = [];
+            let allDisabledProducts = [];
+            let currentOffset = 0;
+            const batchSize = 100;
+            let apiCallCount = 0;
+            let totalAvailable = 0;
 
-                        // Console logging for debugging
-                        if (window.ecwidDebugMode) {
-                            console.log('=== PRODUCT LOADING DEBUG ===');
-                            console.log('Total products found:', totalFound);
-                            console.log('Enabled products:', enabledCount);
-                            console.log('Disabled products:', disabledCount);
-                            console.log('API calls made:', apiCalls);
-                            console.log('Total available in Ecwid:', totalAvailable);
-                            console.log('Actual array length:', ecwidProductsForSelection.length);
-                            console.log('Response data:', response.data);
-                        }
-                        
-                        // Show server debug info if available
-                        if (response.data.debug_info && window.ecwidDebugMode) {
-                            console.log('🔧 Server Debug Info:', response.data.debug_info);
-                        }
-                        
-                        // Show raw API response if available  
-                        if (response.data.raw_first_response && response.data.raw_first_response !== 'N/A') {
-                            console.log('📄 Raw First API Response:', response.data.raw_first_response);
-                        }
-                        
-                        console.log('==============================');
-
-                        // Enhanced status message with enabled/disabled breakdown
-                        let statusMessage = `Loaded ${enabledCount} enabled products`;
-                        if (disabledCount > 0) {
-                            statusMessage += ` and ${disabledCount} disabled products`;
-                        }
-                        if (apiCalls > 1) {
-                            statusMessage += ` (${apiCalls} API calls)`;
-                        }
-                        statusMessage += '. Select individual products to import.';
-
-                        if (selectiveSyncInitialInfoDiv.length) {
-                            // Create clean status message with enabled/disabled button
-                            const disabledButtonStyle = disabledCount > 0 ? '' : 'display: none;';
-                            const styledStatusHtml = `
-                                <p style="margin: 0 0 5px 0; font-weight: bold;">🎯 Product Loading Complete:</p>
-                                <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-style: normal;">${statusMessage}</p>
-                                <div style="margin: 10px 0;">
-                                    <button id="show-enabled-products" class="button button-primary" style="margin-right: 10px;">📦 Enabled Products (${enabledCount})</button>
-                                    <button id="show-disabled-products" class="button button-secondary" style="${disabledButtonStyle}">❌ Disabled Products (${disabledCount})</button>
-                                </div>
-                                <details style="margin-top: 10px; font-size: 11px; color: #999;">
-                                    <summary style="cursor: pointer;">🔍 Debug Info (click to expand)</summary>
-                                    <div style="margin-top: 5px; padding: 5px; background: #f9f9f9; border-radius: 3px;">
-                                        <strong>Total Found:</strong> ${totalFound}<br>
-                                        <strong>Enabled:</strong> ${enabledCount}<br>
-                                        <strong>Disabled:</strong> ${disabledCount}<br>
-                                        <strong>API Calls:</strong> ${apiCalls}<br>
-                                        <strong>Available in Store:</strong> ${totalAvailable}<br>
-                                        <strong>Array Length:</strong> ${ecwidProductsForSelection.length}
-                                    </div>
-                                </details>
-                            `;
-                            selectiveSyncInitialInfoDiv.html(styledStatusHtml);
-                        }
-
-                        // Store the product arrays for later use
-                        window.ecwidEnabledProducts = enabledProducts;
-                        window.ecwidDisabledProducts = disabledProducts;
-
-                        // Reset pagination and selection state
-                        currentProductPage = 1;
-                        selectedProductIds.clear();
-
-                        // Show enabled products by default
-                        renderProductSelectionList(enabledProducts);
-                        
-                        // Show final success message with fade out
-                        $('.ecwid-loading-status').html(`✅ ${totalFound} products ready for sync!`);
-                        setTimeout(function() {
-                            $('.ecwid-loading-container').fadeOut(800);
-                        }, 2000);
-                        
-                        // Set up button click handlers for switching between enabled/disabled
-                        $('#show-enabled-products').click(function() {
-                            $(this).removeClass('button-secondary').addClass('button-primary');
-                            $('#show-disabled-products').removeClass('button-primary').addClass('button-secondary');
-                            currentProductPage = 1; // Reset to first page
-                            selectedProductIds.clear(); // Clear selections when switching
-                            renderProductSelectionList(enabledProducts);
-                            if (enabledProducts.length > 0) {
-                                importSelectedButton.show();
-                            }
-                        });
-                        
-                        $('#show-disabled-products').click(function() {
-                            $(this).removeClass('button-secondary').addClass('button-primary');
-                            $('#show-enabled-products').removeClass('button-primary').addClass('button-secondary');
-                            currentProductPage = 1; // Reset to first page
-                            selectedProductIds.clear(); // Clear selections when switching
-                            renderProductSelectionList(disabledProducts);
-                            if (disabledProducts.length > 0) {
-                                importSelectedButton.show();
-                            }
-                        });
-
-                        if (enabledProducts.length > 0) {
-                            importSelectedButton.show();
-                        } else if (disabledProducts.length > 0) {
-                            // If no enabled products but there are disabled ones, show message
-                            productListContainer.html('<p style="color: orange;">No enabled products found. Click "Disabled Products" to view disabled products.</p>');
-                            importSelectedButton.hide();
-                        } else {
-                            productListContainer.html('<p>' + i18n.no_products_found + '</p>');
-                            if (selectiveSyncInitialInfoDiv.length && totalFound === 0) {
-                                selectiveSyncInitialInfoDiv.text(i18n.no_products_found);
-                            }
-                        }
-                    } else {
-                        $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
-                        $('.ecwid-loading-title').html('❌ Loading Failed');
-                        $('.ecwid-loading-status').html('Error: ' + (response.data && response.data.message ? response.data.message : 'Unknown error occurred'));
-                        
-                        // Clear pagination on error
-                        const paginationContainer = $('#product-pagination-container');
-                        if (paginationContainer.length) {
-                            paginationContainer.html('');
-                        }
-                        
-                        console.log('=== PRODUCT LOADING ERROR ===');
-                        console.log('Response success:', response.success);
-                        console.log('Response data:', response.data);
-                        console.log('==============================');
-                        
-                        const errorMsg = response.data && response.data.message ? response.data.message : i18n.no_products_found;
-                        productListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
-                        if (selectiveSyncInitialInfoDiv.length) {
-                            selectiveSyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
-                        }
-                        
-                        // Auto-hide error after 5 seconds
-                        setTimeout(function() {
-                            $('.ecwid-loading-container').fadeOut(800);
-                        }, 5000);
-                    }
-                },
-                error: function(jqXHR, textStatus, errorThrown) {
-                    $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
-                    $('.ecwid-loading-title').html('❌ Connection Error');
-                    $('.ecwid-loading-status').html('Failed to connect to Ecwid API');
-                    
-                    // Clear pagination on error
-                    const paginationContainer = $('#product-pagination-container');
-                    if (paginationContainer.length) {
-                        paginationContainer.html('');
-                    }
-                    
-                    console.log('=== AJAX ERROR ===');
-                    console.log('Status:', textStatus);
-                    console.log('Error:', errorThrown);
-                    console.log('Response:', jqXHR.responseText);
-                    console.log('==================');
-                    
-                    const errorText = 'AJAX Error: ' + sanitizeHTML(textStatus) + (errorThrown ? ' - ' + sanitizeHTML(errorThrown) : '');
-                    productListContainer.html('<p style="color:red;">' + errorText + '</p>');
-                    if (selectiveSyncInitialInfoDiv.length) {
-                         selectiveSyncInitialInfoDiv.html('<span style="color:red;">' + errorText + '</span>');
-                    }
-                    
-                    // Auto-hide error after 5 seconds
-                    setTimeout(function() {
-                        $('.ecwid-loading-container').fadeOut(800);
-                    }, 5000);
-                },
-                complete: function() {
-                    loadProductsButton.removeClass('disabled').text(originalButtonText);
+            // Recursive function to fetch all batches
+            function fetchProductBatch() {
+                apiCallCount++;
+                
+                // Update loading status
+                const loadingStatusEl = $('#product-loading-status');
+                const loadingProgressEl = $('#product-loading-progress');
+                if (loadingStatusEl.length) {
+                    loadingStatusEl.text(`Fetching batch ${apiCallCount}... (${allProducts.length} products loaded so far)`);
                 }
-            });
+                if (loadingProgressEl.length && totalAvailable > 0) {
+                    const percent = Math.round((allProducts.length / totalAvailable) * 100);
+                    loadingProgressEl.text(`Progress: ${allProducts.length} / ${totalAvailable} products (${percent}%)`);
+                }
+
+                $.ajax({
+                    url: ajax_url,
+                    method: 'POST',
+                    cache: false,
+                    data: { 
+                        action: 'ecwid_wc_fetch_products_for_selection', 
+                        nonce: nonce,
+                        page_offset: currentOffset,
+                        page_limit: batchSize,
+                        cache_bust: Date.now()
+                    },
+                    success: function(response) {
+                        if (response.success && response.data.products) {
+                            const batchProducts = response.data.products;
+                            const batchEnabled = response.data.enabled_products || [];
+                            const batchDisabled = response.data.disabled_products || [];
+                            
+                            allProducts = allProducts.concat(batchProducts);
+                            allEnabledProducts = allEnabledProducts.concat(batchEnabled);
+                            allDisabledProducts = allDisabledProducts.concat(batchDisabled);
+                            totalAvailable = parseInt(response.data.total_available) || totalAvailable;
+                            
+                            if (window.ecwidDebugMode) {
+                                console.log(`Product batch ${apiCallCount}:`, {
+                                    batchSize: batchProducts.length,
+                                    totalLoaded: allProducts.length,
+                                    enabledLoaded: allEnabledProducts.length,
+                                    disabledLoaded: allDisabledProducts.length,
+                                    totalAvailable: totalAvailable,
+                                    hasMore: response.data.has_more
+                                });
+                            }
+
+                            // Check if there are more products to fetch
+                            if (response.data.has_more) {
+                                currentOffset = response.data.next_offset;
+                                // Add a small delay to avoid overwhelming the server
+                                setTimeout(fetchProductBatch, 500);
+                            } else {
+                                // All products loaded - finalize
+                                finalizeProductLoading(allProducts, allEnabledProducts, allDisabledProducts, apiCallCount, totalAvailable);
+                            }
+                        } else {
+                            // Error in response
+                            const errorMsg = response.data && response.data.message ? response.data.message : i18n.no_products_found;
+                            handleProductLoadError(errorMsg);
+                        }
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        const errorText = 'AJAX Error: ' + sanitizeHTML(textStatus) + (errorThrown ? ' - ' + sanitizeHTML(errorThrown) : '');
+                        handleProductLoadError(errorText);
+                    }
+                });
+            }
+
+            function finalizeProductLoading(products, enabledProducts, disabledProducts, apiCalls, total) {
+                // Show completion animation
+                $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-yes-alt');
+                $('.ecwid-loading-title').html('✅ Products Loaded Successfully!');
+                $('.ecwid-loading-status').html('Processing product data...');
+                
+                ecwidProductsForSelection = products;
+                const totalFound = products.length;
+                const enabledCount = enabledProducts.length;
+                const disabledCount = disabledProducts.length;
+
+                // Console logging for debugging
+                if (window.ecwidDebugMode) {
+                    console.log('=== PRODUCT LOADING COMPLETE ===');
+                    console.log('Total products found:', totalFound);
+                    console.log('Enabled products:', enabledCount);
+                    console.log('Disabled products:', disabledCount);
+                    console.log('API calls made:', apiCalls);
+                    console.log('Total available in Ecwid:', total);
+                    console.log('================================');
+                }
+
+                // Enhanced status message with enabled/disabled breakdown
+                let statusMessage = `Loaded ${enabledCount} enabled products`;
+                if (disabledCount > 0) {
+                    statusMessage += ` and ${disabledCount} disabled products`;
+                }
+                if (apiCalls > 1) {
+                    statusMessage += ` (${apiCalls} API calls)`;
+                }
+                statusMessage += '. Select individual products to import.';
+
+                if (selectiveSyncInitialInfoDiv.length) {
+                    // Create clean status message with enabled/disabled button
+                    const disabledButtonStyle = disabledCount > 0 ? '' : 'display: none;';
+                    const styledStatusHtml = `
+                        <div style="background: #d4edda; padding: 10px; margin-bottom: 10px; border: 1px solid #c3e6cb; border-radius: 4px;">
+                            <p style="margin: 0 0 5px 0; font-weight: bold; color: #155724;">✅ Product Loading Complete:</p>
+                            <p style="margin: 0 0 10px 0; font-size: 12px; color: #155724; font-style: normal;">${statusMessage}</p>
+                            <div style="margin: 10px 0;">
+                                <button id="show-enabled-products" class="button button-primary" style="margin-right: 10px;">📦 Enabled Products (${enabledCount})</button>
+                                <button id="show-disabled-products" class="button button-secondary" style="${disabledButtonStyle}">❌ Disabled Products (${disabledCount})</button>
+                            </div>
+                            <details style="margin-top: 10px; font-size: 11px; color: #666;">
+                                <summary style="cursor: pointer;">🔍 Debug Info (click to expand)</summary>
+                                <div style="margin-top: 5px; padding: 5px; background: #f9f9f9; border-radius: 3px;">
+                                    <strong>Total Found:</strong> ${totalFound}<br>
+                                    <strong>Enabled:</strong> ${enabledCount}<br>
+                                    <strong>Disabled:</strong> ${disabledCount}<br>
+                                    <strong>API Calls:</strong> ${apiCalls}<br>
+                                    <strong>Available in Store:</strong> ${total}
+                                </div>
+                            </details>
+                        </div>
+                    `;
+                    selectiveSyncInitialInfoDiv.html(styledStatusHtml);
+                }
+
+                // Store the product arrays for later use
+                window.ecwidEnabledProducts = enabledProducts;
+                window.ecwidDisabledProducts = disabledProducts;
+
+                // Reset pagination and selection state
+                currentProductPage = 1;
+                selectedProductIds.clear();
+
+                // Show enabled products by default
+                renderProductSelectionList(enabledProducts);
+                
+                // Show final success message with fade out
+                $('.ecwid-loading-status').html(`✅ ${totalFound} products ready for sync!`);
+                setTimeout(function() {
+                    $('.ecwid-loading-container').fadeOut(800);
+                }, 2000);
+                
+                // Set up button click handlers for switching between enabled/disabled
+                $('#show-enabled-products').click(function() {
+                    $(this).removeClass('button-secondary').addClass('button-primary');
+                    $('#show-disabled-products').removeClass('button-primary').addClass('button-secondary');
+                    currentProductPage = 1; // Reset to first page
+                    selectedProductIds.clear(); // Clear selections when switching
+                    renderProductSelectionList(enabledProducts);
+                    if (enabledProducts.length > 0) {
+                        importSelectedButton.show();
+                    }
+                });
+                
+                $('#show-disabled-products').click(function() {
+                    $(this).removeClass('button-secondary').addClass('button-primary');
+                    $('#show-enabled-products').removeClass('button-primary').addClass('button-secondary');
+                    currentProductPage = 1; // Reset to first page
+                    selectedProductIds.clear(); // Clear selections when switching
+                    renderProductSelectionList(disabledProducts);
+                    if (disabledProducts.length > 0) {
+                        importSelectedButton.show();
+                    }
+                });
+
+                if (enabledProducts.length > 0) {
+                    importSelectedButton.show();
+                } else if (disabledProducts.length > 0) {
+                    // If no enabled products but there are disabled ones, show message
+                    productListContainer.html('<p style="color: orange;">No enabled products found. Click "Disabled Products" to view disabled products.</p>');
+                    importSelectedButton.hide();
+                } else {
+                    productListContainer.html('<p>' + i18n.no_products_found + '</p>');
+                    if (selectiveSyncInitialInfoDiv.length && totalFound === 0) {
+                        selectiveSyncInitialInfoDiv.text(i18n.no_products_found);
+                    }
+                }
+                
+                loadProductsButton.removeClass('disabled').text(originalButtonText);
+            }
+
+            function handleProductLoadError(errorMsg) {
+                $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
+                $('.ecwid-loading-title').html('❌ Loading Failed');
+                $('.ecwid-loading-status').html('Error: ' + sanitizeHTML(errorMsg));
+                
+                // Clear pagination on error
+                const paginationContainer = $('#product-pagination-container');
+                if (paginationContainer.length) {
+                    paginationContainer.html('');
+                }
+                
+                console.log('=== PRODUCT LOADING ERROR ===');
+                console.log('Error:', errorMsg);
+                console.log('==============================');
+                
+                productListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
+                if (selectiveSyncInitialInfoDiv.length) {
+                    selectiveSyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
+                }
+                
+                // Auto-hide error after 5 seconds
+                setTimeout(function() {
+                    $('.ecwid-loading-container').fadeOut(800);
+                }, 5000);
+                
+                loadProductsButton.removeClass('disabled').text(originalButtonText);
+            }
+
+            // Start fetching the first batch
+            fetchProductBatch();
         }
 
         if (loadProductsButton.length) {

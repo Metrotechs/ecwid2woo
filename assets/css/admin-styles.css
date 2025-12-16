@@ -329,6 +329,30 @@
     display: none;
 }
 
+.sync-button-pause {
+    background-color: #ffc107;
+    color: #212529;
+    border-color: #e0a800;
+    display: none;
+    margin-left: 10px;
+}
+
+.sync-button-pause:hover {
+    background-color: #e0a800;
+    border-color: #c69500;
+}
+
+.sync-button-pause.is-paused {
+    background-color: #28a745;
+    color: white;
+    border-color: #1e7e34;
+}
+
+.sync-button-pause.is-paused:hover {
+    background-color: #218838;
+    border-color: #1c7430;
+}
+
 .sync-button-stop {
     background-color: #dc3545;
     color: white;

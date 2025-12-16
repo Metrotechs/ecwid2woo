@@ -90,6 +90,7 @@ class Ecwid2Woo_Full_Sync {
             </div>
             
             <button id="full-sync-button" class="button button-primary sync-button-primary"><?php esc_html_e('Start Full Sync', 'metrotechs-e2w-sync'); ?></button>
+            <button id="pause-full-sync-button" class="button button-secondary sync-button-pause"><?php esc_html_e('PAUSE', 'metrotechs-e2w-sync'); ?></button>
             <button id="stop-full-sync-button" class="button button-secondary sync-button-stop"><?php esc_html_e('STOP SYNC', 'metrotechs-e2w-sync'); ?></button>
             
             <div id="full-sync-status" class="sync-status margin-top-15"></div>

@@ -1,5 +1,18 @@
 ** Metrotechs E2W Sync Changelog **
 
+2025-12-16 - version 1.4.5
+* NEW FEATURE - PAUSE/RESUME SYNC: Added pause button for Full Sync page
+* NEW - Pause Button: Located between Start and Stop buttons for easy access
+* NEW - Resume Capability: Resumes from exact position including current step, offset, and variation queue
+* NEW - Visual Feedback: Button changes from yellow "PAUSE" to green "RESUME" when paused
+* NEW - State Preservation: Saves complete sync state including variation processing progress
+* UX - Log Messages: Clear icons (⏸️/▶️) indicate pause and resume actions in sync log
+* FIX - CATEGORY BATCH LOADING: Category sync page now fetches ALL categories in batches
+* FIX - Categories beyond 100 now load properly via recursive batch fetching
+* FIX - PRODUCT BATCH LOADING: Product sync page now fetches ALL products in batches
+* FIX - Products beyond 100 now load properly via recursive batch fetching
+* UX - Live progress display during category/product loading shows batch count and progress percentage
+
 2025-12-16 - version 1.4.4
 * ENHANCED - SYSTEM DIAGNOSTICS: Expanded diagnostics panel with comprehensive server information
 * NEW - Memory Usage: Shows current PHP memory usage with visual progress bar and peak usage
