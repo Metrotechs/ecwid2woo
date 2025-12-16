@@ -1124,5 +1124,3 @@ class Ecwid2Woo_Category_Sync {
         }
     }
 }
-
-?>

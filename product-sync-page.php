@@ -11,12 +11,6 @@
  * @package Ecwid2Woo
  */
 
-// Temporary error display for debugging - REMOVE AFTER FIXING
-if (defined('WP_DEBUG') && WP_DEBUG) {
-    @ini_set('display_errors', 1);
-    @error_reporting(E_ALL);
-}
-
 // Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
@@ -498,7 +492,9 @@ class Ecwid2Woo_Product_Sync {
             // translators: %1$s is the Ecwid ID, %2$s is the SKU, %3$s is the raw item data
             $error_message = __('[CRITICAL] Product missing Ecwid ID or SKU. Ecwid ID: %1$s, SKU: %2$s. Raw item: %3$s', 'metrotechs-e2w-sync');
             $product_logs[] = sprintf($error_message, $ecwid_id_for_log, $sku_for_log, wp_json_encode($item));
-            error_log("Ecwid Sync: Product (Ecwid ID: $ecwid_id_for_log) missing SKU or ID. Data: " . print_r($item, true)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log,WordPress.PHP.DevelopmentFunctions.error_log_print_r -- Critical error logging for missing product data
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: Product (Ecwid ID: $ecwid_id_for_log) missing SKU or ID. Data: " . print_r($item, true)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log,WordPress.PHP.DevelopmentFunctions.error_log_print_r -- Critical error logging for missing product data
+            }
             return ['status' => 'failed', 'logs' => $product_logs, 'item_name' => $product_name_for_log, 'ecwid_id' => $ecwid_id_for_log, 'sku' => $sku_for_log];
         }
 
@@ -824,7 +820,9 @@ class Ecwid2Woo_Product_Sync {
 
         } catch (Exception $e) {
             $product_logs[] = "[CRITICAL] Exception during product import: " . $e->getMessage();
-            error_log("Ecwid Sync: Exception during product import for ID $ecwid_id_for_log: " . $e->getMessage()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: Exception during product import for ID $ecwid_id_for_log: " . $e->getMessage()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
             
             return [
                 'status' => 'failed',

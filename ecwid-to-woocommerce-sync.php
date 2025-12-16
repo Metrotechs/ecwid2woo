@@ -73,10 +73,10 @@ if (!defined('ECWID2WOO_CATEGORY_BATCH_SIZE')) {
 }
 
 if (!defined('ECWID2WOO_PRODUCT_BATCH_SIZE')) {
-    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 5); // Much smaller batch size to prevent server overload
+    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 5);
 }
 
-define('ECWID2WOO_VERSION', '1.4.3'); // Define version constant
+define('ECWID2WOO_VERSION', '1.4.5');
 
 class Ecwid_WC_Sync {
     private $options;
@@ -248,7 +248,7 @@ class Ecwid_WC_Sync {
             'manage_options',
             $this->settings_slug,
             [$this, 'options_page_router'],
-            'dashicons-update-alt' // Changed icon slightly
+            'dashicons-update-alt'
         );
 
         add_submenu_page(
@@ -2234,23 +2234,8 @@ class Ecwid_WC_Sync {
     }
 
     private function get_or_create_missing_parent_placeholder($parent_ecwid_id) {
-        // Temporarily disable fetching to troubleshoot the issue
-        // TODO: Re-enable after fixing the category import issue
-        /*
-        // First, try to fetch the missing parent category from Ecwid API
-        $fetched_parent = $this->fetch_and_import_missing_parent($parent_ecwid_id);
-        if ($fetched_parent && isset($fetched_parent['term_id'])) {
-            return [
-                'term_id' => $fetched_parent['term_id'],
-                'name' => $fetched_parent['name'] ?? "Category {$parent_ecwid_id}",
-                'is_new' => true,
-                'is_fetched' => true
-            ];
-        }
-        */
-        
-        // If fetching failed, fall back to creating a placeholder
-        $existing_term_query = new WP_Query([ // Changed from get_posts to WP_Query for consistency
+        // Fall back to creating a placeholder for missing parent categories
+        $existing_term_query = new WP_Query([
             'post_type' => 'ecwid_placeholder', // Query the CPT
             'meta_key' => '_ecwid_placeholder_parent_id',
             'meta_value' => $parent_ecwid_id,

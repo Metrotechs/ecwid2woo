@@ -37,7 +37,7 @@
             syncing_item_of_total: 'Syncing {syncType}: {current} of {total}...',
             load_products: 'Reload Products',
             loading_products: 'Loading Products...',
-            load_ecwid_categories: 'Reload Ecwid Categories', // CHANGED from 'Load Ecwid Category List'
+            load_ecwid_categories: 'Reload Ecwid Categories',
             loading_ecwid_categories: 'Loading Categories...',
             no_categories_found_display: 'No categories found in your Ecwid store or an error occurred.',
             categories_loaded_for_display: '{count} categories loaded for display.',
@@ -62,12 +62,11 @@
             error_importing_variations: 'Error importing variations for {productName}. See log.',
             parent_product_imported_pending_variations: 'Parent product {productName} imported. Starting variation import...',
             load_sync_preview: 'Reload Sync Data', // MODIFIED
-            loading_sync_preview: 'Reloading sync data...', // MODIFIED
+            loading_sync_preview: 'Reloading sync data...',
             preview_loaded_ready_to_sync: 'Preview loaded. Ready to start full sync.',
             categories_for_preview: 'Categories to be Synced:',
             products_for_preview: 'Products to be Synced:',
             preview_load_error: 'Error loading preview data. Please try again or proceed with sync.',
-            // REMOVED: variations_count_in_preview: 'Variation count will be determined when sync starts.',
             products_available_info: 'Ecwid products available for selection: {count}',
             categories_step_complete: 'Categories step complete! Starting product sync...',
             products_step_complete: 'Products step complete!',
@@ -170,9 +169,9 @@
         const fullSyncCustomerPreviewList = $('#full-sync-customer-preview-list');
         const fullSyncOrderPreviewList = $('#full-sync-order-preview-list');
         const fullSyncProgressContainer = $('#full-sync-progress-container');
-        const stopFullSyncButton = $('#stop-full-sync-button'); // ADDED
-        const pauseFullSyncButton = $('#pause-full-sync-button'); // ADDED: Pause button
-        const fullSyncInitialInfoDiv = $('#full-sync-initial-info'); // ADDED
+        const stopFullSyncButton = $('#stop-full-sync-button');
+        const pauseFullSyncButton = $('#pause-full-sync-button');
+        const fullSyncInitialInfoDiv = $('#full-sync-initial-info');
 
         // Category Sync Page UI Elements
         const categoryPageSyncButton = $('#category-page-sync-button');
@@ -238,13 +237,13 @@
         let grandTotalAllItemsForSync = 0;
         let fullSyncVariationQueue = [];
         let currentFullSyncVariationProductData = null;
-        let isSyncCancelledByUser = false; // ADDED: Flag to control sync cancellation
-        let isSyncPaused = false; // ADDED: Flag to control sync pause state
-        let pausedSyncState = null; // ADDED: Store state when paused for resume
-        let isProductSyncCancelled = false; // Flag to control product sync cancellation
-        let isCategorySyncCancelled = false; // Flag to control category sync cancellation
-        let categorySyncRequest = null; // Store AJAX request for cancellation
-        let fullSyncRetryCount = 0; // ADDED: Track retry attempts for better error handling
+        let isSyncCancelledByUser = false;
+        let isSyncPaused = false;
+        let pausedSyncState = null;
+        let isProductSyncCancelled = false;
+        let isCategorySyncCancelled = false;
+        let categorySyncRequest = null;
+        let fullSyncRetryCount = 0;
         // Store continuation data for parent batch processing
         let fullSyncParentContinuation = {
             hasMore: false,
@@ -276,12 +275,10 @@
         let currentlyDisplayedCategories = []; // Currently displayed category subset
         let selectedCategoryIds = new Set(); // Track selected categories across all pages
 
-        let animationInterval = null; // For status text animation
+        let animationInterval = null;
 
         // --- Helper Functions ---
-        // REMOVED duplicate sanitizeHTML function
-
-        const MAX_LOG_LINES = 500; // Maximum number of log lines to keep in the DOM
+        const MAX_LOG_LINES = 500;
 
         function logMessage(logDiv, message, type) {
             if (!logDiv || !logDiv.length) return; // Guard against missing logDiv
@@ -390,7 +387,9 @@
             }
             
             if (responseData && responseData.details) {
-                console.error("Sync Error Details" + (syncType ? ` for ${syncType}` : '') + ":", responseData.details);
+                if (window.ecwidDebugMode) {
+                    console.error("Sync Error Details" + (syncType ? ` for ${syncType}` : '') + ":", responseData.details);
+                }
                 logMessage(logDiv, "Details: " + JSON.stringify(responseData.details), 'error');
             }
             
@@ -428,7 +427,7 @@
 
         // Define fetchAndDisplayFullSyncCounts first
         function fetchAndDisplayFullSyncCounts() {
-            if (isSyncCancelledByUser) return; // ADDED: Check cancellation
+            if (isSyncCancelledByUser) return;
             if (!loadFullSyncPreviewButton.length) return;
 
             updateStatus(fullSyncStatusDiv, i18n.fetching_counts || 'Fetching item counts...');
@@ -480,7 +479,9 @@
                 dataType: 'json'
             })
             .done(function(response) {
-                console.log('Full sync preview response:', response);
+                if (window.ecwidDebugMode) {
+                    console.log('Full sync preview response:', response);
+                }
                 
                 if (response.success && response.data) {
                     totalCategoriesToSync = parseInt(response.data.categories_count) || 0;
@@ -494,10 +495,12 @@
                     const customers = response.data.customers_preview || [];
                     const orders = response.data.orders_preview || [];
                     
-                    console.log('Categories preview data available:', categories ? categories.length : 0);
-                    console.log('Products preview data available:', products ? products.length : 0);
-                    console.log('Customers preview data available:', customers ? customers.length : 0);
-                    console.log('Orders preview data available:', orders ? orders.length : 0);
+                    if (window.ecwidDebugMode) {
+                        console.log('Categories preview data available:', categories ? categories.length : 0);
+                        console.log('Products preview data available:', products ? products.length : 0);
+                        console.log('Customers preview data available:', customers ? customers.length : 0);
+                        console.log('Orders preview data available:', orders ? orders.length : 0);
+                    }
 
                     // Only update preview lists if the elements exist
                     if (fullSyncCategoryPreviewList.length) {
@@ -657,7 +660,9 @@
                 const errorMsg = i18n.ajax_error || 'AJAX Error. Check console or log for details.';
                 updateStatus(fullSyncStatusDiv, errorMsg + ` (${textStatus})`);
                 logMessage(fullSyncLogDiv, `Failed to load sync preview: ${textStatus}, ${errorThrown}`, 'error');
-                console.error('AJAX error details:', jqXHR.responseText);
+                if (window.ecwidDebugMode) {
+                    console.error('AJAX error details:', jqXHR.responseText);
+                }
                 
                 // Update initial info container with AJAX error state
                 if (fullSyncInitialInfoDiv.length) {
@@ -718,7 +723,7 @@
             });
         }
 
-        if (pauseFullSyncButton.length) { // ADDED: Pause button handler
+        if (pauseFullSyncButton.length) {
             pauseFullSyncButton.on('click', function() {
                 if (!isSyncPaused) {
                     // PAUSE the sync
@@ -786,11 +791,11 @@
             });
         }
 
-        if (stopFullSyncButton.length) { // ADDED: Stop button handler
+        if (stopFullSyncButton.length) {
             stopFullSyncButton.on('click', function() {
                 isSyncCancelledByUser = true;
-                isSyncPaused = false; // Reset pause state
-                pausedSyncState = null; // Clear saved state
+                isSyncPaused = false;
+                pausedSyncState = null;
                 logMessage(fullSyncLogDiv, i18n.sync_stopped_by_user_log || 'SYNC HAS BEEN STOPPED BY THE USER.', 'warning');
                 updateStatus(fullSyncStatusDiv, i18n.sync_stopped_by_user_status || 'Sync stopped by user.');
                 
@@ -815,11 +820,11 @@
         }
 
         function processNextFullSyncStep() {
-            if (isSyncCancelledByUser) { // ADDED: Check cancellation
+            if (isSyncCancelledByUser) {
                 logMessage(fullSyncLogDiv, i18n.sync_cancelled_log_message || 'Sync cancelled, not proceeding to next step.', 'info');
                 return;
             }
-            if (isSyncPaused) { // ADDED: Check if paused
+            if (isSyncPaused) {
                 logMessage(fullSyncLogDiv, '⏸️ Sync paused at step boundary. Click RESUME to continue.', 'info');
                 return;
             }
@@ -859,11 +864,11 @@
         }
 
         function processFullSyncBatch(syncType, offset, totalKnownItems) {
-            if (isSyncCancelledByUser) { // ADDED: Check cancellation
+            if (isSyncCancelledByUser) {
                 logMessage(fullSyncLogDiv, i18n.sync_cancelled_log_message || 'Sync cancelled, aborting batch processing.', 'info');
                 return;
             }
-            if (isSyncPaused) { // ADDED: Check if paused
+            if (isSyncPaused) {
                 // Save state for resume
                 pausedSyncState = {
                     stepIndex: currentFullSyncStepIndex,
@@ -1082,11 +1087,11 @@
 
         // New function to decide what to do after a parent batch or a variation product is processed
         function handleFullSyncContinuation() {
-            if (isSyncCancelledByUser) { // ADDED: Check cancellation
+            if (isSyncCancelledByUser) {
                 logMessage(fullSyncLogDiv, i18n.sync_cancelled_log_message || 'Sync cancelled, not continuing.', 'info');
                 return;
             }
-            if (isSyncPaused) { // ADDED: Check if paused
+            if (isSyncPaused) {
                 // Save state for resume
                 pausedSyncState = {
                     stepIndex: currentFullSyncStepIndex,
@@ -1132,13 +1137,13 @@
 
         // New function to process variations for a single product from the fullSyncVariationQueue
         function processFullSyncVariationBatchLoop() {
-            if (isSyncCancelledByUser) { // ADDED: Check cancellation
+            if (isSyncCancelledByUser) {
                 logMessage(fullSyncLogDiv, i18n.sync_cancelled_log_message || 'Sync cancelled, stopping variation loop.', 'info');
-                currentFullSyncVariationProductData = null; // Clear current product data
-                fullSyncVariationQueue = []; // Clear the queue
+                currentFullSyncVariationProductData = null;
+                fullSyncVariationQueue = [];
                 return;
             }
-            if (isSyncPaused) { // ADDED: Check if paused
+            if (isSyncPaused) {
                 // Save state for resume
                 pausedSyncState = {
                     stepIndex: currentFullSyncStepIndex,
@@ -1267,7 +1272,9 @@
             // Ensure the button and container exist before proceeding
             if (!loadCategoriesButton.length || !categoryListContainer.length) {
                 if (loadCategoriesButton.length && !categoryListContainer.length) {
-                    console.warn("loadCategoriesButton exists, but categoryListContainer does not. Cannot load categories.");
+                    if (window.ecwidDebugMode) {
+                        console.warn("loadCategoriesButton exists, but categoryListContainer does not. Cannot load categories.");
+                    }
                 }
                 if (categorySyncInitialInfoDiv.length) {
                     categorySyncInitialInfoDiv.text('');
@@ -1978,7 +1985,9 @@
             // Ensure the button and container exist before proceeding
             if (!loadProductsButton.length || !productListContainer.length) {
                 if (loadProductsButton.length && !productListContainer.length) {
-                    console.warn("loadProductsButton exists, but productListContainer does not. Cannot load products for selection.");
+                    if (window.ecwidDebugMode) {
+                        console.warn("loadProductsButton exists, but productListContainer does not. Cannot load products for selection.");
+                    }
                 }
                 if (selectiveSyncInitialInfoDiv.length) {
                     selectiveSyncInitialInfoDiv.text('');
@@ -2237,9 +2246,9 @@
                     paginationContainer.html('');
                 }
                 
-                console.log('=== PRODUCT LOADING ERROR ===');
-                console.log('Error:', errorMsg);
-                console.log('==============================');
+                if (window.ecwidDebugMode) {
+                    console.log('Product loading error:', errorMsg);
+                }
                 
                 productListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
                 if (selectiveSyncInitialInfoDiv.length) {
@@ -2681,8 +2690,10 @@
 
         function processProductVariationBatch() {
             if (!currentProductVariationData) {
-                console.error("processProductVariationBatch called without currentProductVariationData.");
-                processNextSelectedProduct(); // Attempt to recover by moving to the next product
+                if (window.ecwidDebugMode) {
+                    console.error("processProductVariationBatch called without currentProductVariationData.");
+                }
+                processNextSelectedProduct();
                 return;
             }
 
@@ -3634,8 +3645,8 @@
         .fail(function(jqXHR, textStatus, errorThrown) {
             if (window.ecwidDebugMode) {
                 console.error('❌ Debug request failed:', textStatus, errorThrown);
+                console.error('Response details:', jqXHR.responseText);
             }
-            console.error('Response details:', jqXHR.responseText);
         });
     };
     
@@ -3661,7 +3672,9 @@
     function loadAndDisplayOrdersForSelection() {
         if (!loadOrdersButton.length || !orderListContainer.length) {
             if (loadOrdersButton.length && !orderListContainer.length) {
-                console.warn("loadOrdersButton exists, but orderListContainer does not. Cannot load orders.");
+                if (window.ecwidDebugMode) {
+                    console.warn("loadOrdersButton exists, but orderListContainer does not. Cannot load orders.");
+                }
             }
             if (orderSyncInitialInfoDiv.length) {
                 orderSyncInitialInfoDiv.text('');
@@ -3788,10 +3801,12 @@
                 $('.ecwid-loading-title').html('❌ Loading Failed');
                 $('.ecwid-loading-status').html('Error: ' + (response.data && response.data.message ? response.data.message : 'Unknown error occurred'));
                 
-                console.log('=== ORDER LOADING ERROR ===');
-                console.log('Response success:', response.success);
-                console.log('Response data:', response.data);
-                console.log('==============================');
+                if (window.ecwidDebugMode) {
+                    console.log('=== ORDER LOADING ERROR ===');
+                    console.log('Response success:', response.success);
+                    console.log('Response data:', response.data);
+                    console.log('==============================');
+                }
                 
                 const errorMsg = response.data && response.data.message ? response.data.message : 'No orders found or failed to fetch.';
                 orderListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
@@ -3806,7 +3821,9 @@
             }
         })
         .fail(function(jqXHR, textStatus, errorThrown) {
-            console.error('Order loading AJAX failed:', textStatus, errorThrown);
+            if (window.ecwidDebugMode) {
+                console.error('Order loading AJAX failed:', textStatus, errorThrown);
+            }
             const errorMessage = `AJAX Error: ${textStatus}. ${errorThrown}`;
             
             $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
@@ -4007,7 +4024,9 @@
     function loadAndDisplayCustomersForSelection() {
         if (!loadCustomersButton.length || !customerListContainer.length) {
             if (loadCustomersButton.length && !customerListContainer.length) {
-                console.warn("loadCustomersButton exists, but customerListContainer does not. Cannot load customers.");
+                if (window.ecwidDebugMode) {
+                    console.warn("loadCustomersButton exists, but customerListContainer does not. Cannot load customers.");
+                }
             }
             if (customerSyncInitialInfoDiv.length) {
                 customerSyncInitialInfoDiv.text('');
@@ -4115,10 +4134,12 @@
                 $('.ecwid-loading-title').html('❌ Loading Failed');
                 $('.ecwid-loading-status').html('Error: ' + (response.data && response.data.message ? response.data.message : 'Unknown error occurred'));
                 
-                console.log('=== CUSTOMER LOADING ERROR ===');
-                console.log('Response success:', response.success);
-                console.log('Response data:', response.data);
-                console.log('==============================');
+                if (window.ecwidDebugMode) {
+                    console.log('=== CUSTOMER LOADING ERROR ===');
+                    console.log('Response success:', response.success);
+                    console.log('Response data:', response.data);
+                    console.log('==============================');
+                }
                 
                 const errorMsg = response.data && response.data.message ? response.data.message : 'No customers found or failed to fetch.';
                 customerListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
@@ -4133,7 +4154,9 @@
             }
         })
         .fail(function(jqXHR, textStatus, errorThrown) {
-            console.error('Customer loading AJAX failed:', textStatus, errorThrown);
+            if (window.ecwidDebugMode) {
+                console.error('Customer loading AJAX failed:', textStatus, errorThrown);
+            }
             const errorMessage = `AJAX Error: ${textStatus}. ${errorThrown}`;
             
             $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');

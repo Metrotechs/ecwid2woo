@@ -216,7 +216,6 @@ class Ecwid2Woo_Full_Sync {
         $query_params_for_url = ['limit' => $limit_per_api_call, 'offset' => $offset];
 
         if ($sync_type === 'products') {
-            // Removed enabled=true filter - sync all products regardless of enabled status
             $query_params_for_url['responseFields'] = 'items(id,sku,name,price,description,shortDescription,enabled,weight,quantity,unlimited,categoryIds,hdThumbnailUrl,imageUrl,galleryImages,options,combinations(id,sku,price,compareToPrice,defaultDisplayedPrice,defaultDisplayedCompareToPrice,options,quantity),productClassId,attributes,compareToPrice,dimensions,shipping)';
         } elseif ($sync_type === 'categories') {
             $query_params_for_url['responseFields'] = 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl)';
@@ -284,7 +283,7 @@ class Ecwid2Woo_Full_Sync {
 
         $imported_count = 0; $updated_count = 0; $skipped_count = 0; $failed_count = 0;
         $batch_detailed_logs = [];
-        $batch_item_results = []; // <-- ADDED: To store structured results
+        $batch_item_results = [];
 
         if (!empty($items_from_api)) {
             foreach ($items_from_api as $item_data) {
@@ -332,7 +331,7 @@ class Ecwid2Woo_Full_Sync {
                     }
 
                     if ($result_array && isset($result_array['status'])) {
-                        $batch_item_results[] = $result_array; // <-- ADDED: Store structured result
+                        $batch_item_results[] = $result_array;
                         if ($result_array['status'] === 'imported' || $result_array['status'] === 'imported_parent_pending_variations') $imported_count++;
                         elseif ($result_array['status'] === 'updated') $updated_count++;
                         elseif ($result_array['status'] === 'skipped' ) $skipped_count++;
@@ -351,7 +350,7 @@ class Ecwid2Woo_Full_Sync {
                         $failed_count++;
                         $current_item_log_name = ($item_data['name'] ?? ('Ecwid ID ' . ($item_data['id'] ?? 'Unknown')));
                         $batch_detailed_logs[] = "--- [CRITICAL ERROR] Failed to process item: " . esc_html($current_item_log_name) . ". Import function did not return expected result or status. Result: " . print_r($result_array, true) . " ---"; // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r -- Debug logging for processing failure analysis
-                        $batch_item_results[] = [ // <-- ADDED: Store failure result
+                        $batch_item_results[] = [
                             'status' => 'failed',
                             'item_name' => $current_item_log_name,
                             'ecwid_id' => $item_data['id'] ?? 'Unknown',
@@ -405,7 +404,7 @@ class Ecwid2Woo_Full_Sync {
             'skipped_count' => $skipped_count,
             'failed_count' => $failed_count,
             'batch_logs' => $batch_detailed_logs,
-            'batch_item_results' => $batch_item_results // <-- ADDED: Send structured results
+            'batch_item_results' => $batch_item_results
         ]);
         
         } catch (Error $e) {
