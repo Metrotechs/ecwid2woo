@@ -59,19 +59,19 @@ Revolutionary migration recovery system that intelligently skips already importe
 - **Batch Interruption** – Product imports stop cleanly between batches
 - **Universal Coverage** – Available on both Product and Category sync pages
 
-### ⚡ Enhanced Performance & Reliability (v1.3.8-1.4.6)
+### ⚡ Enhanced Performance & Reliability (v1.3.8-1.4.8)
 
+- **Auto Server Detection** – Automatically detects server resources and configures optimal batch sizes
+- **Server Tier System** – 🚀 High (512MB+), ⚡ Medium (256-512MB), 🐢 Low (<256MB) with auto-tuned settings
+- **Server Crash Recovery** – Handles Cloudflare 520/521/522/523/525 errors with 30-120s cooldown periods
 - **Adaptive Batch Sizing** – Automatically reduces batch size on server timeouts (100→50→25→12→6→3→1)
 - **Fast Skip Optimization** – Pre-loads existing Ecwid IDs in single query for 100x faster duplicate detection
 - **Intelligent Timeout Recovery** – Detects Cloudflare 524, Gateway 504, Request 408, and jQuery timeouts
 - **Exponential Backoff Retry** – Smart retry logic with increasing delays (3s→6s→12s) for server recovery
 - **Batch Loading System** – Products, categories, and sync operations load in manageable batches
-- **Higher Default Batches** – Products and categories start at 100 items per batch for faster syncing
-- **Batch Processing** – Automatic continuation through all products (fixed bulk import bug)
+- **Dynamic Delays** – Delay between batches auto-adjusted (2-5s) based on server capability
 - **Progress Tracking** – Real-time progress bars showing current batch and total progress
-- **Server Compatibility** – Works with restrictive hosting environments
-- **Memory Optimization** – Conservative batch sizes prevent memory exhaustion
-- **Network Resilience** – Enhanced retry logic and error handling with status feedback
+- **Server Compatibility** – Works on shared hosting, VPS, and dedicated servers
 
 ### 🔄 Complete Migration Suite
 
@@ -513,6 +513,18 @@ Revolutionary migration recovery system that intelligently skips already importe
 - **Import/Export Settings** – Backup and restore plugin configurations
 
 ### Version History
+- **v1.4.8** – **AUTO SERVER DETECTION**: Intelligent server resource detection and auto-configuration
+  - 💻 **Server Detection** – Automatically detects PHP memory limit and timeout settings
+  - 🎯 **Tier System** – Categorizes servers as 🚀 High, ⚡ Medium, 🐢 Low and auto-tunes
+  - ⚙️ **Dynamic Batch Sizes** – 5-50 products based on detected server capability
+  - ⏱️ **Adaptive Delays** – 2-5 second delays between batches based on tier
+  - 📊 **Status Display** – Shows memory, timeout, and batch config at sync start
+- **v1.4.7** – **SERVER CRASH RECOVERY**: Extended Cloudflare error handling with recovery cooldowns
+  - 🔥 **Server Down Detection** – Handles 520, 521, 522, 523, 525, 526, 527, 530 Cloudflare errors
+  - ⏳ **Extended Cooldown** – 30-120 second wait periods for server recovery
+  - ⚡ **Aggressive Batch Reduction** – 75% batch size reduction on server crash
+  - 🔄 **Visual Countdown** – Shows cooldown timer during recovery
+  - 💬 **Better Messaging** – 🔥 SERVER OVERLOAD DETECTED with clear recovery status
 - **v1.4.6** – **ADAPTIVE BATCH SIZING & FAST SKIP**: Automatic timeout recovery with intelligent batch management
   - ⚡ **Adaptive Batch Sizing** – Automatically reduces batch size when timeouts occur (100→50→25→12→6→3→1)
   - 🚀 **Fast Skip Optimization** – Pre-loads existing Ecwid IDs in single SQL query for 100x faster duplicate detection

@@ -89,18 +89,55 @@
         const totalFullSyncSteps = fullSyncSteps.length;
         const variationBatchSize = parseInt(ecwid_sync_params.variation_batch_size) || 50; // Ensure it's an integer
 
+        // --- Server Capability Detection ---
+        // Automatically configures batch sizes based on detected server resources
+        const serverCapabilities = ecwid_sync_params.server_capabilities || {
+            server_tier: 'low',
+            products_batch: 10,
+            categories_batch: 25,
+            customers_batch: 25,
+            orders_batch: 25,
+            batch_delay_ms: 5000,
+            memory_limit_mb: 128,
+            max_execution_time: 30
+        };
+
+        // Log server detection on first load (in debug mode)
+        if (window.ecwidDebugMode) {
+            console.log('Server capabilities detected:', serverCapabilities);
+        }
+
         // --- Adaptive Batch Sizing ---
         // Automatically reduces batch size when 524 (Cloudflare timeout) or similar errors occur
+        // Initial values come from server capability detection
         const adaptiveBatchConfig = {
-            // Default batch sizes (will be reduced on timeout errors)
-            categories: { current: 100, min: 10, default: 100 },
-            products: { current: 100, min: 1, default: 100 },
-            customers: { current: 50, min: 5, default: 50 },
-            orders: { current: 50, min: 5, default: 50 },
+            // Batch sizes auto-configured from server detection
+            categories: { 
+                current: serverCapabilities.categories_batch, 
+                min: 5, 
+                default: serverCapabilities.categories_batch 
+            },
+            products: { 
+                current: serverCapabilities.products_batch, 
+                min: 1, 
+                default: serverCapabilities.products_batch 
+            },
+            customers: { 
+                current: serverCapabilities.customers_batch, 
+                min: 5, 
+                default: serverCapabilities.customers_batch 
+            },
+            orders: { 
+                current: serverCapabilities.orders_batch, 
+                min: 5, 
+                default: serverCapabilities.orders_batch 
+            },
             // Track consecutive timeouts per sync type
             timeoutCounts: { categories: 0, products: 0, customers: 0, orders: 0 },
-            // Maximum retries before giving up (allows: 100→50→25→12→6→3→1, then 2 more at minimum)
-            maxTimeoutRetries: 8
+            // Maximum retries before giving up
+            maxTimeoutRetries: 8,
+            // Delay between batches (from server detection)
+            batchDelayMs: serverCapabilities.batch_delay_ms || 5000
         };
 
         /**
@@ -168,6 +205,61 @@
             // Request timeout
             if (jqXHR.status === 408) return true;
             return false;
+        }
+
+        /**
+         * Detect if an error is a Cloudflare "server down" error
+         * These are more severe than timeouts - the origin server is crashing/overloaded
+         */
+        function isServerDownError(jqXHR) {
+            const status = jqXHR.status;
+            // Cloudflare 5xx origin errors
+            if (status === 520) return true; // Web server returned unknown error (server crashed)
+            if (status === 521) return true; // Web server is down (server refusing connections)
+            if (status === 522) return true; // Connection timed out (couldn't reach server)
+            if (status === 523) return true; // Origin is unreachable
+            if (status === 525) return true; // SSL handshake failed (server too busy)
+            if (status === 526) return true; // Invalid SSL certificate
+            if (status === 527) return true; // Railgun error
+            if (status === 530) return true; // Origin DNS error
+            return false;
+        }
+
+        /**
+         * Get human-readable description of Cloudflare error
+         */
+        function getCloudflareErrorMessage(status) {
+            const messages = {
+                520: 'Web server crashed (520). The server returned an unexpected response.',
+                521: 'Web server is down (521). The origin server refused the connection.',
+                522: 'Connection timed out (522). Could not reach the origin server.',
+                523: 'Origin unreachable (523). DNS or routing issue.',
+                525: 'SSL handshake failed (525). Server is overloaded or SSL misconfigured.',
+                526: 'Invalid SSL certificate (526).',
+                527: 'Railgun connection error (527).',
+                530: 'Origin DNS error (530).'
+            };
+            return messages[status] || `Cloudflare error (${status}).`;
+        }
+
+        // Track server down recovery state
+        let serverDownRecoveryCount = 0;
+        const maxServerDownRetries = 5;
+        const serverDownCooldowns = [30, 45, 60, 90, 120]; // Increasing cooldown in seconds
+
+        /**
+         * Get cooldown time for server down recovery
+         */
+        function getServerDownCooldown() {
+            const index = Math.min(serverDownRecoveryCount, serverDownCooldowns.length - 1);
+            return serverDownCooldowns[index];
+        }
+
+        /**
+         * Reset server down recovery counter
+         */
+        function resetServerDownRecovery() {
+            serverDownRecoveryCount = 0;
         }
 
         // --- Utility Functions ---
@@ -800,6 +892,12 @@
                 fullSyncProgressContainer.show();
                 fullSyncLogDiv.html(''); // Clear previous logs
 
+                // Log server capabilities at sync start
+                const tierEmoji = serverCapabilities.server_tier === 'high' ? '🚀' : 
+                                  serverCapabilities.server_tier === 'medium' ? '⚡' : '🐢';
+                logMessage(fullSyncLogDiv, `[INFO] ${tierEmoji} Server detected: ${serverCapabilities.description || serverCapabilities.server_tier}`, 'info');
+                logMessage(fullSyncLogDiv, `[INFO] 📊 Memory: ${serverCapabilities.memory_limit_mb}MB | Timeout: ${serverCapabilities.max_execution_time}s | Batch sizes: Products=${serverCapabilities.products_batch}, Categories=${serverCapabilities.categories_batch}`, 'info');
+
                 processNextFullSyncStep();
             });
         }
@@ -985,6 +1083,8 @@
                     stopBatchStatusAnimation();
                     // Reset timeout count on success (batch completed without timeout)
                     adaptiveBatchConfig.timeoutCounts[syncType] = 0;
+                    // Reset server down recovery on success
+                    resetServerDownRecovery();
                     
                     // Log if we're running with a reduced batch size
                     const defaultBatchSize = adaptiveBatchConfig[syncType] ? adaptiveBatchConfig[syncType].default : currentBatchSize;
@@ -1178,6 +1278,50 @@
                             errorData.message += '\n\nSuggestions:\n• Try again during off-peak hours\n• Contact your hosting provider about timeout limits\n• Consider upgrading your hosting plan';
                         }
                         shouldRetry = false; // Don't use standard retry, we handle it above
+                    } else if (isServerDownError(jqXHR)) {
+                        // Handle Cloudflare server down/crash errors (520, 521, 522, 523, 525, 526, 527, 530)
+                        // These require a LONG cooldown as the server is overloaded/crashed
+                        serverDownRecoveryCount++;
+                        
+                        const cfMessage = getCloudflareErrorMessage(jqXHR.status);
+                        errorData.message = cfMessage + ' The server is overloaded or crashed.';
+                        errorData.error_type = 'server_down';
+                        
+                        if (serverDownRecoveryCount <= maxServerDownRetries) {
+                            const cooldownSeconds = getServerDownCooldown();
+                            
+                            // Reduce batch size aggressively on server crash
+                            reduceBatchSize(syncType);
+                            reduceBatchSize(syncType); // Double reduction for server crashes
+                            const newBatch = getAdaptiveBatchSize(syncType);
+                            
+                            logMessage(fullSyncLogDiv, `[WARNING] 🔥 SERVER OVERLOAD DETECTED: ${cfMessage}`, 'warning');
+                            logMessage(fullSyncLogDiv, `[INFO] ⏳ Waiting ${cooldownSeconds} seconds for server to recover... (attempt ${serverDownRecoveryCount}/${maxServerDownRetries})`, 'info');
+                            logMessage(fullSyncLogDiv, `[INFO] ⚡ Reduced batch size to ${newBatch} to reduce server load.`, 'info');
+                            
+                            // Show countdown in status
+                            let countdown = cooldownSeconds;
+                            const countdownInterval = setInterval(() => {
+                                countdown--;
+                                if (countdown > 0) {
+                                    fullSyncStatusDiv.html(`<span style="color: #e67e22;">🔄 Server recovery cooldown: ${countdown} seconds remaining...</span>`);
+                                } else {
+                                    clearInterval(countdownInterval);
+                                }
+                            }, 1000);
+                            
+                            setTimeout(() => {
+                                clearInterval(countdownInterval);
+                                logMessage(fullSyncLogDiv, `[INFO] ✅ Cooldown complete. Resuming sync with batch size ${newBatch}...`, 'info');
+                                processFullSyncBatch(syncType, offset, totalKnownItems);
+                            }, cooldownSeconds * 1000);
+                            return;
+                        } else {
+                            // Exhausted server down retries
+                            errorData.message += `\n\n🔥 Server crashed ${maxServerDownRetries} times. Your server cannot handle this workload right now.`;
+                            errorData.message += '\n\nSuggestions:\n• Wait 10-15 minutes and try again\n• Try during off-peak hours (night/early morning)\n• Contact your hosting provider - server is severely overloaded\n• Consider upgrading to a more powerful hosting plan';
+                            shouldRetry = false;
+                        }
                     } else if (jqXHR.status === 0) {
                         errorData.message = 'Network connection error. Please check your internet connection and server settings.';
                         errorData.error_type = 'network_error';
@@ -1245,10 +1389,10 @@
                 if (fullSyncParentContinuation.hasMore) {
                     // Pass the correct total for the parent step type
                     const totalForNextParentBatch = fullSyncParentContinuation.syncType === 'categories' ? totalCategoriesToSync : totalProductsToSync;
-                    // Add delay before next batch to prevent server overload
+                    // Add delay before next batch (auto-detected from server capabilities)
                     setTimeout(() => {
                         processFullSyncBatch(fullSyncParentContinuation.syncType, fullSyncParentContinuation.nextOffset, totalForNextParentBatch);
-                    }, 2000); // 2 second delay between batches
+                    }, adaptiveBatchConfig.batchDelayMs); // Dynamic delay based on server tier
                 } else {
                     // Current step is fully complete (no more parent items and variation queue is empty)
                     updateStatus(fullSyncStatusDiv, i18n[currentFullSyncStepType + '_step_complete'] || `Step ${capitalizeFirstLetter(currentFullSyncStepType)} complete!`);

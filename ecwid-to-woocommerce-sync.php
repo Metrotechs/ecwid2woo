@@ -68,15 +68,100 @@ if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
     define('ECWID2WOO_VARIATION_BATCH_SIZE', 10); // Batch size for variation processing
 }
 
+// Server capability detection will override these defaults
 if (!defined('ECWID2WOO_CATEGORY_BATCH_SIZE')) {
-    define('ECWID2WOO_CATEGORY_BATCH_SIZE', 100); // Categories are lightweight, can handle larger batches
+    define('ECWID2WOO_CATEGORY_BATCH_SIZE', 25); // Default, auto-adjusted by server detection
 }
 
 if (!defined('ECWID2WOO_PRODUCT_BATCH_SIZE')) {
-    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 100); // Large batch for fast skipping, adaptive sizing handles timeouts
+    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 10); // Default, auto-adjusted by server detection
 }
 
-define('ECWID2WOO_VERSION', '1.4.6');
+/**
+ * Detect server capabilities and return recommended batch sizes
+ * This helps the plugin automatically adjust to different hosting environments
+ */
+function ecwid2woo_detect_server_capabilities() {
+    // Get PHP memory limit
+    $memory_limit = ini_get('memory_limit');
+    $memory_bytes = wp_convert_hr_to_bytes($memory_limit);
+    $memory_mb = $memory_bytes / (1024 * 1024);
+    
+    // Get max execution time
+    $max_execution_time = (int) ini_get('max_execution_time');
+    if ($max_execution_time === 0) {
+        $max_execution_time = 300; // No limit, assume generous
+    }
+    
+    // Detect hosting environment hints
+    $is_low_memory = $memory_mb < 256;
+    $is_medium_memory = $memory_mb >= 256 && $memory_mb < 512;
+    $is_high_memory = $memory_mb >= 512;
+    
+    // Calculate server tier based primarily on memory (timeout is less important since we handle it with adaptive sizing)
+    // Memory is the key constraint - timeout issues are handled by our adaptive batch reduction
+    $server_tier = 'medium'; // Default: balanced
+    
+    if ($is_high_memory) {
+        // 512MB+ RAM = high tier (timeout doesn't matter much, we handle it)
+        $server_tier = 'high';
+    } elseif ($is_medium_memory) {
+        // 256-512MB RAM = medium tier
+        $server_tier = 'medium';
+    } elseif ($is_low_memory) {
+        // < 256MB RAM = low tier (memory is the real constraint)
+        $server_tier = 'low';
+    }
+    
+    // Downgrade tier if timeout is extremely short (< 30s is very restrictive)
+    if ($max_execution_time > 0 && $max_execution_time < 30 && $server_tier !== 'low') {
+        $server_tier = 'medium'; // Downgrade high to medium, keep medium as medium
+    }
+    
+    // Define batch sizes for each tier
+    $batch_configs = [
+        'low' => [
+            'products' => 5,
+            'categories' => 15,
+            'customers' => 10,
+            'orders' => 10,
+            'batch_delay' => 5000, // 5 seconds
+            'description' => 'Low-resource server (< 256MB RAM)'
+        ],
+        'medium' => [
+            'products' => 15,
+            'categories' => 30,
+            'customers' => 25,
+            'orders' => 25,
+            'batch_delay' => 3000, // 3 seconds
+            'description' => 'Medium-resource server (256-512MB RAM)'
+        ],
+        'high' => [
+            'products' => 25,
+            'categories' => 50,
+            'customers' => 35,
+            'orders' => 35,
+            'batch_delay' => 2000, // 2 seconds
+            'description' => 'High-resource server (512MB+ RAM)'
+        ]
+    ];
+    
+    $config = $batch_configs[$server_tier];
+    
+    return [
+        'server_tier' => $server_tier,
+        'memory_limit_mb' => round($memory_mb),
+        'max_execution_time' => $max_execution_time,
+        'products_batch' => $config['products'],
+        'categories_batch' => $config['categories'],
+        'customers_batch' => $config['customers'],
+        'orders_batch' => $config['orders'],
+        'batch_delay_ms' => $config['batch_delay'],
+        'description' => $config['description']
+    ];
+}
+
+define('ECWID2WOO_VERSION', '1.4.8');
 
 class Ecwid_WC_Sync {
     private $options;
@@ -389,11 +474,15 @@ class Ecwid_WC_Sync {
         wp_enqueue_style('ecwid-wc-sync-admin-css', plugin_dir_url(__FILE__) . 'assets/css/admin-styles.css', [], ECWID2WOO_VERSION);
         wp_enqueue_script('ecwid-wc-sync-admin', plugin_dir_url(__FILE__) . 'assets/js/admin-sync.js', ['jquery', 'wp-i18n'], ECWID2WOO_VERSION, true);
         
+        // Detect server capabilities for automatic batch size adjustment
+        $server_capabilities = ecwid2woo_detect_server_capabilities();
+        
         wp_localize_script('ecwid-wc-sync-admin', 'ecwid_sync_params', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce'    => wp_create_nonce('ecwid_wc_sync_nonce'),
             'sync_steps' => $this->sync_steps,
             'variation_batch_size' => defined('ECWID2WOO_VARIATION_BATCH_SIZE') ? ECWID2WOO_VARIATION_BATCH_SIZE : 50,
+            'server_capabilities' => $server_capabilities,
             'i18n' => [
                 'sync_starting' => __('Sync starting...', 'metrotechs-e2w-sync'),
                 'sync_complete' => __('Sync Complete!', 'metrotechs-e2w-sync'),

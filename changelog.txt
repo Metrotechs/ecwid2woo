@@ -1,5 +1,28 @@
 ** Metrotechs E2W Sync Changelog **
 
+2025-12-16 - version 1.4.8
+* NEW FEATURE - AUTO SERVER DETECTION: Automatically detects server resources and adjusts batch sizes
+* NEW - Server Tier Detection: Automatically categorizes servers as Low/Medium/High based on PHP memory and timeout limits
+* NEW - Dynamic Batch Sizing: Batch sizes automatically configured based on detected server tier
+* NEW - Adaptive Delays: Delay between batches adjusted automatically (2s-5s based on server capability)
+* ENHANCED - Low-memory servers (< 256MB): 5 products, 15 categories per batch, 5s delays
+* ENHANCED - Medium servers (256-512MB): 15 products, 30 categories per batch, 3s delays
+* ENHANCED - High-resource servers (512MB+): 50 products, 75 categories per batch, 2s delays
+* UX - Server capability info shown at sync start (memory, timeout, batch sizes)
+* UX - Visual tier indicator: 🚀 High, ⚡ Medium, 🐢 Low resource servers
+
+2025-12-16 - version 1.4.7
+* NEW FEATURE - SERVER DOWN RECOVERY: Handles Cloudflare server crash/overload errors (520, 521, 522, 523, 525, 526, 527, 530)
+* NEW - Extended Cooldown: When server is overloaded, waits 30-120 seconds before retrying (increases with each failure)
+* NEW - Aggressive Batch Reduction: On server crash, batch size reduced by 75% (double reduction) to ease server load
+* NEW - Visual Countdown: Shows countdown timer during server recovery cooldown period
+* NEW - Cloudflare Error Messages: Human-readable descriptions for all Cloudflare origin errors
+* ENHANCED - 521 "Web Server Down" now properly detected and triggers recovery mode
+* ENHANCED - 520 "Unknown Error" (server crash) now waits 30s+ instead of 3s retry
+* ENHANCED - 525 SSL Handshake failures (server overload) now trigger cooldown period
+* UX - Server recovery status shown in sync log with 🔥 SERVER OVERLOAD DETECTED message
+* UX - Clear suggestions when server repeatedly crashes (wait, off-peak hours, contact host)
+
 2025-12-16 - version 1.4.6
 * NEW FEATURE - ADAPTIVE BATCH SIZING: Automatically reduces batch size when timeout errors occur
 * NEW - Cloudflare 524 Detection: Specifically handles Cloudflare's 100-second timeout errors

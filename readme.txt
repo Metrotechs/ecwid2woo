@@ -5,7 +5,7 @@ Tags: ecwid, woocommerce, migration, sync, ecommerce
 Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 7.2
-Stable tag: 1.4.6
+Stable tag: 1.4.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
@@ -240,6 +240,47 @@ The plugin uses intelligent multi-tier matching:
 6. **Navigation Interface** - Modern, intuitive admin navigation
 
 == Changelog ==
+
+= 1.4.8 =
+**Automatic Server Resource Detection**
+
+**Major Features:**
+* **Auto Server Detection** - Automatically detects server resources (memory, timeout limits) and adjusts batch sizes
+* **Server Tier System** - Categorizes servers as Low/Medium/High and configures optimal settings
+* **Dynamic Batch Sizing** - Batch sizes auto-configured based on detected server capabilities
+* **Adaptive Delays** - Delay between batches adjusted automatically (2-5 seconds based on server tier)
+
+**Server Tier Configurations:**
+* 🐢 **Low (< 256MB RAM):** 5 products, 15 categories, 5s delays
+* ⚡ **Medium (256-512MB RAM):** 15 products, 30 categories, 3s delays
+* 🚀 **High (512MB+ RAM):** 50 products, 75 categories, 2s delays
+
+**UX Improvements:**
+* Server capability info shown at sync start
+* Visual tier indicator with emoji (🚀 High, ⚡ Medium, 🐢 Low)
+* Memory and timeout limits displayed in sync log
+
+= 1.4.7 =
+**Server Crash Recovery & Extended Cloudflare Support**
+
+**Major Features:**
+* **Server Down Recovery** - Handles Cloudflare server crash/overload errors (520, 521, 522, 523, 525, 526, 527, 530)
+* **Extended Cooldown Periods** - Waits 30-120 seconds (increasing) when server is overloaded before retrying
+* **Aggressive Batch Reduction** - On server crash, batch size reduced by 75% to ease server load
+* **Visual Countdown Timer** - Shows countdown during server recovery cooldown period
+
+**Technical Enhancements:**
+* 520 (Web server crashed) - Now triggers 30s+ recovery cooldown
+* 521 (Web server down) - Properly detected with long cooldown
+* 522 (Connection timed out) - Server unreachable handling
+* 523 (Origin unreachable) - DNS/routing issue recovery
+* 525 (SSL handshake failed) - Server overload detection
+* Human-readable error messages for all Cloudflare origin errors
+
+**UX Improvements:**
+* 🔥 SERVER OVERLOAD DETECTED message in sync log
+* Clear countdown showing "Server recovery cooldown: X seconds remaining"
+* Helpful suggestions when server crashes repeatedly
 
 = 1.4.6 =
 **Adaptive Batch Sizing & Fast Skip Optimization**
