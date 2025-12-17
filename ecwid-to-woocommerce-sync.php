@@ -65,15 +65,15 @@ function ecwid2woo_woocommerce_missing_notice() {
 }
 
 if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
-    define('ECWID2WOO_VARIATION_BATCH_SIZE', 5); // Reduced from 50 to 10 for better stability
+    define('ECWID2WOO_VARIATION_BATCH_SIZE', 10); // Batch size for variation processing
 }
 
 if (!defined('ECWID2WOO_CATEGORY_BATCH_SIZE')) {
-    define('ECWID2WOO_CATEGORY_BATCH_SIZE', 50); // Smaller batch size to prevent server overload
+    define('ECWID2WOO_CATEGORY_BATCH_SIZE', 100); // Categories are lightweight, can handle larger batches
 }
 
 if (!defined('ECWID2WOO_PRODUCT_BATCH_SIZE')) {
-    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 5);
+    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 10); // Products with fast skip optimization
 }
 
 define('ECWID2WOO_VERSION', '1.4.5');
@@ -987,11 +987,23 @@ class Ecwid_WC_Sync {
         // Categories are lighter and can handle larger batches, products are heavier due to variations
         $sync_type = isset($_POST['sync_type']) ? sanitize_text_field(wp_unslash($_POST['sync_type'])) : '';
         
+        // Check if client sent a reduced batch size (adaptive batch sizing for timeout recovery)
+        $client_batch_size = isset($_POST['batch_size']) ? intval($_POST['batch_size']) : 0;
+        
         // Determine appropriate batch size based on sync type and available memory
         if ($sync_type === 'categories') {
             $default_batch_size = ECWID2WOO_CATEGORY_BATCH_SIZE;
         } else {
             $default_batch_size = ECWID2WOO_PRODUCT_BATCH_SIZE;
+        }
+        
+        // Use client-provided batch size if valid (for adaptive timeout recovery)
+        // But cap it at the default maximum to prevent abuse
+        if ($client_batch_size > 0 && $client_batch_size <= $default_batch_size) {
+            $default_batch_size = $client_batch_size;
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: Using client-requested batch size: $client_batch_size for $sync_type (adaptive timeout recovery)"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
         }
         
         // Adaptive batch sizing based on memory
@@ -1090,7 +1102,35 @@ class Ecwid_WC_Sync {
 
         $imported_count = 0; $updated_count = 0; $skipped_count = 0; $failed_count = 0;
         $batch_detailed_logs = [];
-        $batch_item_results = []; // <-- ADDED: To store structured results
+        $batch_item_results = []; // To store structured results
+        
+        // --- PRE-LOAD EXISTING ECWID IDS FOR FAST SKIP ---
+        // Instead of querying DB for each product, load all existing Ecwid IDs in one query
+        $existing_ecwid_ids_map = []; // Maps ecwid_id => wc_product_id
+        if ($sync_type === 'products' && !empty($items_from_api)) {
+            $ecwid_ids_to_check = array_column($items_from_api, 'id');
+            if (!empty($ecwid_ids_to_check)) {
+                global $wpdb;
+                // Single query to find all existing products with these Ecwid IDs
+                $placeholders = implode(',', array_fill(0, count($ecwid_ids_to_check), '%s'));
+                $query = $wpdb->prepare(
+                    "SELECT pm.meta_value as ecwid_id, pm.post_id 
+                     FROM {$wpdb->postmeta} pm 
+                     INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID 
+                     WHERE pm.meta_key = '_ecwid_product_id' 
+                     AND pm.meta_value IN ($placeholders)
+                     AND p.post_type = 'product'",
+                    $ecwid_ids_to_check
+                );
+                $results = $wpdb->get_results($query);
+                foreach ($results as $row) {
+                    $existing_ecwid_ids_map[$row->ecwid_id] = (int) $row->post_id;
+                }
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log("Ecwid Sync: Pre-loaded " . count($existing_ecwid_ids_map) . " existing products from batch of " . count($ecwid_ids_to_check)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+                }
+            }
+        }
 
         if (!empty($items_from_api)) {
             foreach ($items_from_api as $item_data) {
@@ -1106,7 +1146,7 @@ class Ecwid_WC_Sync {
                 try {
                     switch ($sync_type) {
                         case 'products':
-                            $result_array = $this->product_sync_handler->import_product($item_data);
+                            $result_array = $this->product_sync_handler->import_product($item_data, $existing_ecwid_ids_map);
                             break;
                         case 'categories':
                             $result_array = $this->category_sync_handler->import_category($item_data);

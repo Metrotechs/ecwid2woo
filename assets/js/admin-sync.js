@@ -89,6 +89,87 @@
         const totalFullSyncSteps = fullSyncSteps.length;
         const variationBatchSize = parseInt(ecwid_sync_params.variation_batch_size) || 50; // Ensure it's an integer
 
+        // --- Adaptive Batch Sizing ---
+        // Automatically reduces batch size when 524 (Cloudflare timeout) or similar errors occur
+        const adaptiveBatchConfig = {
+            // Default batch sizes (will be reduced on timeout errors)
+            categories: { current: 100, min: 10, default: 100 },
+            products: { current: 10, min: 1, default: 10 },
+            customers: { current: 25, min: 5, default: 25 },
+            orders: { current: 25, min: 5, default: 25 },
+            // Track consecutive timeouts per sync type
+            timeoutCounts: { categories: 0, products: 0, customers: 0, orders: 0 },
+            // Maximum retries before giving up (allows: 10→5→2→1, then 2 more at minimum)
+            maxTimeoutRetries: 6
+        };
+
+        /**
+         * Get current batch size for a sync type
+         */
+        function getAdaptiveBatchSize(syncType) {
+            if (adaptiveBatchConfig[syncType]) {
+                return adaptiveBatchConfig[syncType].current;
+            }
+            return 5; // Safe fallback
+        }
+
+        /**
+         * Reduce batch size after a timeout error
+         * Returns true if batch was reduced, false if already at minimum
+         */
+        function reduceBatchSize(syncType) {
+            if (!adaptiveBatchConfig[syncType]) return false;
+            
+            const config = adaptiveBatchConfig[syncType];
+            const oldSize = config.current;
+            
+            // Always increment timeout count
+            adaptiveBatchConfig.timeoutCounts[syncType]++;
+            
+            // Reduce by half, but not below minimum
+            config.current = Math.max(config.min, Math.floor(config.current / 2));
+            
+            if (config.current < oldSize) {
+                if (window.ecwidDebugMode) {
+                    console.log(`Adaptive batch: Reduced ${syncType} batch size from ${oldSize} to ${config.current}`);
+                }
+                return true;
+            }
+            return false; // Already at minimum
+        }
+
+        /**
+         * Reset batch size to default (call after successful sync completion)
+         */
+        function resetBatchSize(syncType) {
+            if (adaptiveBatchConfig[syncType]) {
+                adaptiveBatchConfig[syncType].current = adaptiveBatchConfig[syncType].default;
+                adaptiveBatchConfig.timeoutCounts[syncType] = 0;
+            }
+        }
+
+        /**
+         * Check if we've exceeded max timeout retries
+         */
+        function hasExceededTimeoutRetries(syncType) {
+            return adaptiveBatchConfig.timeoutCounts[syncType] >= adaptiveBatchConfig.maxTimeoutRetries;
+        }
+
+        /**
+         * Detect if an error is a timeout/524 error
+         */
+        function isTimeoutError(jqXHR, textStatus) {
+            // Cloudflare 524 timeout
+            if (jqXHR.status === 524) return true;
+            // jQuery timeout
+            if (textStatus === 'timeout') return true;
+            // Gateway timeout
+            if (jqXHR.status === 504) return true;
+            // Request timeout
+            if (jqXHR.status === 408) return true;
+            return false;
+        }
+
         // --- Utility Functions ---
         function capitalizeFirstLetter(string) {
             if (!string) return ''; // Handle empty or null string
@@ -892,13 +973,25 @@
                 .replace('{total}', totalKnownItems > 0 ? totalKnownItems : 'N/A');
             startBatchStatusAnimation(fullSyncStatusDiv, statusMsg);
 
+            // Get adaptive batch size for this sync type
+            const currentBatchSize = getAdaptiveBatchSize(syncType);
+            
             $.ajax({
                 url: ajax_url,
                 method: 'POST',
-                timeout: 300000, // 5 minutes timeout for full sync operations
-                data: { action: 'ecwid_wc_batch_sync', nonce: nonce, sync_type: syncType, offset: offset },
+                timeout: 90000, // 90 seconds - stay under Cloudflare's 100s limit
+                data: { action: 'ecwid_wc_batch_sync', nonce: nonce, sync_type: syncType, offset: offset, batch_size: currentBatchSize },
                 success: function(response) {
                     stopBatchStatusAnimation();
+                    // Reset timeout count on success (batch completed without timeout)
+                    adaptiveBatchConfig.timeoutCounts[syncType] = 0;
+                    
+                    // Log if we're running with a reduced batch size
+                    const defaultBatchSize = adaptiveBatchConfig[syncType] ? adaptiveBatchConfig[syncType].default : currentBatchSize;
+                    if (currentBatchSize < defaultBatchSize) {
+                        logMessage(fullSyncLogDiv, `[INFO] ⚡ Running with reduced batch size (${currentBatchSize}) to avoid timeouts.`, 'info');
+                    }
+                    
                     // Log the main batch_logs from PHP
                     (response.data.batch_logs || []).forEach(logEntry => categorizeAndLog(fullSyncLogDiv, logEntry));
 
@@ -1047,11 +1140,44 @@
                         errorData.message = 'API rate limit exceeded. Will retry automatically.';
                         errorData.error_type = 'rate_limit';
                         shouldRetry = true;
-                    } else if (textStatus === 'timeout') {
-                        errorData.message = 'Request timed out. The server is taking too long to respond. This may be due to a large batch size or server load.';
+                    } else if (jqXHR.status === 524 || jqXHR.status === 504 || jqXHR.status === 408 || textStatus === 'timeout') {
+                        // Handle timeout errors (524, 504, 408, or jQuery timeout) with adaptive batch sizing
+                        const currentBatch = getAdaptiveBatchSize(syncType);
+                        const canReduce = reduceBatchSize(syncType);
+                        const newBatch = getAdaptiveBatchSize(syncType);
+                        
+                        if (jqXHR.status === 524) {
+                            errorData.message = `Cloudflare timeout (524). Request exceeded 100 second limit.`;
+                        } else if (jqXHR.status === 504) {
+                            errorData.message = `Gateway timeout (504). Server took too long to respond.`;
+                        } else {
+                            errorData.message = `Request timed out. The server is taking too long to respond.`;
+                        }
+                        
                         errorData.error_type = 'timeout';
                         errorData.retry_recommended = true;
-                        shouldRetry = true;
+                        
+                        // Check if we should retry with adaptive batch sizing
+                        if (!hasExceededTimeoutRetries(syncType)) {
+                            // We haven't exhausted retries yet
+                            logMessage(fullSyncLogDiv, `[WARNING] ${errorData.message}`, 'warning');
+                            
+                            if (canReduce) {
+                                logMessage(fullSyncLogDiv, `[INFO] ⚡ Reducing batch size from ${currentBatch} to ${newBatch} and retrying...`, 'info');
+                            } else {
+                                logMessage(fullSyncLogDiv, `[INFO] ⚡ Already at minimum batch size (${newBatch}). Retrying... (attempt ${adaptiveBatchConfig.timeoutCounts[syncType]}/${adaptiveBatchConfig.maxTimeoutRetries})`, 'info');
+                            }
+                            
+                            setTimeout(() => {
+                                processFullSyncBatch(syncType, offset, totalKnownItems);
+                            }, 2000);
+                            return;
+                        } else {
+                            // Exhausted all retries
+                            errorData.message += `\n\nFailed after ${adaptiveBatchConfig.maxTimeoutRetries} attempts at minimum batch size (${newBatch}).`;
+                            errorData.message += '\n\nSuggestions:\n• Try again during off-peak hours\n• Contact your hosting provider about timeout limits\n• Consider upgrading your hosting plan';
+                        }
+                        shouldRetry = false; // Don't use standard retry, we handle it above
                     } else if (jqXHR.status === 0) {
                         errorData.message = 'Network connection error. Please check your internet connection and server settings.';
                         errorData.error_type = 'network_error';

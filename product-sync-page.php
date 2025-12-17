@@ -468,9 +468,10 @@ class Ecwid2Woo_Product_Sync {
      * Import a single product from Ecwid data
      * 
      * @param array $item The product data from Ecwid API
+     * @param array $existing_ecwid_ids_map Optional pre-loaded map of ecwid_id => wc_product_id for faster lookups
      * @return array Result array with status, logs, etc.
      */
-    public function import_product($item) {
+    public function import_product($item, $existing_ecwid_ids_map = []) {
         $product_logs = [];
         $product_name_for_log = isset($item['name']) ? sanitize_text_field($item['name']) : '[No Name]';
         $ecwid_id_for_log = $item['id'] ?? 'N/A';
@@ -518,8 +519,15 @@ class Ecwid2Woo_Product_Sync {
 
         // --- PRODUCT IDENTIFICATION AND TYPE HANDLING ---
         $product_id_by_ecwid_id = null;
-        $existing_products_by_ecwid_id_query = get_posts(['post_type' => 'product', 'meta_key' => '_ecwid_product_id', 'meta_value' => $ecwid_id_for_log, 'post_status' => 'any', 'numberposts' => 1, 'fields' => 'ids']);
-        if (!empty($existing_products_by_ecwid_id_query)) $product_id_by_ecwid_id = $existing_products_by_ecwid_id_query[0];
+        
+        // Fast path: Use pre-loaded map if available
+        if (!empty($existing_ecwid_ids_map) && isset($existing_ecwid_ids_map[$ecwid_id_for_log])) {
+            $product_id_by_ecwid_id = $existing_ecwid_ids_map[$ecwid_id_for_log];
+        } else {
+            // Fallback: Individual query (slower, but works for single product imports)
+            $existing_products_by_ecwid_id_query = get_posts(['post_type' => 'product', 'meta_key' => '_ecwid_product_id', 'meta_value' => $ecwid_id_for_log, 'post_status' => 'any', 'numberposts' => 1, 'fields' => 'ids']);
+            if (!empty($existing_products_by_ecwid_id_query)) $product_id_by_ecwid_id = $existing_products_by_ecwid_id_query[0];
+        }
 
         $product_id_by_sku = wc_get_product_id_by_sku($sku_for_log);
         $product_id = $product_id_by_ecwid_id ?: $product_id_by_sku; // Prioritize match by Ecwid ID
