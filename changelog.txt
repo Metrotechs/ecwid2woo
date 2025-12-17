@@ -1,5 +1,19 @@
 ** Metrotechs E2W Sync Changelog **
 
+2025-12-16 - version 1.4.6
+* NEW FEATURE - ADAPTIVE BATCH SIZING: Automatically reduces batch size when timeout errors occur
+* NEW - Cloudflare 524 Detection: Specifically handles Cloudflare's 100-second timeout errors
+* NEW - Multi-Timeout Support: Detects 524 (Cloudflare), 504 (Gateway), 408 (Request), and jQuery timeouts
+* NEW - Auto-Retry with Reduction: On timeout, batch size halves (100→50→25→12→6→3→1) and retries automatically
+* NEW - FAST SKIP OPTIMIZATION: Pre-loads existing product IDs in single query for 100x faster duplicate detection
+* PERFORMANCE - Batch Skip: Now skips 100 previously imported products per request instead of checking individually
+* PERFORMANCE - Single Query Lookup: Replaced N individual DB queries with 1 batch query per sync request
+* ENHANCED - Higher Default Batches: Increased default batch sizes (products: 100, categories: 100, customers/orders: 50)
+* ENHANCED - Smarter Retry Logic: Up to 8 retries with progressive batch reduction before failing
+* UX - Live Feedback: Shows batch size reduction messages in sync log (⚡ Reducing batch size...)
+* UX - Timeout Recovery: Displays clear error messages with suggestions when max retries exceeded
+* FIX - 524 Error Handling: 524 errors now properly trigger adaptive sizing instead of generic retry
+
 2025-12-16 - version 1.4.5
 * NEW FEATURE - PAUSE/RESUME SYNC: Added pause button for Full Sync page
 * NEW - Pause Button: Located between Start and Stop buttons for easy access

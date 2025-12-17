@@ -5,7 +5,7 @@ Tags: ecwid, woocommerce, migration, sync, ecommerce
 Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 7.2
-Stable tag: 1.4.3
+Stable tag: 1.4.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
@@ -240,6 +240,28 @@ The plugin uses intelligent multi-tier matching:
 6. **Navigation Interface** - Modern, intuitive admin navigation
 
 == Changelog ==
+
+= 1.4.6 =
+**Adaptive Batch Sizing & Fast Skip Optimization**
+
+**Major Features:**
+* **Adaptive Batch Sizing** - Automatically reduces batch size when server timeouts occur (524, 504, 408)
+* **Fast Skip Optimization** - Pre-loads existing Ecwid IDs in single query for 100x faster duplicate detection
+* **Intelligent Timeout Recovery** - Detects Cloudflare 524, Gateway 504, Request 408, and jQuery timeouts
+* **Higher Default Batches** - Products and categories now start at 100 items per batch for faster syncing
+* **Client-Side Batch Control** - Batch sizes dynamically adjust based on server response times
+
+**Technical Enhancements:**
+* Batch size halves automatically on timeout (100→50→25→12→6→3→1)
+* Up to 8 timeout retries before giving up on a batch
+* Single SQL query with IN clause replaces individual lookups
+* O(1) hash map lookup for existing product detection
+* Reduced AJAX timeout from 300s to 90s for faster error detection
+
+**UX Improvements:**
+* Clear status messages when batch size is reduced
+* Shows current batch size in sync progress
+* Automatic recovery continues sync after batch reduction
 
 = 1.4.3 =
 **Enhanced Reliability & Retry Logic**

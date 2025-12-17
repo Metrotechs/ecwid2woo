@@ -73,10 +73,10 @@ if (!defined('ECWID2WOO_CATEGORY_BATCH_SIZE')) {
 }
 
 if (!defined('ECWID2WOO_PRODUCT_BATCH_SIZE')) {
-    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 10); // Products with fast skip optimization
+    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 100); // Large batch for fast skipping, adaptive sizing handles timeouts
 }
 
-define('ECWID2WOO_VERSION', '1.4.5');
+define('ECWID2WOO_VERSION', '1.4.6');
 
 class Ecwid_WC_Sync {
     private $options;

@@ -94,13 +94,13 @@
         const adaptiveBatchConfig = {
             // Default batch sizes (will be reduced on timeout errors)
             categories: { current: 100, min: 10, default: 100 },
-            products: { current: 10, min: 1, default: 10 },
-            customers: { current: 25, min: 5, default: 25 },
-            orders: { current: 25, min: 5, default: 25 },
+            products: { current: 100, min: 1, default: 100 },
+            customers: { current: 50, min: 5, default: 50 },
+            orders: { current: 50, min: 5, default: 50 },
             // Track consecutive timeouts per sync type
             timeoutCounts: { categories: 0, products: 0, customers: 0, orders: 0 },
-            // Maximum retries before giving up (allows: 10→5→2→1, then 2 more at minimum)
-            maxTimeoutRetries: 6
+            // Maximum retries before giving up (allows: 100→50→25→12→6→3→1, then 2 more at minimum)
+            maxTimeoutRetries: 8
         };
 
         /**

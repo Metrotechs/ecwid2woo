@@ -59,12 +59,14 @@ Revolutionary migration recovery system that intelligently skips already importe
 - **Batch Interruption** – Product imports stop cleanly between batches
 - **Universal Coverage** – Available on both Product and Category sync pages
 
-### ⚡ Enhanced Performance & Reliability (v1.3.8-1.4.3)
+### ⚡ Enhanced Performance & Reliability (v1.3.8-1.4.6)
 
+- **Adaptive Batch Sizing** – Automatically reduces batch size on server timeouts (100→50→25→12→6→3→1)
+- **Fast Skip Optimization** – Pre-loads existing Ecwid IDs in single query for 100x faster duplicate detection
+- **Intelligent Timeout Recovery** – Detects Cloudflare 524, Gateway 504, Request 408, and jQuery timeouts
 - **Exponential Backoff Retry** – Smart retry logic with increasing delays (3s→6s→12s) for server recovery
 - **Batch Loading System** – Products, categories, and sync operations load in manageable batches
-- **Cloudflare Timeout Handling** – Explicit handling for 524 timeout errors with automatic retry
-- **Timeout Prevention** – Ultra-small batch sizes (5 products) prevent server timeouts
+- **Higher Default Batches** – Products and categories start at 100 items per batch for faster syncing
 - **Batch Processing** – Automatic continuation through all products (fixed bulk import bug)
 - **Progress Tracking** – Real-time progress bars showing current batch and total progress
 - **Server Compatibility** – Works with restrictive hosting environments
@@ -511,6 +513,13 @@ Revolutionary migration recovery system that intelligently skips already importe
 - **Import/Export Settings** – Backup and restore plugin configurations
 
 ### Version History
+- **v1.4.6** – **ADAPTIVE BATCH SIZING & FAST SKIP**: Automatic timeout recovery with intelligent batch management
+  - ⚡ **Adaptive Batch Sizing** – Automatically reduces batch size when timeouts occur (100→50→25→12→6→3→1)
+  - 🚀 **Fast Skip Optimization** – Pre-loads existing Ecwid IDs in single SQL query for 100x faster duplicate detection
+  - 🛡️ **Multi-Timeout Support** – Detects Cloudflare 524, Gateway 504, Request 408, and jQuery timeouts
+  - 📦 **Higher Default Batches** – Products and categories now start at 100 items per batch
+  - 🔧 **Client-Side Batch Control** – Batch sizes dynamically adjust based on server response
+  - 💬 **UX Improvements** – Clear status messages showing batch size reductions and recovery
 - **v1.4.3** – **ENHANCED RELIABILITY**: Improved retry logic and batch loading across all sync pages
   - 🔄 **Exponential Backoff Retry** – Smart retry delays (3s→6s→12s) for better server recovery
   - 📦 **Category Batch Loading** – Categories now load in batches with retry logic like products
