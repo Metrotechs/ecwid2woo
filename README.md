@@ -11,17 +11,27 @@ Transform your e-commerce presence with the most advanced, reliable, and feature
 
 ---
 
-## 🧠 **NEW: Smart Skip Technology + Image Preservation** 
+## 🧠 **NEW: Smart Skip Technology + Self-Healing Batch Processing** 
 
-Revolutionary migration recovery system that intelligently skips already imported **products AND categories**, preserving all existing images and making large store migrations (1000+ products) resume seamlessly from interruptions. **70-90% time savings** when restarting migrations with **complete image safety**.
+Revolutionary migration system featuring **intelligent skip technology** for products AND categories, plus **self-optimizing batch processing** that automatically adapts to your server's capabilities. No configuration required – it just works.
 
 ### 🎯 **Smart Skip Benefits:**
 - **Intelligent Resume** – Automatically continues from where migration left off
 - **Products & Categories** – Smart Skip works on both product and category syncs
 - **Image Preservation** – Existing product images are never deleted during updates
 - **Timestamp Comparison** – Compares Ecwid update dates with local import records
-- **Memory Optimization** – Adaptive batch sizing prevents server errors
+- **70-90% Time Savings** – Skip already-imported items when restarting migrations
 - **Legacy Support** – Handles items imported before Smart Skip implementation
+
+### ⚡ **Self-Healing Batch Processing:**
+- **Bidirectional Sizing** – Batch size decreases on timeouts AND recovers after stability
+- **Auto-Recovery** – After 5 successful batches, size increases by 50% (50→75→100)
+- **Zero Configuration** – Works optimally on shared hosting AND high-end VPS
+- **Timeout Protection** – Automatically halves batch size on 524/504/408 errors
+- **Progressive Cooldowns** – Server recovery waits increase with consecutive timeouts
+- **Memory-Aware** – Reduces batch size automatically if memory is low
+
+**Example:** `100 → [timeout] → 50 → [5 successes] → 75 → [5 successes] → 100 ✓`
 
 ---
 
