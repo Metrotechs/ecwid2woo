@@ -1167,7 +1167,7 @@ class Ecwid_WC_Sync {
             $query_params_for_url['enabled'] = 'true';
             $query_params_for_url['responseFields'] = 'items(id,sku,name,price,description,shortDescription,enabled,weight,quantity,unlimited,categoryIds,hdThumbnailUrl,imageUrl,galleryImages,options,combinations(id,sku,price,compareToPrice,defaultDisplayedPrice,defaultDisplayedCompareToPrice,options,quantity),productClassId,attributes,compareToPrice,dimensions,shipping)';
         } elseif ($sync_type === 'categories') {
-            $query_params_for_url['responseFields'] = 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl)';
+            $query_params_for_url['responseFields'] = 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl,updateTimestamp)';
         }
 
         $api_url = add_query_arg($query_params_for_url, $api_url_base);
@@ -3313,7 +3313,7 @@ class Ecwid_WC_Sync {
             $query_params = [
                 'limit' => $limit,
                 'offset' => $offset,
-                'responseFields' => 'items(id,name,parentId),total'
+                'responseFields' => 'items(id,name,parentId,updateTimestamp),total'
             ];
             $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories');
 
@@ -3422,7 +3422,7 @@ class Ecwid_WC_Sync {
             $detailed_logs[] = "--- Processing Category ID: $category_id ---";
             
             // Fetch individual category data from Ecwid
-            $query_params = ['responseFields' => 'id,name,parentId,description,hdThumbnailUrl,originalImageUrl'];
+            $query_params = ['responseFields' => 'id,name,parentId,description,hdThumbnailUrl,originalImageUrl,updateTimestamp'];
             $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories/' . $category_id);
 
             $response = wp_remote_get($api_url, [
@@ -3555,7 +3555,7 @@ class Ecwid_WC_Sync {
                 $query_params = [
                     'limit' => $limit,
                     'offset' => $offset,
-                    'responseFields' => 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl),total'
+                    'responseFields' => 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl,updateTimestamp),total'
                 ];
                 $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories');
 

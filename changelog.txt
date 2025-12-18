@@ -1,6 +1,7 @@
 ** Metrotechs E2W Sync Changelog **
 
 2025-12-18 - version 1.5.0
+* NEW FEATURE - CATEGORY SMART SKIP: Categories now skip unchanged imports using timestamp comparison
 * NEW FEATURE - REAL-TIME BATCH LOGGING: All sync pages now show detailed logs as each batch processes
 * NEW FEATURE - ADAPTIVE BATCH SIZING: Batch size automatically reduces on timeouts (100 → 50 → 25 → ...)
 * NEW FEATURE - BATCH SIZE RECOVERY: After 5 successful batches, batch size gradually increases back toward default

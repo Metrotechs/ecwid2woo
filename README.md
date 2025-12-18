@@ -13,14 +13,15 @@ Transform your e-commerce presence with the most advanced, reliable, and feature
 
 ## 🧠 **NEW: Smart Skip Technology + Image Preservation** 
 
-Revolutionary migration recovery system that intelligently skips already imported products AND preserves all existing images, making large store migrations (1000+ products) resume seamlessly from interruptions. **70-90% time savings** when restarting migrations with **complete image safety**.
+Revolutionary migration recovery system that intelligently skips already imported **products AND categories**, preserving all existing images and making large store migrations (1000+ products) resume seamlessly from interruptions. **70-90% time savings** when restarting migrations with **complete image safety**.
 
 ### 🎯 **Smart Skip Benefits:**
 - **Intelligent Resume** – Automatically continues from where migration left off
+- **Products & Categories** – Smart Skip works on both product and category syncs
 - **Image Preservation** – Existing product images are never deleted during updates
 - **Timestamp Comparison** – Compares Ecwid update dates with local import records
 - **Memory Optimization** – Adaptive batch sizing prevents server errors
-- **Legacy Support** – Handles products imported before Smart Skip implementation
+- **Legacy Support** – Handles items imported before Smart Skip implementation
 
 ---
 
@@ -42,10 +43,11 @@ Revolutionary migration recovery system that intelligently skips already importe
 
 ### 🧠 Smart Skip Technology (NEW)
 
-- **Migration Recovery** – Resume interrupted migrations without re-processing existing products
+- **Products & Categories** – Smart Skip works on both product and category syncs
+- **Migration Recovery** – Resume interrupted migrations without re-processing existing items
 - **Timestamp Intelligence** – Advanced comparison of Ecwid vs. local modification dates
 - **Adaptive Processing** – Conservative 24-hour skip rule for recently imported products
-- **Legacy Handling** – Automatic timestamp assignment for products imported before Smart Skip
+- **Legacy Handling** – Automatic timestamp assignment for items imported before Smart Skip
 - **Debug Visibility** – Comprehensive logging of skip decisions and timestamp analysis
 - **Enterprise Scale** – Tested with 4500+ product migrations
 

@@ -315,7 +315,7 @@ class Ecwid2Woo_Full_Sync {
         if ($sync_type === 'products') {
             $query_params_for_url['responseFields'] = 'items(id,sku,name,price,description,shortDescription,enabled,weight,quantity,unlimited,categoryIds,hdThumbnailUrl,imageUrl,galleryImages,options,combinations(id,sku,price,compareToPrice,defaultDisplayedPrice,defaultDisplayedCompareToPrice,options,quantity),productClassId,attributes,compareToPrice,dimensions,shipping)';
         } elseif ($sync_type === 'categories') {
-            $query_params_for_url['responseFields'] = 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl)';
+            $query_params_for_url['responseFields'] = 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl,updateTimestamp)';
         } elseif ($sync_type === 'customers') {
             $query_params_for_url['responseFields'] = 'items(id,email,name,customerGroupId,customerGroupName,acceptMarketing,registered,lang,billingPerson,shippingAddresses)';
         } elseif ($sync_type === 'orders') {

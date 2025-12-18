@@ -31,10 +31,11 @@ Go beyond basic product sync with full customer and order migration capabilities
 == Key Features ==
 
 **🧠 Smart Skip Technology (NEW)**
-- **Intelligent Resume:** Automatically skips imported products and continues migration from interruption point
+- **Products & Categories:** Smart Skip now works on both product and category syncs
+- **Intelligent Resume:** Automatically skips imported items and continues migration from interruption point
 - **Timestamp Comparison:** Compares Ecwid update dates with local import timestamps
 - **Migration Recovery:** 70-90% time savings when restarting large migrations
-- **Legacy Product Handling:** Automatically manages products imported before Smart Skip implementation
+- **Legacy Handling:** Automatically manages items imported before Smart Skip implementation
 - **Memory Optimization:** Adaptive batch sizing based on available server memory
 
 **🔄 Complete Migration Suite**

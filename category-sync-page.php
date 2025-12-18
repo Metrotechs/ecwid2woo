@@ -433,11 +433,100 @@ class Ecwid2Woo_Category_Sync {
             $existing_wc_term_id_by_ecwid_meta = $this->parent_plugin->get_term_id_by_ecwid_id($ecwid_cat_id, 'product_cat', true);
 
             if ($existing_wc_term_id_by_ecwid_meta) {
+                // --- SMART SKIP LOGIC: Check if category needs updating ---
+                $should_skip = false;
+                $ecwid_updated_timestamp = null;
+                $local_import_timestamp = get_term_meta($existing_wc_term_id_by_ecwid_meta, '_ecwid_last_import_time', true);
+                
+                // Check if Ecwid category has an updated/modified timestamp
+                if (isset($item['updated'])) {
+                    $ecwid_updated_timestamp = strtotime($item['updated']);
+                } elseif (isset($item['updateTimestamp'])) {
+                    $ecwid_updated_timestamp = $item['updateTimestamp']; // Already a Unix timestamp
+                } elseif (isset($item['createTimestamp'])) {
+                    $ecwid_updated_timestamp = $item['createTimestamp']; // Already a Unix timestamp
+                }
+                
+                // Debug: Log what timestamp fields are available
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    $available_dates = [];
+                    foreach (['updated', 'updateTimestamp', 'createTimestamp'] as $field) {
+                        if (isset($item[$field])) {
+                            $available_dates[] = "$field: " . $item[$field];
+                        }
+                    }
+                    if (!empty($available_dates)) {
+                        $category_logs[] = "DEBUG: Available Ecwid timestamps: " . implode(', ', $available_dates);
+                    }
+                }
+                
+                // Get current term data to check for actual changes
+                $current_term_data = get_term($existing_wc_term_id_by_ecwid_meta, 'product_cat');
+                
+                // If we have both timestamps, compare them
+                if ($ecwid_updated_timestamp && $local_import_timestamp) {
+                    if ($ecwid_updated_timestamp <= $local_import_timestamp) {
+                        $should_skip = true;
+                        $category_logs[] = "SKIPPING: Category has not been modified since last import. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", Last imported: " . gmdate('Y-m-d H:i:s', $local_import_timestamp);
+                    } else {
+                        $category_logs[] = "UPDATE NEEDED: Category has been modified since last import. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", Last imported: " . gmdate('Y-m-d H:i:s', $local_import_timestamp);
+                    }
+                } elseif ($local_import_timestamp) {
+                    // Category was imported before but no Ecwid timestamp available
+                    // Check if it was imported recently (within last 24 hours) - if so, safe to skip
+                    $hours_since_import = (time() - $local_import_timestamp) / 3600;
+                    if ($hours_since_import < 24) {
+                        $should_skip = true;
+                        $category_logs[] = "SKIPPING: Category was imported recently (" . round($hours_since_import, 1) . " hours ago). No Ecwid timestamp available.";
+                    } else {
+                        $category_logs[] = "Category was previously imported but no Ecwid update timestamp available. Will update to be safe.";
+                    }
+                } elseif ($current_term_data) {
+                    // No local import timestamp but term exists - check if content has actually changed
+                    $current_name = $current_term_data->name;
+                    $current_desc = $current_term_data->description;
+                    $current_parent = $current_term_data->parent;
+                    
+                    $new_desc = isset($args['description']) ? $args['description'] : '';
+                    
+                    // Compare name, description, and parent
+                    $name_unchanged = ($current_name === $ecwid_cat_name);
+                    $desc_unchanged = ($current_desc === $new_desc);
+                    $parent_unchanged = ($current_parent == $parent_wc_term_id);
+                    
+                    if ($name_unchanged && $desc_unchanged && $parent_unchanged) {
+                        $should_skip = true;
+                        $category_logs[] = "SKIPPING: No changes detected (name, description, parent all match). Setting import timestamp for future reference.";
+                        // Set timestamp for future Smart Skip checks
+                        update_term_meta($existing_wc_term_id_by_ecwid_meta, '_ecwid_last_import_time', time());
+                    } else {
+                        $changes = [];
+                        if (!$name_unchanged) $changes[] = "name";
+                        if (!$desc_unchanged) $changes[] = "description";
+                        if (!$parent_unchanged) $changes[] = "parent";
+                        $category_logs[] = "UPDATE NEEDED: Changes detected in: " . implode(', ', $changes);
+                    }
+                }
+                
+                // Return early if skipping
+                if ($should_skip) {
+                    return [
+                        'status' => 'skipped',
+                        'logs' => $category_logs,
+                        'item_name' => $item_name_for_return,
+                        'ecwid_id' => $ecwid_id_for_return,
+                        'wc_term_id' => $existing_wc_term_id_by_ecwid_meta
+                    ];
+                }
+                
                 $category_logs[] = "Existing WC Term ID $existing_wc_term_id_by_ecwid_meta found linked to Ecwid ID $ecwid_cat_id. Updating...";
                 $update_args = ['name' => wp_slash($ecwid_cat_name)];
                 if (isset($args['description'])) $update_args['description'] = $args['description'];
 
-                $current_term_data = get_term($existing_wc_term_id_by_ecwid_meta, 'product_cat');
+                // Re-fetch current_term_data if not already fetched
+                if (!$current_term_data) {
+                    $current_term_data = get_term($existing_wc_term_id_by_ecwid_meta, 'product_cat');
+                }
                 if ($current_term_data && $current_term_data->parent != $parent_wc_term_id) {
                     $update_args['parent'] = $parent_wc_term_id;
                     $category_logs[] = "Updating parent for WC Term ID $existing_wc_term_id_by_ecwid_meta. Old parent: {$current_term_data->parent}, New parent target: $parent_wc_term_id.";
@@ -453,6 +542,9 @@ class Ecwid2Woo_Category_Sync {
                 }
                 clean_term_cache($existing_wc_term_id_by_ecwid_meta, 'product_cat');
                 $category_logs[] = "Updated successfully (WC Term ID: $existing_wc_term_id_by_ecwid_meta). Cache cleaned.";
+                
+                // Track import timestamp for Smart Skip
+                update_term_meta($existing_wc_term_id_by_ecwid_meta, '_ecwid_last_import_time', time());
                 
                 // Handle category image import for existing category
                 $this->handle_category_image_import($item, $existing_wc_term_id_by_ecwid_meta, $category_logs);
@@ -613,6 +705,9 @@ class Ecwid2Woo_Category_Sync {
                 if ($meta_update_result) {
                     clean_term_cache($new_term_id, 'product_cat');
                     $category_logs[] = "Imported successfully (New WC Term ID: $new_term_id). Meta update successful. Cache cleaned.";
+                    
+                    // Track import timestamp for Smart Skip
+                    update_term_meta($new_term_id, '_ecwid_last_import_time', time());
                     
                     // Handle category image import
                     $this->handle_category_image_import($item, $new_term_id, $category_logs);
@@ -884,7 +979,7 @@ class Ecwid2Woo_Category_Sync {
         $query_params = [
             'limit' => $page_limit,
             'offset' => $page_offset,
-            'responseFields' => 'items(id,name,parentId),total,count,offset,limit'
+            'responseFields' => 'items(id,name,parentId,updateTimestamp),total,count,offset,limit'
         ];
         $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories');
 
@@ -1001,7 +1096,7 @@ class Ecwid2Woo_Category_Sync {
         
         foreach ($selected_category_ids as $category_id) {
             // Fetch individual category data from Ecwid
-            $query_params = ['responseFields' => 'id,name,parentId,description,hdThumbnailUrl,originalImageUrl'];
+            $query_params = ['responseFields' => 'id,name,parentId,description,hdThumbnailUrl,originalImageUrl,updateTimestamp'];
             $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories/' . $category_id);
 
             $response = wp_remote_get($api_url, [
@@ -1160,7 +1255,7 @@ class Ecwid2Woo_Category_Sync {
                 $query_params = [
                     'limit' => $limit,
                     'offset' => $offset,
-                    'responseFields' => 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl),total'
+                    'responseFields' => 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl,updateTimestamp),total'
                 ];
                 $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories');
 
@@ -1401,7 +1496,7 @@ class Ecwid2Woo_Category_Sync {
         $query_params = [
             'limit' => $batch_size,
             'offset' => $offset,
-            'responseFields' => 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl),total,count,offset'
+            'responseFields' => 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl,updateTimestamp),total,count,offset'
         ];
         $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories');
 
