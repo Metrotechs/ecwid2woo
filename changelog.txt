@@ -1,5 +1,30 @@
 ** Metrotechs E2W Sync Changelog **
 
+2025-12-18 - version 1.5.0
+* NEW FEATURE - CATEGORY PARENT-FIRST SORTING: Categories are now sorted before import to ensure parents are processed before children
+* NEW - Topological Sort: Uses breadth-first traversal to guarantee parent categories exist before their children
+* NEW - Auto-Fix Orphaned Children: When a parent category is imported, any previously orphaned children are automatically re-parented
+* NEW - Missing Parent Tracking: Stores parent-child relationships for categories imported out of order, fixes them automatically
+* NEW - Next Step Messaging: Shows what sync step is coming next (e.g., "Next: Syncing Customers...")
+* ENHANCED - Batch Size Constants: Server detection now respects PHP constants (ECWID2WOO_PRODUCT_BATCH_SIZE, ECWID2WOO_CATEGORY_BATCH_SIZE)
+* ENHANCED - Step Completion Logs: Clear ✅ success messages when each sync step completes
+* FIX - "Parent category not found" warnings significantly reduced by processing parents first
+* FIX - Categories with deep nesting now import correctly in proper hierarchy
+* FIX - Variation SKU validation now properly identifies variations belonging to same Ecwid product
+* ENHANCED - Standardized variation meta key to _ecwid_variation_id with backward compatibility for _ecwid_combination_id
+* FIX - Variation Ecwid IDs now properly displayed in SKU integrity warnings (was showing empty)
+* NEW - Auto-backfill of missing Ecwid IDs when updating existing variations
+
+2025-12-16 - version 1.4.9
+* NEW FEATURE - API PERMISSION ERROR DETECTION: Better handling of empty API responses
+* NEW - Empty Response Detection: Detects when Ecwid API returns empty response (common for permission issues)
+* NEW - Permission Error Guidance: Shows specific guidance for customer/order API permission errors
+* NEW - Smart Error Classification: Distinguishes between server errors (retry) and permission errors (check settings)
+* ENHANCED - Customer API errors now suggest checking "Read customers" permission in Ecwid API settings
+* ENHANCED - Order API errors now suggest checking "Read orders" permission in Ecwid API settings
+* UX - Clear 🔑 icon and guidance when API permissions are likely the issue
+* UX - Direct link to Ecwid Admin → Apps → API → Access Tokens in error messages
+
 2025-12-16 - version 1.4.8
 * NEW FEATURE - AUTO SERVER DETECTION: Automatically detects server resources and adjusts batch sizes
 * NEW - Server Tier Detection: Automatically categorizes servers as Low/Medium/High based on PHP memory and timeout limits

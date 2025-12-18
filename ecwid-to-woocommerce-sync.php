@@ -4,7 +4,7 @@ Plugin Name: Metrotechs E2W Sync
 Description: Professional Ecwid to WooCommerce synchronization plugin by Metrotechs.
 Plugin URI: https://metrotechs.io/plugins/ecwid2woo/
 Author URI: https://metrotechs.io
-Version: 1.4.5
+Version: 1.5.0
 Author: Metrotechs
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -65,16 +65,16 @@ function ecwid2woo_woocommerce_missing_notice() {
 }
 
 if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
-    define('ECWID2WOO_VARIATION_BATCH_SIZE', 10); // Batch size for variation processing
+    define('ECWID2WOO_VARIATION_BATCH_SIZE', 50); // Batch size for variation processing
 }
 
 // Server capability detection will override these defaults
 if (!defined('ECWID2WOO_CATEGORY_BATCH_SIZE')) {
-    define('ECWID2WOO_CATEGORY_BATCH_SIZE', 25); // Default, auto-adjusted by server detection
+    define('ECWID2WOO_CATEGORY_BATCH_SIZE', 100); // Default, auto-adjusted by server detection
 }
 
 if (!defined('ECWID2WOO_PRODUCT_BATCH_SIZE')) {
-    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 10); // Default, auto-adjusted by server detection
+    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 50); // Default, auto-adjusted by server detection
 }
 
 /**
@@ -119,26 +119,31 @@ function ecwid2woo_detect_server_capabilities() {
     }
     
     // Define batch sizes for each tier
+    // These are multipliers/percentages of the PHP constants defined above
+    // High tier = 100% of constant, Medium = 60%, Low = 20%
+    $product_max = defined('ECWID2WOO_PRODUCT_BATCH_SIZE') ? ECWID2WOO_PRODUCT_BATCH_SIZE : 50;
+    $category_max = defined('ECWID2WOO_CATEGORY_BATCH_SIZE') ? ECWID2WOO_CATEGORY_BATCH_SIZE : 100;
+    
     $batch_configs = [
         'low' => [
-            'products' => 5,
-            'categories' => 15,
+            'products' => max(5, intval($product_max * 0.2)),
+            'categories' => max(15, intval($category_max * 0.15)),
             'customers' => 10,
             'orders' => 10,
             'batch_delay' => 5000, // 5 seconds
             'description' => 'Low-resource server (< 256MB RAM)'
         ],
         'medium' => [
-            'products' => 15,
-            'categories' => 30,
+            'products' => max(10, intval($product_max * 0.5)),
+            'categories' => max(30, intval($category_max * 0.3)),
             'customers' => 25,
             'orders' => 25,
             'batch_delay' => 3000, // 3 seconds
             'description' => 'Medium-resource server (256-512MB RAM)'
         ],
         'high' => [
-            'products' => 25,
-            'categories' => 50,
+            'products' => $product_max,
+            'categories' => $category_max,
             'customers' => 35,
             'orders' => 35,
             'batch_delay' => 2000, // 2 seconds
@@ -161,7 +166,7 @@ function ecwid2woo_detect_server_capabilities() {
     ];
 }
 
-define('ECWID2WOO_VERSION', '1.4.8');
+define('ECWID2WOO_VERSION', '1.5.0');
 
 class Ecwid_WC_Sync {
     private $options;
@@ -895,23 +900,55 @@ class Ecwid_WC_Sync {
             ];
         }
         
+        // Check for empty response - this often indicates permission issues
+        if (empty(trim($raw_response_body))) {
+            // Determine likely cause based on the endpoint being called
+            $endpoint_hint = '';
+            if (strpos($url ?? '', '/customers') !== false) {
+                $endpoint_hint = __('Your API token may not have "Read customers" permission, or your Ecwid plan may not include customer API access.', 'metrotechs-e2w-sync');
+            } elseif (strpos($url ?? '', '/orders') !== false) {
+                $endpoint_hint = __('Your API token may not have "Read orders" permission, or your Ecwid plan may not include order API access.', 'metrotechs-e2w-sync');
+            } else {
+                $endpoint_hint = __('This could be a temporary Ecwid server issue, or a permission problem with your API token.', 'metrotechs-e2w-sync');
+            }
+            
+            $user_friendly_message = __('Ecwid API returned an empty response.', 'metrotechs-e2w-sync') . ' ' . $endpoint_hint;
+            
+            return [
+                'is_server_error' => false, // Not a server error - likely permissions
+                'is_permission_error' => true,
+                'user_message' => $user_friendly_message,
+                'technical_message' => __('Empty response from Ecwid API - check API token permissions', 'metrotechs-e2w-sync'),
+                'retry_recommended' => false, // Retrying won't help if it's permissions
+                'error_data' => ['empty_response' => true, 'http_code' => $http_code]
+            ];
+        }
+        
         // Try to decode JSON response
         $body = json_decode($raw_response_body, true);
         
         // Check for JSON decode errors
         if (json_last_error() !== JSON_ERROR_NONE) {
-            $user_friendly_message = __('Ecwid API returned an invalid response format. This usually indicates server issues on Ecwid\'s side.', 'metrotechs-e2w-sync');
+            // Check if the response was empty (permission issue) vs malformed (server issue)
+            $is_likely_permission_issue = strlen(trim($raw_response_body)) < 10;
+            
+            if ($is_likely_permission_issue) {
+                $user_friendly_message = __('Ecwid API returned an unexpected response. This often indicates your API token lacks the required permissions for this data type.', 'metrotechs-e2w-sync');
+            } else {
+                $user_friendly_message = __('Ecwid API returned an invalid response format. This usually indicates server issues on Ecwid\'s side.', 'metrotechs-e2w-sync');
+            }
             
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log("Ecwid Sync: JSON decode error. Error: " . json_last_error_msg() . ". Raw response: " . substr($raw_response_body, 0, 500)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             }
             
             return [
-                'is_server_error' => true,
+                'is_server_error' => !$is_likely_permission_issue,
+                'is_permission_error' => $is_likely_permission_issue,
                 'user_message' => $user_friendly_message,
                 // translators: %1$s is the JSON error message, %2$s is the HTTP status code
                 'technical_message' => sprintf(__('JSON decode error: %1$s (HTTP %2$s)', 'metrotechs-e2w-sync'), json_last_error_msg(), $http_code),
-                'retry_recommended' => true,
+                'retry_recommended' => !$is_likely_permission_issue,
                 'error_data' => ['raw_response' => substr($raw_response_body, 0, 1000), 'json_error' => json_last_error_msg()]
             ];
         }
@@ -1184,6 +1221,11 @@ class Ecwid_WC_Sync {
                     error_log("Ecwid Sync: Categories API response for $sync_type was not in expected 'items' wrapper and not a direct array of categories. Raw Body: " . $raw_response_body); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
                 }
             }
+        }
+
+        // Sort categories so parents are imported before children
+        if ($sync_type === 'categories' && !empty($items_from_api)) {
+            $items_from_api = $this->sort_categories_parents_first($items_from_api);
         }
 
         $total_items_reported_by_api = $body['total'] ?? count($items_from_api);
@@ -2074,6 +2116,8 @@ class Ecwid_WC_Sync {
             if ($existing_vars_query->have_posts()) {
                 $variation_id = $existing_vars_query->posts[0];
                 $batch_logs[] = "Found existing WC Variation ID $variation_id for Ecwid Combo ID $ecwid_combination_id.";
+                // Ensure the meta is up to date (in case of any inconsistency)
+                update_post_meta($variation_id, '_ecwid_variation_id', $ecwid_combination_id);
             } else {
                 // Check if a variation with the desired SKU already exists
                 $desired_sku = $combo['sku'] ?? ($parent_sku . '-combo-' . $ecwid_combination_id);
@@ -2310,6 +2354,95 @@ class Ecwid_WC_Sync {
         }
         $missing_parents[$parent_ecwid_id][] = $child_ecwid_id;
         update_option('ecwid_wc_sync_missing_parents', $missing_parents);
+    }
+
+    /**
+     * Sort categories so parents are imported before children (topological sort)
+     * This prevents "Parent category not found" warnings by ensuring parent categories
+     * are always processed before their children within the same batch.
+     * 
+     * @param array $categories Array of category data from Ecwid API
+     * @return array Sorted array with parents before children
+     */
+    private function sort_categories_parents_first($categories) {
+        if (empty($categories)) {
+            return $categories;
+        }
+
+        // Build lookup maps
+        $categories_by_id = [];
+        $children_of = []; // parentId => [child_ids]
+        $root_categories = [];
+
+        foreach ($categories as $cat) {
+            $id = $cat['id'] ?? null;
+            if (!$id) continue;
+            
+            $categories_by_id[$id] = $cat;
+            $parent_id = isset($cat['parentId']) && intval($cat['parentId']) > 0 ? intval($cat['parentId']) : 0;
+            
+            if ($parent_id === 0) {
+                $root_categories[] = $id;
+            } else {
+                if (!isset($children_of[$parent_id])) {
+                    $children_of[$parent_id] = [];
+                }
+                $children_of[$parent_id][] = $id;
+            }
+        }
+
+        // Build sorted list using BFS (breadth-first) to ensure parents come before children
+        $sorted = [];
+        $queue = $root_categories;
+        $processed = [];
+
+        while (!empty($queue)) {
+            $current_id = array_shift($queue);
+            
+            // Skip if already processed (prevent infinite loops)
+            if (isset($processed[$current_id])) {
+                continue;
+            }
+            
+            // Check if parent is in this batch but not yet processed
+            $cat = $categories_by_id[$current_id] ?? null;
+            if ($cat) {
+                $parent_id = isset($cat['parentId']) && intval($cat['parentId']) > 0 ? intval($cat['parentId']) : 0;
+                
+                // If parent is in this batch and not yet processed, defer this item
+                if ($parent_id > 0 && isset($categories_by_id[$parent_id]) && !isset($processed[$parent_id])) {
+                    // Push to end of queue to process after parent
+                    $queue[] = $current_id;
+                    continue;
+                }
+                
+                $sorted[] = $cat;
+                $processed[$current_id] = true;
+                
+                // Add children to queue
+                if (isset($children_of[$current_id])) {
+                    foreach ($children_of[$current_id] as $child_id) {
+                        if (!isset($processed[$child_id])) {
+                            $queue[] = $child_id;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add any categories that weren't processed (orphans with parents not in this batch)
+        foreach ($categories as $cat) {
+            $id = $cat['id'] ?? null;
+            if ($id && !isset($processed[$id])) {
+                $sorted[] = $cat;
+            }
+        }
+
+        if (defined('WP_DEBUG') && WP_DEBUG && count($sorted) !== count($categories)) {
+            error_log("Ecwid Sync: Category sort - Input: " . count($categories) . ", Output: " . count($sorted)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+        }
+
+        return $sorted;
     }
 
     /**

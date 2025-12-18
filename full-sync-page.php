@@ -109,6 +109,91 @@ class Ecwid2Woo_Full_Sync {
     }
 
     /**
+     * Sort categories so parents are imported before children (topological sort)
+     * This prevents "Parent category not found" warnings by ensuring parent categories
+     * are always processed before their children within the same batch.
+     * 
+     * @param array $categories Array of category data from Ecwid API
+     * @return array Sorted array with parents before children
+     */
+    private function sort_categories_parents_first($categories) {
+        if (empty($categories)) {
+            return $categories;
+        }
+
+        // Build lookup maps
+        $categories_by_id = [];
+        $children_of = []; // parentId => [child_ids]
+        $root_categories = [];
+
+        foreach ($categories as $cat) {
+            $id = $cat['id'] ?? null;
+            if (!$id) continue;
+            
+            $categories_by_id[$id] = $cat;
+            $parent_id = isset($cat['parentId']) && intval($cat['parentId']) > 0 ? intval($cat['parentId']) : 0;
+            
+            if ($parent_id === 0) {
+                $root_categories[] = $id;
+            } else {
+                if (!isset($children_of[$parent_id])) {
+                    $children_of[$parent_id] = [];
+                }
+                $children_of[$parent_id][] = $id;
+            }
+        }
+
+        // Build sorted list using BFS (breadth-first) to ensure parents come before children
+        $sorted = [];
+        $queue = $root_categories;
+        $processed = [];
+
+        while (!empty($queue)) {
+            $current_id = array_shift($queue);
+            
+            // Skip if already processed (prevent infinite loops)
+            if (isset($processed[$current_id])) {
+                continue;
+            }
+            
+            // Check if parent is in this batch but not yet processed
+            $cat = $categories_by_id[$current_id] ?? null;
+            if ($cat) {
+                $parent_id = isset($cat['parentId']) && intval($cat['parentId']) > 0 ? intval($cat['parentId']) : 0;
+                
+                // If parent is in this batch and not yet processed, defer this item
+                if ($parent_id > 0 && isset($categories_by_id[$parent_id]) && !isset($processed[$parent_id])) {
+                    // Push to end of queue to process after parent
+                    $queue[] = $current_id;
+                    continue;
+                }
+                
+                $sorted[] = $cat;
+                $processed[$current_id] = true;
+                
+                // Add children to queue
+                if (isset($children_of[$current_id])) {
+                    foreach ($children_of[$current_id] as $child_id) {
+                        if (!isset($processed[$child_id])) {
+                            $queue[] = $child_id;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add any categories that weren't processed (orphans with parents not in this batch)
+        foreach ($categories as $cat) {
+            $id = $cat['id'] ?? null;
+            if ($id && !isset($processed[$id])) {
+                $sorted[] = $cat;
+            }
+        }
+
+        return $sorted;
+    }
+
+    /**
      * AJAX handler for batch sync operations
      */
     public function ajax_batch_sync() {
@@ -288,6 +373,11 @@ class Ecwid2Woo_Full_Sync {
                     error_log("Ecwid Sync: Categories API response for $sync_type was not in expected 'items' wrapper and not a direct array of categories. Raw Body: " . $raw_response_body); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
                 }
             }
+        }
+
+        // Sort categories so parents are imported before children
+        if ($sync_type === 'categories' && !empty($items_from_api)) {
+            $items_from_api = $this->sort_categories_parents_first($items_from_api);
         }
 
         $total_items_reported_by_api = $body['total'] ?? count($items_from_api);

@@ -513,6 +513,22 @@ Revolutionary migration recovery system that intelligently skips already importe
 - **Import/Export Settings** – Backup and restore plugin configurations
 
 ### Version History
+- **v1.5.0** – **CATEGORY HIERARCHY & PARENT-FIRST SORTING**: Proper category hierarchy with auto-fix
+  - 🏗️ **Parent-First Sorting** – Categories sorted before import so parents are always processed first
+  - 🔧 **Auto-Fix Orphaned Children** – When parent is imported, orphaned children are automatically re-parented
+  - 📝 **Missing Parent Tracking** – Stores relationships and fixes them when parent appears
+  - ➡️ **Next Step Messaging** – Shows upcoming sync step ("Next: Syncing Customers...")
+  - ⚙️ **Batch Size Constants** – Server detection respects your PHP constants
+  - ✅ **Step Completion Logs** – Clear success messages when each step completes
+  - 🔍 **Variation SKU Validation** – Properly identifies variations from same Ecwid product
+  - 🔑 **Standardized Meta Keys** – Uses `_ecwid_variation_id` with backward compatibility
+  - 🛠️ **Meta Backfill** – Auto-populates missing Ecwid IDs on existing variations
+- **v1.4.9** – **API PERMISSION ERROR DETECTION**: Smart handling of empty API responses and permission issues
+  - 🔑 **Empty Response Detection** – Detects when Ecwid API returns empty response (permission issues)
+  - 📋 **Permission Guidance** – Specific guidance for customer/order API permission errors
+  - 🎯 **Smart Classification** – Distinguishes server errors (retry) from permission errors (check settings)
+  - 💡 **Actionable Steps** – Direct link to Ecwid Admin → Apps → API → Access Tokens
+  - ⚡ **No Wasted Retries** – Doesn't retry permission-based errors
 - **v1.4.8** – **AUTO SERVER DETECTION**: Intelligent server resource detection and auto-configuration
   - 💻 **Server Detection** – Automatically detects PHP memory limit and timeout settings
   - 🎯 **Tier System** – Categorizes servers as 🚀 High, ⚡ Medium, 🐢 Low and auto-tunes

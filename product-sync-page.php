@@ -1068,6 +1068,9 @@ class Ecwid2Woo_Product_Sync {
 
             // Save variation
             $variation_id = $variation->save();
+            // Store Ecwid combination ID - use _ecwid_variation_id for consistency with main sync
+            update_post_meta($variation_id, '_ecwid_variation_id', $combination['id']);
+            // Also store with legacy key for backward compatibility
             update_post_meta($variation_id, '_ecwid_combination_id', $combination['id']);
             
             $product_logs[] = "Variation saved with ID: $variation_id";
@@ -1081,6 +1084,21 @@ class Ecwid2Woo_Product_Sync {
      * Get variation ID by Ecwid combination ID
      */
     private function get_variation_by_ecwid_id($parent_id, $ecwid_combination_id) {
+        // First try the standard key
+        $variations = get_posts([
+            'post_type' => 'product_variation',
+            'post_parent' => $parent_id,
+            'meta_key' => '_ecwid_variation_id',
+            'meta_value' => $ecwid_combination_id,
+            'numberposts' => 1,
+            'fields' => 'ids'
+        ]);
+
+        if (!empty($variations)) {
+            return $variations[0];
+        }
+
+        // Fallback to legacy key for backward compatibility
         $variations = get_posts([
             'post_type' => 'product_variation',
             'post_parent' => $parent_id,
@@ -1154,10 +1172,38 @@ class Ecwid2Woo_Product_Sync {
         foreach ($all_skus as $sku) {
             $existing_product_id = wc_get_product_id_by_sku($sku);
             if ($existing_product_id) {
-                // Check if this existing product belongs to the same Ecwid product
-                $existing_ecwid_id = get_post_meta($existing_product_id, '_ecwid_product_id', true);
+                $existing_product = wc_get_product($existing_product_id);
+                $existing_ecwid_id = '';
+                
+                if ($existing_product) {
+                    if ($existing_product->is_type('variation')) {
+                        // For variations, check _ecwid_variation_id on the variation itself
+                        // Also check legacy _ecwid_combination_id for backward compatibility
+                        // OR check the parent product's _ecwid_product_id
+                        $variation_ecwid_id = get_post_meta($existing_product_id, '_ecwid_variation_id', true);
+                        if (empty($variation_ecwid_id)) {
+                            // Try legacy key
+                            $variation_ecwid_id = get_post_meta($existing_product_id, '_ecwid_combination_id', true);
+                        }
+                        $parent_id = $existing_product->get_parent_id();
+                        $parent_ecwid_id = $parent_id ? get_post_meta($parent_id, '_ecwid_product_id', true) : '';
+                        
+                        // If the variation belongs to this Ecwid product, no warning needed
+                        if ($parent_ecwid_id === $ecwid_id) {
+                            continue; // Same Ecwid product, skip warning
+                        }
+                        
+                        // Use variation's combo ID if available, otherwise parent's product ID
+                        $existing_ecwid_id = $variation_ecwid_id ?: ($parent_ecwid_id ? "parent:$parent_ecwid_id" : '');
+                    } else {
+                        // For regular products, check _ecwid_product_id
+                        $existing_ecwid_id = get_post_meta($existing_product_id, '_ecwid_product_id', true);
+                    }
+                }
+                
                 if ($existing_ecwid_id !== $ecwid_id) {
-                    $result['warnings'][] = "SKU '$sku' already exists in WooCommerce (Product ID: $existing_product_id, Ecwid ID: $existing_ecwid_id)";
+                    $product_type = ($existing_product && $existing_product->is_type('variation')) ? 'Variation' : 'Product';
+                    $result['warnings'][] = "SKU '$sku' already exists in WooCommerce ($product_type ID: $existing_product_id, Ecwid ID: $existing_ecwid_id)";
                 }
             }
         }

@@ -70,6 +70,9 @@
             products_available_info: 'Ecwid products available for selection: {count}',
             categories_step_complete: 'Categories step complete! Starting product sync...',
             products_step_complete: 'Products step complete!',
+            customers_step_complete: 'Customers step complete!',
+            orders_step_complete: 'Orders step complete!',
+            next_step_message: 'Next: Syncing {nextType}...',
             stop_full_sync_button_text: 'STOP SYNC',
             sync_stopped_by_user_log: 'SYNC HAS BEEN STOPPED BY THE USER.',
             sync_stopped_by_user_status: 'Sync stopped by user.',
@@ -536,23 +539,35 @@
             // Check if this is a server error that should suggest retry
             let isServerError = false;
             let retryRecommended = false;
+            let isPermissionError = false;
             
             if (responseData) {
                 isServerError = responseData.is_server_error || false;
                 retryRecommended = responseData.retry_recommended || false;
+                isPermissionError = responseData.is_permission_error || false;
             }
             
             // Enhanced status message for server errors
             let enhancedStatusMessage = statusMessage;
             if (isServerError && retryRecommended) {
                 enhancedStatusMessage += ' 🔄 You can try again in a few minutes.';
+            } else if (isPermissionError) {
+                enhancedStatusMessage += ' 🔑 Check API token permissions.';
             }
             
             updateStatus(statusDiv, enhancedStatusMessage);
             logMessage(logDiv, (syncType ? `${syncType}: ` : '') + 'Error - ' + errorMessage, 'error');
             
+            // Special handling for permission errors
+            if (isPermissionError) {
+                logMessage(logDiv, '🔑 This appears to be an API permission issue.', 'warning');
+                logMessage(logDiv, '💡 Go to your Ecwid Admin → Apps → API → Access Tokens and check permissions.', 'info');
+                if (syncType && (syncType.toLowerCase().includes('customer') || syncType.toLowerCase().includes('order'))) {
+                    logMessage(logDiv, '📋 Make sure "Read customers" and/or "Read orders" permissions are enabled.', 'info');
+                }
+            }
             // Special handling for server errors
-            if (isServerError) {
+            else if (isServerError) {
                 logMessage(logDiv, '⚠️ This appears to be a temporary server issue on Ecwid\'s side.', 'warning');
                 if (retryRecommended) {
                     logMessage(logDiv, '🔄 Recommendation: Wait a few minutes and try again.', 'info');
@@ -1395,7 +1410,25 @@
                     }, adaptiveBatchConfig.batchDelayMs); // Dynamic delay based on server tier
                 } else {
                     // Current step is fully complete (no more parent items and variation queue is empty)
-                    updateStatus(fullSyncStatusDiv, i18n[currentFullSyncStepType + '_step_complete'] || `Step ${capitalizeFirstLetter(currentFullSyncStepType)} complete!`);
+                    const completedStepName = capitalizeFirstLetter(currentFullSyncStepType);
+                    const stepCompleteMsg = i18n[currentFullSyncStepType + '_step_complete'] || `Step ${completedStepName} complete!`;
+                    
+                    // Log step completion
+                    logMessage(fullSyncLogDiv, `✅ ${stepCompleteMsg}`, 'success');
+                    
+                    // Check if there's a next step and show what's coming
+                    const nextStepIndex = currentFullSyncStepIndex + 1;
+                    if (nextStepIndex < totalFullSyncSteps) {
+                        const nextStepType = fullSyncSteps[nextStepIndex];
+                        const nextStepName = capitalizeFirstLetter(nextStepType);
+                        const nextMsg = (i18n.next_step_message || 'Next: Syncing {nextType}...')
+                            .replace('{nextType}', nextStepName);
+                        logMessage(fullSyncLogDiv, `➡️ ${nextMsg}`, 'info');
+                        updateStatus(fullSyncStatusDiv, nextMsg);
+                    } else {
+                        updateStatus(fullSyncStatusDiv, stepCompleteMsg);
+                    }
+                    
                     updateOverallFullSyncProgress(100); // Ensure step progress is 100% for overall calculation
                     currentFullSyncStepIndex++; // Move to next step
                     setTimeout(() => {

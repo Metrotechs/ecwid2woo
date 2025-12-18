@@ -5,7 +5,7 @@ Tags: ecwid, woocommerce, migration, sync, ecommerce
 Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 7.2
-Stable tag: 1.4.8
+Stable tag: 1.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
@@ -240,6 +240,49 @@ The plugin uses intelligent multi-tier matching:
 6. **Navigation Interface** - Modern, intuitive admin navigation
 
 == Changelog ==
+
+= 1.5.0 =
+**Category Hierarchy & Parent-First Sorting**
+
+**Major Features:**
+* **Parent-First Sorting** - Categories are now sorted before import to ensure parents are processed before children
+* **Auto-Fix Orphaned Children** - When a parent category is imported, any previously orphaned children are automatically re-parented
+* **Missing Parent Tracking** - Stores parent-child relationships and fixes them automatically when parent appears
+* **Next Step Messaging** - Shows what sync step is coming next ("Next: Syncing Customers...")
+
+**Enhanced Batch Control:**
+* Server detection now respects PHP constants (ECWID2WOO_PRODUCT_BATCH_SIZE, ECWID2WOO_CATEGORY_BATCH_SIZE)
+* High-tier servers use 100% of your configured batch sizes
+* Medium/Low tiers scale proportionally
+
+**Variation SKU Validation Fixes:**
+* **Proper Variation Detection** - SKU validation now correctly identifies variations belonging to same Ecwid product
+* **Standardized Meta Keys** - Uses `_ecwid_variation_id` with backward compatibility for legacy `_ecwid_combination_id`
+* **Meta Backfill** - Auto-populates missing Ecwid IDs when updating existing variations
+* **Fixed Empty ID Warning** - Variation Ecwid IDs now properly displayed in SKU integrity warnings
+
+**Bug Fixes:**
+* "Parent category not found" warnings significantly reduced
+* Categories with deep nesting now import correctly
+* Step completion shows clear ✅ success messages
+
+= 1.4.9 =
+**API Permission Error Detection**
+
+**Major Features:**
+* **Empty Response Detection** - Detects when Ecwid API returns empty response (common for permission issues)
+* **Permission Error Guidance** - Shows specific guidance for customer/order API permission errors
+* **Smart Error Classification** - Distinguishes between server errors (retry) and permission errors (check settings)
+
+**Enhanced Error Handling:**
+* Customer API errors now suggest checking "Read customers" permission
+* Order API errors now suggest checking "Read orders" permission
+* Direct link to Ecwid Admin → Apps → API → Access Tokens
+
+**UX Improvements:**
+* 🔑 Clear icon when API permissions are likely the issue
+* Actionable steps to resolve permission problems
+* No longer recommends retry for permission-based errors
 
 = 1.4.8 =
 **Automatic Server Resource Detection**
@@ -545,6 +588,12 @@ This plugin:
 - All API communications use secure HTTPS connections
 
 == Changelog ==
+
+= 1.4.9 - API Permission Error Detection =
+* **NEW FEATURE** - Empty Response Detection: Detects when Ecwid API returns empty response
+* **NEW** - Permission Error Guidance: Shows specific guidance for customer/order API permission errors
+* **ENHANCED** - Smart Error Classification: Distinguishes server errors vs permission errors
+* **UX** - 🔑 Clear icon and guidance when API permissions are likely the issue
 
 = 1.3.5 - Critical Disabled Products Fix =
 * **CRITICAL FIX** - Added check to skip disabled products that have incomplete data

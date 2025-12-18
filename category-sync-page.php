@@ -271,6 +271,91 @@ class Ecwid2Woo_Category_Sync {
     }
 
     /**
+     * Sort categories so parents are imported before children (topological sort)
+     * This prevents "Parent category not found" warnings by ensuring parent categories
+     * are always processed before their children within the same batch.
+     * 
+     * @param array $categories Array of category data from Ecwid API
+     * @return array Sorted array with parents before children
+     */
+    private function sort_categories_parents_first($categories) {
+        if (empty($categories)) {
+            return $categories;
+        }
+
+        // Build lookup maps
+        $categories_by_id = [];
+        $children_of = []; // parentId => [child_ids]
+        $root_categories = [];
+
+        foreach ($categories as $cat) {
+            $id = $cat['id'] ?? null;
+            if (!$id) continue;
+            
+            $categories_by_id[$id] = $cat;
+            $parent_id = isset($cat['parentId']) && intval($cat['parentId']) > 0 ? intval($cat['parentId']) : 0;
+            
+            if ($parent_id === 0) {
+                $root_categories[] = $id;
+            } else {
+                if (!isset($children_of[$parent_id])) {
+                    $children_of[$parent_id] = [];
+                }
+                $children_of[$parent_id][] = $id;
+            }
+        }
+
+        // Build sorted list using BFS (breadth-first) to ensure parents come before children
+        $sorted = [];
+        $queue = $root_categories;
+        $processed = [];
+
+        while (!empty($queue)) {
+            $current_id = array_shift($queue);
+            
+            // Skip if already processed (prevent infinite loops)
+            if (isset($processed[$current_id])) {
+                continue;
+            }
+            
+            // Check if parent is in this batch but not yet processed
+            $cat = $categories_by_id[$current_id] ?? null;
+            if ($cat) {
+                $parent_id = isset($cat['parentId']) && intval($cat['parentId']) > 0 ? intval($cat['parentId']) : 0;
+                
+                // If parent is in this batch and not yet processed, defer this item
+                if ($parent_id > 0 && isset($categories_by_id[$parent_id]) && !isset($processed[$parent_id])) {
+                    // Push to end of queue to process after parent
+                    $queue[] = $current_id;
+                    continue;
+                }
+                
+                $sorted[] = $cat;
+                $processed[$current_id] = true;
+                
+                // Add children to queue
+                if (isset($children_of[$current_id])) {
+                    foreach ($children_of[$current_id] as $child_id) {
+                        if (!isset($processed[$child_id])) {
+                            $queue[] = $child_id;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add any categories that weren't processed (orphans with parents not in this batch)
+        foreach ($categories as $cat) {
+            $id = $cat['id'] ?? null;
+            if ($id && !isset($processed[$id])) {
+                $sorted[] = $cat;
+            }
+        }
+
+        return $sorted;
+    }
+
+    /**
      * Import a category from Ecwid data
      * 
      * @param array $item Category data from Ecwid API
@@ -327,8 +412,19 @@ class Ecwid2Woo_Category_Sync {
                     $category_logs[] = "Parent category (Ecwid ID: $parent_ecwid_id) mapped to WC Term ID: {$args['parent']}.";
                 } else {
                     $category_logs[] = "[WARNING] Parent category (Ecwid ID: $parent_ecwid_id) not found. Importing as top-level category for now.";
+                    $category_logs[] = "[INFO] Parent relationship will be fixed automatically when parent category is imported.";
                     $parent_wc_term_id = 0;
                     unset($args['parent']);
+                    
+                    // Store the missing parent relationship for later fixing
+                    $missing_parents = get_option('ecwid_wc_sync_missing_parents', []);
+                    if (!isset($missing_parents[$parent_ecwid_id])) {
+                        $missing_parents[$parent_ecwid_id] = [];
+                    }
+                    if (!in_array($ecwid_cat_id, $missing_parents[$parent_ecwid_id])) {
+                        $missing_parents[$parent_ecwid_id][] = $ecwid_cat_id;
+                    }
+                    update_option('ecwid_wc_sync_missing_parents', $missing_parents);
                 }
             }
 
@@ -358,6 +454,9 @@ class Ecwid2Woo_Category_Sync {
                 
                 // Handle category image import for existing category
                 $this->handle_category_image_import($item, $existing_wc_term_id_by_ecwid_meta, $category_logs);
+                
+                // Auto-fix orphaned children if this category was a missing parent
+                $this->fix_orphaned_children($ecwid_cat_id, $existing_wc_term_id_by_ecwid_meta, $category_logs);
                 
                 return ['status' => 'updated', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
             }
@@ -516,6 +615,9 @@ class Ecwid2Woo_Category_Sync {
                     // Handle category image import
                     $this->handle_category_image_import($item, $new_term_id, $category_logs);
                     
+                    // Auto-fix orphaned children if this category was a missing parent
+                    $this->fix_orphaned_children($ecwid_cat_id, $new_term_id, $category_logs);
+                    
                 } else {
                      $category_logs[] = "[ERROR] Imported successfully (New WC Term ID: $new_term_id). BUT FAILED to set _ecwid_category_id meta (update_term_meta failed).";
                      return ['status' => 'failed', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
@@ -618,6 +720,55 @@ class Ecwid2Woo_Category_Sync {
         update_post_meta($attachment_id, '_ecwid_category_id', $category_data['id'] ?? '');
         
         $logs[] = "Successfully imported category image (Attachment ID: $attachment_id) and set as thumbnail.";
+    }
+
+    /**
+     * Automatically fix orphaned children when their parent category is imported
+     * 
+     * @param int $parent_ecwid_id The Ecwid ID of the parent category just imported
+     * @param int $parent_wc_term_id The WooCommerce term ID of the parent category
+     * @param array &$logs Reference to logs array for adding messages
+     */
+    private function fix_orphaned_children($parent_ecwid_id, $parent_wc_term_id, &$logs) {
+        $missing_parents = get_option('ecwid_wc_sync_missing_parents', []);
+        
+        // Check if any children were waiting for this parent
+        if (!isset($missing_parents[$parent_ecwid_id]) || empty($missing_parents[$parent_ecwid_id])) {
+            return;
+        }
+        
+        $child_ecwid_ids = $missing_parents[$parent_ecwid_id];
+        $fixed_count = 0;
+        
+        foreach ($child_ecwid_ids as $child_ecwid_id) {
+            $child_wc_term_id = $this->parent_plugin->get_term_id_by_ecwid_id($child_ecwid_id, 'product_cat', true);
+            
+            if (!$child_wc_term_id) {
+                continue; // Child not imported yet, will be handled when it's imported
+            }
+            
+            // Check if child is currently a top-level category (parent = 0)
+            $child_term = get_term($child_wc_term_id, 'product_cat');
+            if ($child_term && $child_term->parent == 0) {
+                // Fix the parent relationship
+                $update_result = wp_update_term($child_wc_term_id, 'product_cat', ['parent' => $parent_wc_term_id]);
+                
+                if (!is_wp_error($update_result)) {
+                    $fixed_count++;
+                    $logs[] = "[AUTO-FIX] ✅ Fixed parent for child category (Ecwid ID: $child_ecwid_id, WC Term: $child_wc_term_id) - now under parent WC Term: $parent_wc_term_id";
+                } else {
+                    $logs[] = "[WARNING] Failed to fix parent for child category (Ecwid ID: $child_ecwid_id): " . $update_result->get_error_message();
+                }
+            }
+        }
+        
+        // Remove this parent from the missing parents list
+        unset($missing_parents[$parent_ecwid_id]);
+        update_option('ecwid_wc_sync_missing_parents', $missing_parents);
+        
+        if ($fixed_count > 0) {
+            $logs[] = "[AUTO-FIX] ✅ Automatically fixed $fixed_count child categories that were waiting for this parent.";
+        }
     }
 
     /**
@@ -1057,6 +1208,10 @@ class Ecwid2Woo_Category_Sync {
                 ]);
                 return;
             }
+
+            // Sort categories so parents are imported before children
+            $all_categories = $this->sort_categories_parents_first($all_categories);
+            $detailed_logs[] = "Sorted categories to ensure parents are imported before children";
 
             // Process each category
             foreach ($all_categories as $category_data) {
