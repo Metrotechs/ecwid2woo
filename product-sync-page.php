@@ -348,23 +348,44 @@ class Ecwid2Woo_Product_Sync {
             wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
-        set_time_limit(0); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Legitimate use for bulk operations
+        set_time_limit(300); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Legitimate use for bulk operations
+        wp_raise_memory_limit('admin');
 
         $api_essentials = $this->parent_plugin->_get_api_essentials();
         if (is_wp_error($api_essentials)) {
+            ob_end_clean();
             wp_send_json_error(['message' => $api_essentials->get_error_message()]);
             return;
         }
 
-        // Sync currency before importing products
-        $currency_sync_logs = [];
-        $currency_sync_result = $this->parent_plugin->sync_currency_settings($currency_sync_logs);
-        if (defined('WP_DEBUG') && WP_DEBUG && !empty($currency_sync_result)) {
-            error_log("Ecwid Sync: Currency sync result for all products import: " . print_r($currency_sync_result, true)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log,WordPress.PHP.DevelopmentFunctions.error_log_print_r -- Debug logging wrapped in WP_DEBUG check
+        // Sync currency before importing products (only on first batch)
+        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        if ($offset === 0) {
+            $currency_sync_logs = [];
+            $this->parent_plugin->sync_currency_settings($currency_sync_logs);
         }
 
-        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
-        $limit = 5; // Process in very small batches for all products sync to prevent timeouts
+        // --- ADAPTIVE BATCH SIZING (mirrors full sync) ---
+        $client_batch_size = isset($_POST['batch_size']) ? intval($_POST['batch_size']) : 0;
+        $default_batch_size = defined('ECWID2WOO_PRODUCT_BATCH_SIZE') ? ECWID2WOO_PRODUCT_BATCH_SIZE : 100;
+        
+        // Use client-provided batch size if valid (for adaptive timeout recovery)
+        if ($client_batch_size > 0 && $client_batch_size <= $default_batch_size) {
+            $limit = $client_batch_size;
+        } else {
+            $limit = $default_batch_size;
+        }
+        
+        // Adaptive batch sizing based on available memory
+        $available_memory = wp_convert_hr_to_bytes(ini_get('memory_limit'));
+        $used_memory = function_exists('memory_get_usage') ? memory_get_usage(true) : 0;
+        $free_memory = $available_memory - $used_memory;
+        
+        // If we have less than 128MB free, reduce batch size
+        if ($free_memory < (128 * 1024 * 1024)) {
+            $memory_factor = max(0.5, min(1.0, $free_memory / (128 * 1024 * 1024)));
+            $limit = max(2, intval($limit * $memory_factor));
+        }
 
         $query_params = [
             'limit' => $limit,
@@ -375,13 +396,17 @@ class Ecwid2Woo_Product_Sync {
         $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/products');
 
         $response = wp_remote_get($api_url, [
-            'timeout' => 120,
+            'timeout' => 90, // 90 seconds - stay under Cloudflare's 100s limit
             'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
         ]);
 
         if (is_wp_error($response)) {
-            // translators: %s is the error message
-            wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'metrotechs-e2w-sync'), $response->get_error_message())]);
+            ob_end_clean();
+            wp_send_json_error([
+                'message' => sprintf(__('API Request Error: %s', 'metrotechs-e2w-sync'), $response->get_error_message()),
+                'is_server_error' => true,
+                'retry_recommended' => true
+            ]);
             return;
         }
 
@@ -389,8 +414,12 @@ class Ecwid2Woo_Product_Sync {
         $http_code = wp_remote_retrieve_response_code($response);
 
         if ($http_code !== 200 || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
-            // translators: %1$s is the HTTP status code, %2$s is the error message
-            wp_send_json_error(['message' => sprintf(__('Ecwid API Error (HTTP %1$s): %2$s', 'metrotechs-e2w-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error'))]);
+            ob_end_clean();
+            wp_send_json_error([
+                'message' => sprintf(__('Ecwid API Error (HTTP %1$s): %2$s', 'metrotechs-e2w-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error')),
+                'is_server_error' => $http_code >= 500,
+                'retry_recommended' => $http_code >= 500 || $http_code === 524 || $http_code === 504
+            ]);
             return;
         }
 
@@ -460,7 +489,8 @@ class Ecwid2Woo_Product_Sync {
             'updated_count' => $updated_count,
             'skipped_count' => $skipped_count,
             'failed_count' => $failed_count,
-            'batch_logs' => $detailed_logs
+            'batch_logs' => $detailed_logs,
+            'batch_size_used' => $limit // Report actual batch size used for adaptive sizing feedback
         ]);
     }
 

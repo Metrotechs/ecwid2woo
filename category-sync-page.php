@@ -34,6 +34,8 @@ class Ecwid2Woo_Category_Sync {
         add_action('wp_ajax_ecwid_wc_fetch_categories_for_display', [$this, 'ajax_fetch_categories_for_display']);
         add_action('wp_ajax_ecwid_wc_import_selected_categories', [$this, 'ajax_import_selected_categories']);
         add_action('wp_ajax_ecwid_wc_sync_all_categories', [$this, 'ajax_sync_all_categories']);
+        add_action('wp_ajax_ecwid_wc_batch_category_sync', [$this, 'ajax_batch_category_sync']);
+        add_action('wp_ajax_ecwid_wc_get_category_count', [$this, 'ajax_get_category_count']);
     }
     
     /**
@@ -991,9 +993,13 @@ class Ecwid2Woo_Category_Sync {
 
         $detailed_logs[] = "Starting selective category import for " . count($selected_category_ids) . " categories.";
 
+        // PHASE 1: Fetch all selected categories first (so we can sort them parent-first)
+        $all_categories_data = [];
+        $fetch_failed_ids = [];
+        
+        $detailed_logs[] = "Phase 1: Fetching category data from Ecwid API...";
+        
         foreach ($selected_category_ids as $category_id) {
-            $detailed_logs[] = "--- Processing Category ID: $category_id ---";
-            
             // Fetch individual category data from Ecwid
             $query_params = ['responseFields' => 'id,name,parentId,description,hdThumbnailUrl,originalImageUrl'];
             $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories/' . $category_id);
@@ -1005,6 +1011,7 @@ class Ecwid2Woo_Category_Sync {
 
             if (is_wp_error($response)) {
                 $detailed_logs[] = "[ERROR] API Request failed for category $category_id: " . $response->get_error_message();
+                $fetch_failed_ids[] = $category_id;
                 $failed_count++;
                 continue;
             }
@@ -1014,15 +1021,35 @@ class Ecwid2Woo_Category_Sync {
 
             if ($http_code !== 200 || (isset($category_data['errorMessage']) && !empty($category_data['errorMessage']))) {
                 $detailed_logs[] = "[ERROR] Failed to fetch category $category_id (HTTP $http_code): " . ($category_data['errorMessage'] ?? 'Unknown error');
+                $fetch_failed_ids[] = $category_id;
                 $failed_count++;
                 continue;
             }
 
             if (empty($category_data) || !isset($category_data['id'])) {
                 $detailed_logs[] = "[ERROR] Invalid category data received for category $category_id";
+                $fetch_failed_ids[] = $category_id;
                 $failed_count++;
                 continue;
             }
+
+            $all_categories_data[] = $category_data;
+        }
+        
+        $detailed_logs[] = "Fetched " . count($all_categories_data) . " categories successfully" . (count($fetch_failed_ids) > 0 ? " (" . count($fetch_failed_ids) . " failed to fetch)" : "");
+        
+        // PHASE 2: Sort categories so parents are imported before children (identical to full sync)
+        if (!empty($all_categories_data)) {
+            $all_categories_data = $this->sort_categories_parents_first($all_categories_data);
+            $detailed_logs[] = "Phase 2: Sorted categories to ensure parents are imported before children";
+        }
+        
+        // PHASE 3: Process each category in sorted order
+        $detailed_logs[] = "Phase 3: Importing categories...";
+        
+        foreach ($all_categories_data as $category_data) {
+            $category_id = $category_data['id'];
+            $detailed_logs[] = "--- Processing Category ID: $category_id ---";
 
             // Import the category using existing import_category method
             try {
@@ -1277,5 +1304,236 @@ class Ecwid2Woo_Category_Sync {
                 'logs' => $detailed_logs
             ]);
         }
+    }
+
+    /**
+     * AJAX handler to get total category count from Ecwid
+     * Used by JavaScript to know total items before starting batch sync
+     */
+    public function ajax_get_category_count() {
+        check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            return;
+        }
+
+        $api_essentials = $this->parent_plugin->_get_api_essentials();
+        if (is_wp_error($api_essentials)) {
+            wp_send_json_error(['message' => $api_essentials->get_error_message()]);
+            return;
+        }
+
+        // Fetch just the count with minimal data
+        $query_params = ['limit' => 1, 'offset' => 0, 'responseFields' => 'total,count'];
+        $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories');
+
+        $response = wp_remote_get($api_url, [
+            'timeout' => 30,
+            'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
+        ]);
+
+        if (is_wp_error($response)) {
+            wp_send_json_error(['message' => $response->get_error_message()]);
+            return;
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $http_code = wp_remote_retrieve_response_code($response);
+
+        if ($http_code !== 200) {
+            wp_send_json_error(['message' => __('Failed to fetch category count from Ecwid.', 'metrotechs-e2w-sync')]);
+            return;
+        }
+
+        $total = isset($body['total']) ? intval($body['total']) : 0;
+
+        wp_send_json_success([
+            'total' => $total,
+            'message' => sprintf(__('%d categories found in Ecwid', 'metrotechs-e2w-sync'), $total)
+        ]);
+    }
+
+    /**
+     * AJAX handler for batch category sync (mirrors full sync batch processing)
+     * Processes categories in batches with real-time progress updates
+     */
+    public function ajax_batch_category_sync() {
+        // Start output buffering to prevent PHP notices/warnings from corrupting JSON response
+        ob_start();
+        
+        check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            ob_end_clean();
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            return;
+        }
+
+        // Enhanced resource management
+        set_time_limit(300);
+        wp_raise_memory_limit('admin');
+
+        $api_essentials = $this->parent_plugin->_get_api_essentials();
+        if (is_wp_error($api_essentials)) {
+            ob_end_clean();
+            wp_send_json_error(['message' => $api_essentials->get_error_message()]);
+            return;
+        }
+
+        // Get batch parameters
+        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        $client_batch_size = isset($_POST['batch_size']) ? intval($_POST['batch_size']) : 0;
+        
+        // Determine batch size (use constant or client-provided for adaptive sizing)
+        $default_batch_size = defined('ECWID2WOO_CATEGORY_BATCH_SIZE') ? ECWID2WOO_CATEGORY_BATCH_SIZE : 100;
+        if ($client_batch_size > 0 && $client_batch_size <= $default_batch_size) {
+            $batch_size = $client_batch_size;
+        } else {
+            $batch_size = $default_batch_size;
+        }
+
+        // Sync currency at the start of first batch
+        if ($offset === 0) {
+            $currency_sync_logs = [];
+            $this->parent_plugin->sync_currency_settings($currency_sync_logs);
+        }
+
+        // Fetch categories from Ecwid API
+        $query_params = [
+            'limit' => $batch_size,
+            'offset' => $offset,
+            'responseFields' => 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl),total,count,offset'
+        ];
+        $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/categories');
+
+        $response = wp_remote_get($api_url, [
+            'timeout' => 60,
+            'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
+        ]);
+
+        if (is_wp_error($response)) {
+            ob_end_clean();
+            wp_send_json_error([
+                'message' => $response->get_error_message(),
+                'is_server_error' => true,
+                'retry_recommended' => true
+            ]);
+            return;
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $http_code = wp_remote_retrieve_response_code($response);
+
+        if ($http_code !== 200 || !is_array($body)) {
+            ob_end_clean();
+            wp_send_json_error([
+                'message' => __('Failed to fetch categories from Ecwid API.', 'metrotechs-e2w-sync'),
+                'http_code' => $http_code,
+                'is_server_error' => $http_code >= 500,
+                'retry_recommended' => $http_code >= 500
+            ]);
+            return;
+        }
+
+        // Extract categories from response
+        $categories_from_api = [];
+        if (isset($body['items']) && is_array($body['items'])) {
+            $categories_from_api = $body['items'];
+        } elseif (is_array($body) && (empty($body) || isset($body[0]['id']))) {
+            $categories_from_api = $body;
+        }
+
+        $total_items = isset($body['total']) ? intval($body['total']) : count($categories_from_api);
+        $count_in_response = isset($body['count']) ? intval($body['count']) : count($categories_from_api);
+
+        // Sort categories so parents are imported before children
+        if (!empty($categories_from_api)) {
+            $categories_from_api = $this->sort_categories_parents_first($categories_from_api);
+        }
+
+        // Process each category
+        $imported_count = 0;
+        $updated_count = 0;
+        $skipped_count = 0;
+        $failed_count = 0;
+        $batch_logs = [];
+        $batch_item_results = [];
+
+        foreach ($categories_from_api as $category_data) {
+            if (!is_array($category_data) || !isset($category_data['id'])) {
+                $batch_logs[] = "[ERROR] Invalid category data received, skipping.";
+                $failed_count++;
+                continue;
+            }
+
+            $ecwid_id = $category_data['id'];
+            $category_name = isset($category_data['name']) ? $category_data['name'] : 'Unknown';
+
+            $batch_logs[] = "--- Processing: {$category_name} (Ecwid ID: {$ecwid_id}) ---";
+
+            try {
+                $result_array = $this->import_category($category_data);
+
+                if ($result_array && isset($result_array['status'])) {
+                    $batch_item_results[] = $result_array;
+                    
+                    if ($result_array['status'] === 'imported') {
+                        $imported_count++;
+                    } elseif ($result_array['status'] === 'updated') {
+                        $updated_count++;
+                    } elseif ($result_array['status'] === 'skipped') {
+                        $skipped_count++;
+                    } else {
+                        $failed_count++;
+                    }
+
+                    // Add detailed logs from import
+                    if (!empty($result_array['logs']) && is_array($result_array['logs'])) {
+                        foreach ($result_array['logs'] as $log_line) {
+                            $batch_logs[] = "  " . $log_line;
+                        }
+                    }
+                    $batch_logs[] = "--- Result for {$ecwid_id}: " . strtoupper($result_array['status']) . " ---";
+                } else {
+                    $failed_count++;
+                    $batch_logs[] = "[ERROR] Import function did not return expected result for category $ecwid_id";
+                }
+            } catch (Exception $e) {
+                $failed_count++;
+                $batch_logs[] = "[EXCEPTION] Error importing category $ecwid_id: " . $e->getMessage();
+            }
+
+            $batch_logs[] = " ";
+        }
+
+        // Calculate pagination
+        $new_offset = $offset + $count_in_response;
+        $has_more = ($count_in_response > 0) && ($new_offset < $total_items);
+
+        // Clean output buffer before sending response
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        wp_send_json_success([
+            'message' => sprintf(
+                __('Categories: Processed %1$d items (Imported: %2$d, Updated: %3$d, Skipped: %4$d, Failed: %5$d). Total: %6$d.', 'metrotechs-e2w-sync'),
+                count($categories_from_api),
+                $imported_count,
+                $updated_count,
+                $skipped_count,
+                $failed_count,
+                $total_items
+            ),
+            'next_offset' => $new_offset,
+            'total_items' => $total_items,
+            'has_more' => $has_more,
+            'imported_count' => $imported_count,
+            'updated_count' => $updated_count,
+            'skipped_count' => $skipped_count,
+            'failed_count' => $failed_count,
+            'batch_logs' => $batch_logs,
+            'batch_item_results' => $batch_item_results,
+            'batch_size_used' => $batch_size
+        ]);
     }
 }

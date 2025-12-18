@@ -74,7 +74,7 @@ if (!defined('ECWID2WOO_CATEGORY_BATCH_SIZE')) {
 }
 
 if (!defined('ECWID2WOO_PRODUCT_BATCH_SIZE')) {
-    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 50); // Default, auto-adjusted by server detection
+    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 100); // Default, auto-adjusted by server detection
 }
 
 /**

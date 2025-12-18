@@ -96,8 +96,8 @@
         // Automatically configures batch sizes based on detected server resources
         const serverCapabilities = ecwid_sync_params.server_capabilities || {
             server_tier: 'low',
-            products_batch: 10,
-            categories_batch: 25,
+            products_batch: 100,
+            categories_batch: 100,
             customers_batch: 25,
             orders_batch: 25,
             batch_delay_ms: 5000,
@@ -111,7 +111,9 @@
         }
 
         // --- Adaptive Batch Sizing ---
-        // Automatically reduces batch size when 524 (Cloudflare timeout) or similar errors occur
+        // Automatically adjusts batch size based on server performance:
+        // - Reduces batch size when 524 (Cloudflare timeout) or similar errors occur
+        // - Increases batch size after consecutive successful batches (recovery mode)
         // Initial values come from server capability detection
         const adaptiveBatchConfig = {
             // Batch sizes auto-configured from server detection
@@ -137,8 +139,12 @@
             },
             // Track consecutive timeouts per sync type
             timeoutCounts: { categories: 0, products: 0, customers: 0, orders: 0 },
+            // Track consecutive successful batches per sync type (for recovery/increase)
+            successCounts: { categories: 0, products: 0, customers: 0, orders: 0 },
             // Maximum retries before giving up
             maxTimeoutRetries: 8,
+            // Number of consecutive successful batches before attempting to increase batch size
+            successThresholdForIncrease: 5,
             // Delay between batches (from server detection)
             batchDelayMs: serverCapabilities.batch_delay_ms || 5000
         };
@@ -166,6 +172,9 @@
             // Always increment timeout count
             adaptiveBatchConfig.timeoutCounts[syncType]++;
             
+            // Reset success count when we have a failure
+            adaptiveBatchConfig.successCounts[syncType] = 0;
+            
             // Reduce by half, but not below minimum
             config.current = Math.max(config.min, Math.floor(config.current / 2));
             
@@ -179,12 +188,64 @@
         }
 
         /**
+         * Try to increase batch size after consecutive successful batches
+         * Only increases if currently below default (recovering from previous reduction)
+         * Returns object with increased flag and optional log message
+         */
+        function tryIncreaseBatchSize(syncType) {
+            if (!adaptiveBatchConfig[syncType]) return { increased: false };
+            
+            const config = adaptiveBatchConfig[syncType];
+            
+            // Increment success counter
+            adaptiveBatchConfig.successCounts[syncType]++;
+            
+            // Only try to increase if we're below default (in recovery mode)
+            if (config.current >= config.default) {
+                // Already at or above default, no need to increase
+                adaptiveBatchConfig.successCounts[syncType] = 0; // Reset counter
+                return { increased: false };
+            }
+            
+            // Check if we've hit the threshold for increasing
+            if (adaptiveBatchConfig.successCounts[syncType] >= adaptiveBatchConfig.successThresholdForIncrease) {
+                const oldSize = config.current;
+                
+                // Increase by 50% (multiply by 1.5), but don't exceed default
+                const newSize = Math.min(config.default, Math.ceil(config.current * 1.5));
+                
+                if (newSize > oldSize) {
+                    config.current = newSize;
+                    adaptiveBatchConfig.successCounts[syncType] = 0; // Reset counter after increase
+                    
+                    if (window.ecwidDebugMode) {
+                        console.log(`Adaptive batch: Increased ${syncType} batch size from ${oldSize} to ${config.current} after ${adaptiveBatchConfig.successThresholdForIncrease} successful batches`);
+                    }
+                    
+                    const atDefault = config.current === config.default;
+                    return { 
+                        increased: true, 
+                        oldSize: oldSize, 
+                        newSize: config.current,
+                        atDefault: atDefault,
+                        message: atDefault 
+                            ? `📈 Batch size recovered to default (${config.current}) after stable performance.`
+                            : `📈 Batch size increased from ${oldSize} to ${config.current} after ${adaptiveBatchConfig.successThresholdForIncrease} successful batches.`
+                    };
+                }
+            }
+            
+            return { increased: false };
+        }
+
+        /**
          * Reset batch size to default (call after successful sync completion)
          */
         function resetBatchSize(syncType) {
             if (adaptiveBatchConfig[syncType]) {
                 adaptiveBatchConfig[syncType].current = adaptiveBatchConfig[syncType].default;
                 adaptiveBatchConfig.timeoutCounts[syncType] = 0;
+                adaptiveBatchConfig.successCounts[syncType] = 0;
             }
         }
 
@@ -1080,14 +1141,15 @@
             currentFullSyncStepOffset = offset;
             // currentFullSyncStepTotalItems = totalKnownItems; // This was for the step, not used by updateOverallFullSyncProgress directly
 
+            // Get adaptive batch size for this sync type (moved up so we can show it in status)
+            const currentBatchSize = getAdaptiveBatchSize(syncType);
+
             const statusMsg = i18n.syncing_item_of_total
                 .replace('{syncType}', capitalizeFirstLetter(syncType))
                 .replace('{current}', offset)
-                .replace('{total}', totalKnownItems > 0 ? totalKnownItems : 'N/A');
+                .replace('{total}', totalKnownItems > 0 ? totalKnownItems : 'N/A')
+                + ` [batch size: ${currentBatchSize}]`;
             startBatchStatusAnimation(fullSyncStatusDiv, statusMsg);
-
-            // Get adaptive batch size for this sync type
-            const currentBatchSize = getAdaptiveBatchSize(syncType);
             
             $.ajax({
                 url: ajax_url,
@@ -1101,9 +1163,15 @@
                     // Reset server down recovery on success
                     resetServerDownRecovery();
                     
+                    // Try to increase batch size if we're in recovery mode (below default)
+                    const increaseResult = tryIncreaseBatchSize(syncType);
+                    if (increaseResult.increased && increaseResult.message) {
+                        logMessage(fullSyncLogDiv, `[INFO] ${increaseResult.message}`, 'info');
+                    }
+                    
                     // Log if we're running with a reduced batch size
                     const defaultBatchSize = adaptiveBatchConfig[syncType] ? adaptiveBatchConfig[syncType].default : currentBatchSize;
-                    if (currentBatchSize < defaultBatchSize) {
+                    if (currentBatchSize < defaultBatchSize && !increaseResult.increased) {
                         logMessage(fullSyncLogDiv, `[INFO] ⚡ Running with reduced batch size (${currentBatchSize}) to avoid timeouts.`, 'info');
                     }
                     
@@ -1128,7 +1196,8 @@
                         const statusUpdate = i18n.syncing_item_of_total
                             .replace('{syncType}', capitalizeFirstLetter(syncType))
                             .replace('{current}', response.data.next_offset)
-                            .replace('{total}', itemsInStepForStatus > 0 ? itemsInStepForStatus : 'N/A');
+                            .replace('{total}', itemsInStepForStatus > 0 ? itemsInStepForStatus : 'N/A')
+                            + ` [batch size: ${currentBatchSize}]`;
                         updateStatus(fullSyncStatusDiv, statusUpdate);
 
                         // Populate variation queue from structured results
@@ -2195,6 +2264,12 @@
                     stopBatchStatusAnimation();
                     categoryProcessingText.text('Processing categories...');
                     
+                    // Try to increase batch size if we're in recovery mode
+                    const increaseResult = tryIncreaseBatchSize(syncType);
+                    if (increaseResult.increased && increaseResult.message) {
+                        logMessage(categoryPageSyncLogDiv, `[INFO] ${increaseResult.message}`, 'info');
+                    }
+                    
                     if (response.success) {
                         // Use actual counts from the response
                         const batchImportedCount = parseInt(response.data.imported_count) || 0;
@@ -2265,6 +2340,10 @@
                         }
                     } else {
                         categoryProcessingText.text('Error occurred during sync');
+                        // Reset success counter on failure
+                        if (adaptiveBatchConfig.successCounts[syncType] !== undefined) {
+                            adaptiveBatchConfig.successCounts[syncType] = 0;
+                        }
                         handleAjaxError(categoryPageSyncStatusDiv, categoryPageSyncLogDiv, categoryPageSyncButton, i18n.start_category_sync_page, syncType, response.data);
                         loadCategoriesButton.removeClass('disabled').prop('disabled', false);
                         fixHierarchyButton.removeClass('disabled').prop('disabled', false);
@@ -2273,6 +2352,10 @@
                 error: function(jqXHR, textStatus, errorThrown) {
                     stopBatchStatusAnimation();
                     categoryProcessingText.text('Network error occurred');
+                    // Reset success counter on failure
+                    if (adaptiveBatchConfig.successCounts[syncType] !== undefined) {
+                        adaptiveBatchConfig.successCounts[syncType] = 0;
+                    }
                     handleAjaxError(categoryPageSyncStatusDiv, categoryPageSyncLogDiv, categoryPageSyncButton, i18n.start_category_sync_page, syncType, { message: `${textStatus} ${errorThrown || ''}` }, true);
                     loadCategoriesButton.removeClass('disabled').prop('disabled', false);
                     fixHierarchyButton.removeClass('disabled').prop('disabled', false);
@@ -3178,7 +3261,7 @@
             });
         });
 
-        // Sync All Categories Button Handler
+        // Sync All Categories Button Handler - Uses batch processing like full sync
         if (syncAllCategoriesButton.length) {
             syncAllCategoriesButton.on('click', function(e) {
                 e.preventDefault();
@@ -3213,118 +3296,189 @@
                     categoryPaginationContainer.hide();
                 }
 
-                categorySyncRequest = $.ajax({
+                // State for batch category sync
+                let categorySyncState = {
+                    offset: 0,
+                    totalItems: 0,
+                    totalImported: 0,
+                    totalUpdated: 0,
+                    totalSkipped: 0,
+                    totalFailed: 0,
+                    batchSize: serverCapabilities.categories_batch || 100,
+                    retryCount: 0,
+                    maxRetries: 3
+                };
+
+                // First, get total category count
+                logMessage(selectiveSyncLogDiv, 'Fetching category count from Ecwid...', 'info');
+                
+                $.ajax({
                     url: ajax_url,
                     method: 'POST',
-                    timeout: 300000, // 5 minutes timeout for bulk operations
+                    timeout: 30000,
                     data: {
-                        action: 'ecwid_wc_sync_all_categories',
+                        action: 'ecwid_wc_get_category_count',
                         nonce: nonce
                     },
-                    beforeSend: function() {
-                        updateProgressBar(selectiveSyncProgressBar, 10);
-                        updateStatus(selectiveSyncStatusDiv, 'Fetching all categories from Ecwid...');
-                        
-                        // Start a progress animation to show activity
-                        let progressPercent = 10;
-                        const progressInterval = setInterval(function() {
-                            if (progressPercent < 90) {
-                                progressPercent += 2;
-                                updateProgressBar(selectiveSyncProgressBar, progressPercent);
-                                
-                                // Update status messages to show progress
-                                if (progressPercent < 30) {
-                                    updateStatus(selectiveSyncStatusDiv, 'Fetching categories from Ecwid...');
-                                } else if (progressPercent < 60) {
-                                    updateStatus(selectiveSyncStatusDiv, 'Processing categories...');
-                                } else if (progressPercent < 90) {
-                                    updateStatus(selectiveSyncStatusDiv, 'Importing categories to WooCommerce...');
-                                }
-                            } else {
-                                clearInterval(progressInterval);
-                            }
-                        }, 1000); // Update every second
-                        
-                        // Store interval ID so we can clear it
-                        window.categoryProgressInterval = progressInterval;
-                    },
                     success: function(response) {
-                        // Clear the progress animation
-                        if (window.categoryProgressInterval) {
-                            clearInterval(window.categoryProgressInterval);
-                        }
-                        
-                        if (response.success) {
-                            const data = response.data;
-                            updateProgressBar(selectiveSyncProgressBar, 100);
-                            updateStatus(selectiveSyncStatusDiv, 'Full category import completed successfully!');
+                        if (response.success && response.data.total !== undefined) {
+                            categorySyncState.totalItems = response.data.total;
+                            logMessage(selectiveSyncLogDiv, `Found ${categorySyncState.totalItems} categories to sync`, 'info');
                             
-                            // Display results
-                            const resultMessage = data.message || 'Category import completed';
-                            logMessage(selectiveSyncLogDiv, resultMessage, 'success');
-                            
-                            // Show detailed statistics if available
-                            if (data.imported_count !== undefined || data.updated_count !== undefined) {
-                                const importedCount = parseInt(data.imported_count) || 0;
-                                const updatedCount = parseInt(data.updated_count) || 0;
-                                const skippedCount = parseInt(data.skipped_count) || 0;
-                                const failedCount = parseInt(data.failed_count) || 0;
-                                
-                                const statsMessage = `Results: ${importedCount} imported, ${updatedCount} updated, ${skippedCount} skipped, ${failedCount} failed`;
-                                logMessage(selectiveSyncLogDiv, statsMessage, 'info');
+                            if (categorySyncState.totalItems === 0) {
+                                updateStatus(selectiveSyncStatusDiv, 'No categories found in Ecwid');
+                                updateProgressBar(selectiveSyncProgressBar, 100);
+                                finishCategorySync();
+                                return;
                             }
                             
-                            // Display detailed logs if available
-                            if (data.logs && data.logs.length > 0) {
-                                data.logs.forEach(function(logEntry) {
-                                    logMessage(selectiveSyncLogDiv, logEntry, 'info');
-                                });
-                            }
-                            
-                            // Reload category list to show updated data
-                            setTimeout(function() {
-                                if (loadCategoriesButton.length) {
-                                    loadAndDisplayCategories();
-                                }
-                            }, 2000);
-                            
+                            // Start batch processing
+                            processCategoryBatch(categorySyncState);
                         } else {
-                            const errorMsg = response.data && response.data.message ? response.data.message : 'Unknown error occurred during category import';
-                            updateStatus(selectiveSyncStatusDiv, 'Import failed');
-                            logMessage(selectiveSyncLogDiv, `Error: ${errorMsg}`, 'error');
+                            logMessage(selectiveSyncLogDiv, 'Failed to get category count: ' + (response.data?.message || 'Unknown error'), 'error');
+                            finishCategorySync();
                         }
                     },
                     error: function(jqXHR, textStatus, errorThrown) {
-                        // Clear the progress animation
-                        if (window.categoryProgressInterval) {
-                            clearInterval(window.categoryProgressInterval);
-                        }
-                        
-                        const errorText = `AJAX Error: ${textStatus}${errorThrown ? ' - ' + errorThrown : ''}`;
-                        updateStatus(selectiveSyncStatusDiv, 'Import failed');
-                        logMessage(selectiveSyncLogDiv, `Error: ${errorText}`, 'error');
-                    },
-                    complete: function() {
-                        // Clear request reference
-                        categorySyncRequest = null;
-                        
-                        // Re-enable buttons
-                        syncAllCategoriesButton.removeClass('disabled').text('Import All Categories');
-                        loadCategoriesButton.removeClass('disabled');
-                        importSelectedCategoriesButton.removeClass('disabled');
-                        stopSyncCategoriesButton.hide(); // Hide stop button
-                        
-                        // Show category list and pagination again
-                        categoryListContainer.show();
-                        if (categoryPaginationContainer.length) {
-                            categoryPaginationContainer.show();
-                        }
+                        logMessage(selectiveSyncLogDiv, `Error getting category count: ${textStatus} ${errorThrown}`, 'error');
+                        finishCategorySync();
                     }
                 });
+
+                // Function to process a single batch
+                function processCategoryBatch(state) {
+                    if (isCategorySyncCancelled) {
+                        logMessage(selectiveSyncLogDiv, '⛔ Category sync cancelled by user.', 'warning');
+                        finishCategorySync();
+                        return;
+                    }
+
+                    // Update progress
+                    let progressPercent = state.totalItems > 0 ? (state.offset / state.totalItems) * 100 : 0;
+                    progressPercent = Math.min(99, progressPercent); // Don't hit 100 until complete
+                    updateProgressBar(selectiveSyncProgressBar, progressPercent);
+                    updateStatus(selectiveSyncStatusDiv, `Syncing Categories: ${state.offset} of ${state.totalItems}...`);
+
+                    categorySyncRequest = $.ajax({
+                        url: ajax_url,
+                        method: 'POST',
+                        timeout: 90000, // 90 seconds - under Cloudflare limit
+                        data: {
+                            action: 'ecwid_wc_batch_category_sync',
+                            nonce: nonce,
+                            offset: state.offset,
+                            batch_size: state.batchSize
+                        },
+                        success: function(response) {
+                            state.retryCount = 0; // Reset retry count on success
+                            
+                            if (response.success) {
+                                const data = response.data;
+                                
+                                // Log batch results in real-time
+                                if (data.batch_logs && data.batch_logs.length > 0) {
+                                    data.batch_logs.forEach(function(logEntry) {
+                                        categorizeAndLog(selectiveSyncLogDiv, logEntry);
+                                    });
+                                }
+                                
+                                // Accumulate counts
+                                state.totalImported += parseInt(data.imported_count) || 0;
+                                state.totalUpdated += parseInt(data.updated_count) || 0;
+                                state.totalSkipped += parseInt(data.skipped_count) || 0;
+                                state.totalFailed += parseInt(data.failed_count) || 0;
+                                
+                                // Check if more batches to process
+                                if (data.has_more) {
+                                    state.offset = data.next_offset;
+                                    
+                                    // Small delay between batches to prevent server overload
+                                    setTimeout(function() {
+                                        processCategoryBatch(state);
+                                    }, adaptiveBatchConfig.batchDelayMs || 2000);
+                                } else {
+                                    // All done!
+                                    updateProgressBar(selectiveSyncProgressBar, 100);
+                                    updateStatus(selectiveSyncStatusDiv, '✅ Category sync completed successfully!');
+                                    
+                                    const summaryMsg = `Category Sync Complete! Imported: ${state.totalImported}, Updated: ${state.totalUpdated}, Skipped: ${state.totalSkipped}, Failed: ${state.totalFailed}`;
+                                    logMessage(selectiveSyncLogDiv, summaryMsg, 'success');
+                                    
+                                    finishCategorySync();
+                                }
+                            } else {
+                                const errorMsg = response.data?.message || 'Unknown error during batch processing';
+                                logMessage(selectiveSyncLogDiv, `Error: ${errorMsg}`, 'error');
+                                
+                                // Check if we should retry
+                                if (response.data?.retry_recommended && state.retryCount < state.maxRetries) {
+                                    state.retryCount++;
+                                    logMessage(selectiveSyncLogDiv, `Retrying batch (attempt ${state.retryCount}/${state.maxRetries})...`, 'warning');
+                                    setTimeout(function() {
+                                        processCategoryBatch(state);
+                                    }, 5000);
+                                } else {
+                                    finishCategorySync();
+                                }
+                            }
+                        },
+                        error: function(jqXHR, textStatus, errorThrown) {
+                            const isTimeout = textStatus === 'timeout' || 
+                                              jqXHR.status === 524 || 
+                                              jqXHR.status === 504 || 
+                                              jqXHR.status === 408;
+                            
+                            if (isTimeout && state.batchSize > 5) {
+                                // Reduce batch size and retry
+                                state.batchSize = Math.max(5, Math.floor(state.batchSize / 2));
+                                state.retryCount++;
+                                logMessage(selectiveSyncLogDiv, `⚡ Timeout detected. Reducing batch size to ${state.batchSize} and retrying...`, 'warning');
+                                
+                                setTimeout(function() {
+                                    processCategoryBatch(state);
+                                }, 5000);
+                            } else if (state.retryCount < state.maxRetries) {
+                                state.retryCount++;
+                                logMessage(selectiveSyncLogDiv, `Error: ${textStatus} ${errorThrown}. Retrying (${state.retryCount}/${state.maxRetries})...`, 'warning');
+                                
+                                setTimeout(function() {
+                                    processCategoryBatch(state);
+                                }, 5000);
+                            } else {
+                                logMessage(selectiveSyncLogDiv, `Fatal error after ${state.maxRetries} retries: ${textStatus} ${errorThrown}`, 'error');
+                                finishCategorySync();
+                            }
+                        }
+                    });
+                }
+
+                // Function to clean up after sync completes or fails
+                function finishCategorySync() {
+                    categorySyncRequest = null;
+                    
+                    // Re-enable buttons
+                    syncAllCategoriesButton.removeClass('disabled').text('Import All Categories');
+                    loadCategoriesButton.removeClass('disabled');
+                    importSelectedCategoriesButton.removeClass('disabled');
+                    stopSyncCategoriesButton.hide();
+                    
+                    // Show category list and pagination again
+                    categoryListContainer.show();
+                    if (categoryPaginationContainer.length) {
+                        categoryPaginationContainer.show();
+                    }
+                    
+                    // Reload category list to show updated data
+                    setTimeout(function() {
+                        if (loadCategoriesButton.length && typeof loadAndDisplayCategories === 'function') {
+                            loadAndDisplayCategories();
+                        }
+                    }, 2000);
+                }
             });
         }
 
-        // Sync All Products Button Handler
+        // Sync All Products Button Handler - Uses batch processing with real-time logs
         if (syncAllProductsButton.length) {
             syncAllProductsButton.on('click', function(e) {
                 e.preventDefault();
@@ -3361,170 +3515,212 @@
                     productPaginationContainer.hide();
                 }
 
-                // Initialize batch processing variables
-                let totalImported = 0;
-                let totalUpdated = 0;
-                let totalSkipped = 0;
-                let totalFailed = 0;
-                let totalItems = 0;
-                let processedItems = 0;
-                let allLogs = [];
-                let currentOffset = 0;
-                let batchNumber = 1;
+                // Initialize batch processing state with adaptive sizing
+                let productSyncState = {
+                    offset: 0,
+                    totalItems: 0,
+                    totalImported: 0,
+                    totalUpdated: 0,
+                    totalSkipped: 0,
+                    totalFailed: 0,
+                    batchNumber: 1,
+                    batchSize: serverCapabilities.products_batch || 100,
+                    minBatchSize: 1,
+                    defaultBatchSize: serverCapabilities.products_batch || 100,
+                    retryCount: 0,
+                    maxRetries: 5,
+                    consecutiveTimeouts: 0,
+                    consecutiveSuccesses: 0, // Track successful batches for recovery
+                    successThresholdForIncrease: 5 // Batches needed before trying to increase
+                };
 
-                // Recursive function to process all batches
-                function processNextBatch() {
+                logMessage(selectiveSyncLogDiv, `Starting product sync with batch size: ${productSyncState.batchSize}...`, 'info');
+
+                // Recursive function to process all batches with real-time logging
+                function processProductBatch(state) {
                     // Check if sync was cancelled
                     if (isProductSyncCancelled) {
-                        updateStatus(selectiveSyncStatusDiv, 'Product import cancelled');
-                        logMessage(selectiveSyncLogDiv, 'Import stopped by user', 'warning');
-                        
-                        // Reset UI
-                        syncAllProductsButton.removeClass('disabled').text('Import All Products');
-                        loadProductsButton.removeClass('disabled');
-                        importSelectedButton.removeClass('disabled');
-                        stopSyncProductsButton.hide();
-                        productListContainer.show();
-                        const productPaginationContainer = $('#product-pagination-container');
-                        if (productPaginationContainer.length) {
-                            productPaginationContainer.show();
-                        }
-                        return; // Exit the batch processing
+                        logMessage(selectiveSyncLogDiv, '⛔ Product sync cancelled by user.', 'warning');
+                        finishProductSync(state);
+                        return;
                     }
                     
-                    updateStatus(selectiveSyncStatusDiv, `Processing batch ${batchNumber}... (${processedItems}/${totalItems || '?'} products)`);
+                    // Update progress
+                    let progressPercent = 0;
+                    if (state.totalItems > 0) {
+                        progressPercent = Math.min(99, (state.offset / state.totalItems) * 100);
+                    } else {
+                        progressPercent = Math.min(50, state.batchNumber * 3);
+                    }
+                    updateProgressBar(selectiveSyncProgressBar, progressPercent);
+                    updateStatus(selectiveSyncStatusDiv, `Syncing Products: Batch ${state.batchNumber} (${state.offset}/${state.totalItems || '?'}) [batch size: ${state.batchSize}]...`);
                     
                     $.ajax({
                         url: ajax_url,
                         method: 'POST',
-                        timeout: 300000, // 5 minutes timeout per batch
+                        timeout: 95000, // 95 seconds - stay under Cloudflare's 100s limit
                         data: {
                             action: 'ecwid_wc_sync_all_products',
                             nonce: nonce,
-                            offset: currentOffset
+                            offset: state.offset,
+                            batch_size: state.batchSize // Send batch size for adaptive sizing
                         },
                         success: function(response) {
+                            state.retryCount = 0; // Reset retry count on success
+                            state.consecutiveTimeouts = 0; // Reset timeout count on success
+                            state.consecutiveSuccesses++; // Track successful batches
+                            
+                            // Try to increase batch size if we're in recovery mode (below default)
+                            if (state.batchSize < state.defaultBatchSize && 
+                                state.consecutiveSuccesses >= state.successThresholdForIncrease) {
+                                const oldBatchSize = state.batchSize;
+                                // Increase by 50%, but don't exceed default
+                                state.batchSize = Math.min(state.defaultBatchSize, Math.ceil(state.batchSize * 1.5));
+                                state.consecutiveSuccesses = 0; // Reset counter after increase
+                                
+                                if (state.batchSize > oldBatchSize) {
+                                    const atDefault = state.batchSize === state.defaultBatchSize;
+                                    const msg = atDefault 
+                                        ? `📈 Batch size recovered to default (${state.batchSize}) after stable performance.`
+                                        : `📈 Batch size increased from ${oldBatchSize} to ${state.batchSize} after ${state.successThresholdForIncrease} successful batches.`;
+                                    logMessage(selectiveSyncLogDiv, `[INFO] ${msg}`, 'info');
+                                }
+                            }
+                            
                             if (response.success) {
                                 const data = response.data;
                                 
-                                // Update totals
-                                totalImported += parseInt(data.imported_count) || 0;
-                                totalUpdated += parseInt(data.updated_count) || 0;
-                                totalSkipped += parseInt(data.skipped_count) || 0;
-                                totalFailed += parseInt(data.failed_count) || 0;
-                                
-                                // Set total items if this is the first batch
-                                if (totalItems === 0 && data.total_items) {
-                                    totalItems = parseInt(data.total_items);
+                                // Update total items if this is the first batch
+                                if (state.totalItems === 0 && data.total_items) {
+                                    state.totalItems = parseInt(data.total_items);
+                                    logMessage(selectiveSyncLogDiv, `Found ${state.totalItems} products to sync`, 'info');
                                 }
                                 
-                                // Update processed count
-                                processedItems = parseInt(data.next_offset) || (currentOffset + 50);
-                                
-                                // Update progress bar
-                                let progressPercent = 0;
-                                if (totalItems > 0) {
-                                    progressPercent = Math.min(95, (processedItems / totalItems) * 100);
-                                } else {
-                                    progressPercent = Math.min(95, (batchNumber * 5)); // Fallback progress
+                                // Log if running with reduced batch size
+                                if (data.batch_size_used && data.batch_size_used < state.defaultBatchSize) {
+                                    logMessage(selectiveSyncLogDiv, `[INFO] ⚡ Using reduced batch size (${data.batch_size_used}) for stability.`, 'info');
                                 }
-                                updateProgressBar(selectiveSyncProgressBar, progressPercent);
                                 
-                                // Log batch results
-                                const batchMessage = `Batch ${batchNumber} completed: ${data.imported_count || 0} imported, ${data.updated_count || 0} updated, ${data.skipped_count || 0} skipped, ${data.failed_count || 0} failed`;
-                                logMessage(selectiveSyncLogDiv, batchMessage, 'info');
-                                
-                                // Add batch logs to overall logs
+                                // Log detailed batch results in REAL-TIME
                                 if (data.batch_logs && data.batch_logs.length > 0) {
-                                    allLogs = allLogs.concat(data.batch_logs);
+                                    data.batch_logs.forEach(function(logEntry) {
+                                        categorizeAndLog(selectiveSyncLogDiv, logEntry);
+                                    });
                                 }
+                                
+                                // Accumulate counts
+                                state.totalImported += parseInt(data.imported_count) || 0;
+                                state.totalUpdated += parseInt(data.updated_count) || 0;
+                                state.totalSkipped += parseInt(data.skipped_count) || 0;
+                                state.totalFailed += parseInt(data.failed_count) || 0;
                                 
                                 // Check if we need to process more batches
                                 if (data.has_more && data.next_offset) {
-                                    currentOffset = parseInt(data.next_offset);
-                                    batchNumber++;
-                                    // Continue processing next batch
-                                    setTimeout(processNextBatch, 500); // Small delay between batches
+                                    state.offset = parseInt(data.next_offset);
+                                    state.batchNumber++;
+                                    
+                                    // Small delay between batches to prevent server overload
+                                    setTimeout(function() {
+                                        processProductBatch(state);
+                                    }, adaptiveBatchConfig.batchDelayMs || 2000);
                                 } else {
                                     // All batches completed
                                     updateProgressBar(selectiveSyncProgressBar, 100);
-                                    updateStatus(selectiveSyncStatusDiv, 'Full product import completed successfully!');
+                                    updateStatus(selectiveSyncStatusDiv, '✅ Product sync completed successfully!');
                                     
-                                    // Display final results
-                                    const finalMessage = `Product import completed! Processed ${processedItems} products total.`;
-                                    logMessage(selectiveSyncLogDiv, finalMessage, 'success');
+                                    const summaryMsg = `Product Sync Complete! Imported: ${state.totalImported}, Updated: ${state.totalUpdated}, Skipped: ${state.totalSkipped}, Failed: ${state.totalFailed}`;
+                                    logMessage(selectiveSyncLogDiv, summaryMsg, 'success');
                                     
-                                    // Show detailed statistics
-                                    const statsMessage = `Final Results: ${totalImported} imported, ${totalUpdated} updated, ${totalSkipped} skipped, ${totalFailed} failed`;
-                                    logMessage(selectiveSyncLogDiv, statsMessage, 'info');
-                                    
-                                    // Display detailed logs if available (limit to last 100 entries to prevent overflow)
-                                    if (allLogs.length > 0) {
-                                        const logsToShow = allLogs.slice(-100); // Show last 100 log entries
-                                        if (allLogs.length > 100) {
-                                            logMessage(selectiveSyncLogDiv, `... (showing last 100 of ${allLogs.length} log entries)`, 'info');
-                                        }
-                                        logsToShow.forEach(function(logEntry) {
-                                            logMessage(selectiveSyncLogDiv, logEntry, 'info');
-                                        });
-                                    }
-                                    
-                                    // Re-enable buttons and show UI elements
-                                    syncAllProductsButton.removeClass('disabled').text('Import All Products');
-                                    loadProductsButton.removeClass('disabled');
-                                    importSelectedButton.removeClass('disabled');
-                                    stopSyncProductsButton.hide(); // Hide stop button
-                                    productListContainer.show();
-                                    if (productPaginationContainer.length) {
-                                        productPaginationContainer.show();
-                                    }
-                                    
-                                    // Reload product list to show updated data
-                                    setTimeout(function() {
-                                        if (loadProductsButton.length) {
-                                            loadAndDisplayProductsForSelection();
-                                        }
-                                    }, 2000);
+                                    finishProductSync(state);
                                 }
-                                
                             } else {
-                                const errorMsg = response.data && response.data.message ? response.data.message : 'Unknown error occurred during product import';
-                                updateStatus(selectiveSyncStatusDiv, 'Import failed');
-                                logMessage(selectiveSyncLogDiv, `Error in batch ${batchNumber}: ${errorMsg}`, 'error');
+                                const errorMsg = response.data?.message || 'Unknown error during batch processing';
+                                logMessage(selectiveSyncLogDiv, `Error in batch ${state.batchNumber}: ${errorMsg}`, 'error');
                                 
-                                // Re-enable buttons on error
-                                syncAllProductsButton.removeClass('disabled').text('Import All Products');
-                                loadProductsButton.removeClass('disabled');
-                                importSelectedButton.removeClass('disabled');
-                                stopSyncProductsButton.hide(); // Hide stop button
-                                productListContainer.show();
-                                if (productPaginationContainer.length) {
-                                    productPaginationContainer.show();
+                                // Check if we should retry
+                                if (response.data?.retry_recommended && state.retryCount < state.maxRetries) {
+                                    state.retryCount++;
+                                    logMessage(selectiveSyncLogDiv, `Retrying batch (attempt ${state.retryCount}/${state.maxRetries})...`, 'warning');
+                                    setTimeout(function() {
+                                        processProductBatch(state);
+                                    }, 5000);
+                                } else {
+                                    finishProductSync(state);
                                 }
                             }
                         },
                         error: function(jqXHR, textStatus, errorThrown) {
-                            const errorText = `AJAX Error in batch ${batchNumber}: ${textStatus}${errorThrown ? ' - ' + errorThrown : ''}`;
-                            updateStatus(selectiveSyncStatusDiv, 'Import failed');
-                            logMessage(selectiveSyncLogDiv, `Error: ${errorText}`, 'error');
+                            const isTimeout = textStatus === 'timeout' || 
+                                              jqXHR.status === 524 || 
+                                              jqXHR.status === 504 || 
+                                              jqXHR.status === 408;
                             
-                            // Re-enable buttons on error
-                            syncAllProductsButton.removeClass('disabled').text('Import All Products');
-                            loadProductsButton.removeClass('disabled');
-                            importSelectedButton.removeClass('disabled');
-                            stopSyncProductsButton.hide(); // Hide stop button
-                            productListContainer.show();
-                            if (productPaginationContainer.length) {
-                                productPaginationContainer.show();
+                            if (isTimeout) {
+                                state.consecutiveTimeouts++;
+                                state.consecutiveSuccesses = 0; // Reset success counter on failure
+                                
+                                // Reduce batch size on timeout (adaptive sizing)
+                                if (state.batchSize > state.minBatchSize) {
+                                    const oldBatchSize = state.batchSize;
+                                    state.batchSize = Math.max(state.minBatchSize, Math.floor(state.batchSize / 2));
+                                    logMessage(selectiveSyncLogDiv, `⚡ Timeout detected! Reducing batch size from ${oldBatchSize} to ${state.batchSize} and retrying...`, 'warning');
+                                    
+                                    // Add cooldown for server recovery
+                                    const cooldownSeconds = Math.min(30, 5 + (state.consecutiveTimeouts * 5));
+                                    logMessage(selectiveSyncLogDiv, `⏳ Waiting ${cooldownSeconds} seconds for server recovery...`, 'info');
+                                    
+                                    setTimeout(function() {
+                                        processProductBatch(state);
+                                    }, cooldownSeconds * 1000);
+                                } else if (state.retryCount < state.maxRetries) {
+                                    state.retryCount++;
+                                    logMessage(selectiveSyncLogDiv, `⚡ Timeout at minimum batch size. Retrying (${state.retryCount}/${state.maxRetries})...`, 'warning');
+                                    
+                                    setTimeout(function() {
+                                        processProductBatch(state);
+                                    }, 10000); // 10 second cooldown at min batch
+                                } else {
+                                    logMessage(selectiveSyncLogDiv, `Fatal error: Too many timeouts even at minimum batch size.`, 'error');
+                                    finishProductSync(state);
+                                }
+                            } else if (state.retryCount < state.maxRetries) {
+                                state.retryCount++;
+                                logMessage(selectiveSyncLogDiv, `Error: ${textStatus} ${errorThrown}. Retrying (${state.retryCount}/${state.maxRetries})...`, 'warning');
+                                
+                                setTimeout(function() {
+                                    processProductBatch(state);
+                                }, 5000);
+                            } else {
+                                logMessage(selectiveSyncLogDiv, `Fatal error after ${state.maxRetries} retries: ${textStatus} ${errorThrown}`, 'error');
+                                finishProductSync(state);
                             }
                         }
                     });
                 }
 
+                // Function to clean up after sync completes or fails
+                function finishProductSync(state) {
+                    // Re-enable buttons and show UI elements
+                    syncAllProductsButton.removeClass('disabled').text('Import All Products');
+                    loadProductsButton.removeClass('disabled');
+                    importSelectedButton.removeClass('disabled');
+                    stopSyncProductsButton.hide();
+                    productListContainer.show();
+                    if (productPaginationContainer.length) {
+                        productPaginationContainer.show();
+                    }
+                    
+                    // Reload product list to show updated data
+                    setTimeout(function() {
+                        if (loadProductsButton.length && typeof loadAndDisplayProductsForSelection === 'function') {
+                            loadAndDisplayProductsForSelection();
+                        }
+                    }, 2000);
+                }
+
                 // Start the batch processing
                 updateProgressBar(selectiveSyncProgressBar, 5);
-                updateStatus(selectiveSyncStatusDiv, 'Fetching products from Ecwid...');
-                processNextBatch();
+                processProductBatch(productSyncState);
             });
         }
 

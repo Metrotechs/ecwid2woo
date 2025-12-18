@@ -1,429 +1,157 @@
 ** Metrotechs E2W Sync Changelog **
 
 2025-12-18 - version 1.5.0
-* NEW FEATURE - CATEGORY PARENT-FIRST SORTING: Categories are now sorted before import to ensure parents are processed before children
-* NEW - Topological Sort: Uses breadth-first traversal to guarantee parent categories exist before their children
-* NEW - Auto-Fix Orphaned Children: When a parent category is imported, any previously orphaned children are automatically re-parented
-* NEW - Missing Parent Tracking: Stores parent-child relationships for categories imported out of order, fixes them automatically
-* NEW - Next Step Messaging: Shows what sync step is coming next (e.g., "Next: Syncing Customers...")
-* ENHANCED - Batch Size Constants: Server detection now respects PHP constants (ECWID2WOO_PRODUCT_BATCH_SIZE, ECWID2WOO_CATEGORY_BATCH_SIZE)
-* ENHANCED - Step Completion Logs: Clear ✅ success messages when each sync step completes
-* FIX - "Parent category not found" warnings significantly reduced by processing parents first
-* FIX - Categories with deep nesting now import correctly in proper hierarchy
-* FIX - Variation SKU validation now properly identifies variations belonging to same Ecwid product
-* ENHANCED - Standardized variation meta key to _ecwid_variation_id with backward compatibility for _ecwid_combination_id
-* FIX - Variation Ecwid IDs now properly displayed in SKU integrity warnings (was showing empty)
-* NEW - Auto-backfill of missing Ecwid IDs when updating existing variations
+* NEW FEATURE - REAL-TIME BATCH LOGGING: All sync pages now show detailed logs as each batch processes
+* NEW FEATURE - ADAPTIVE BATCH SIZING: Batch size automatically reduces on timeouts (100 → 50 → 25 → ...)
+* NEW FEATURE - BATCH SIZE RECOVERY: After 5 successful batches, batch size gradually increases back toward default
+* NEW FEATURE - BATCH SIZE DISPLAY: Current batch size shown in status bar on all sync pages
+* NEW - Product Sync Page: Now has identical batch processing to Full Sync with real-time logs
+* NEW - Category Sync Page: Now has identical batch processing to Full Sync with real-time logs
+* NEW - Default Batch Size: Products and Categories now start at 100 items per batch
+* NEW - Timeout Recovery: On 524/504/408 errors, batch size is halved and retried automatically
+* NEW - Progressive Cooldowns: Server recovery waits increase with consecutive timeouts (5s → 10s → 30s)
+* NEW - Memory-Aware Batching: PHP automatically reduces batch size if memory is low (<128MB free)
+* NEW - Performance Recovery: Batch size increases by 50% after stable performance (5 consecutive successes)
+* ENHANCED - Category Parent-First Sorting: Categories sorted before import to ensure parents processed first
+* ENHANCED - Topological Sort: Breadth-first traversal guarantees parent categories exist before children
+* ENHANCED - Auto-Fix Orphaned Children: Orphaned children automatically re-parented when parent imported
+* ENHANCED - Missing Parent Tracking: Stores parent-child relationships, fixes automatically when parent appears
+* ENHANCED - Next Step Messaging: Shows what sync step is coming next
+* ENHANCED - Batch Size Constants: Server detection respects PHP constants
+* FIX - "Parent category not found" warnings significantly reduced
+* FIX - Categories with deep nesting now import correctly
+* FIX - Variation SKU validation now properly identifies variations from same Ecwid product
+* FIX - Variation Ecwid IDs now properly displayed in SKU integrity warnings
 
-2025-12-16 - version 1.4.9
-* NEW FEATURE - API PERMISSION ERROR DETECTION: Better handling of empty API responses
-* NEW - Empty Response Detection: Detects when Ecwid API returns empty response (common for permission issues)
-* NEW - Permission Error Guidance: Shows specific guidance for customer/order API permission errors
-* NEW - Smart Error Classification: Distinguishes between server errors (retry) and permission errors (check settings)
-* ENHANCED - Customer API errors now suggest checking "Read customers" permission in Ecwid API settings
-* ENHANCED - Order API errors now suggest checking "Read orders" permission in Ecwid API settings
-* UX - Clear 🔑 icon and guidance when API permissions are likely the issue
-* UX - Direct link to Ecwid Admin → Apps → API → Access Tokens in error messages
-
-2025-12-16 - version 1.4.8
-* NEW FEATURE - AUTO SERVER DETECTION: Automatically detects server resources and adjusts batch sizes
-* NEW - Server Tier Detection: Automatically categorizes servers as Low/Medium/High based on PHP memory and timeout limits
-* NEW - Dynamic Batch Sizing: Batch sizes automatically configured based on detected server tier
-* NEW - Adaptive Delays: Delay between batches adjusted automatically (2s-5s based on server capability)
-* ENHANCED - Low-memory servers (< 256MB): 5 products, 15 categories per batch, 5s delays
-* ENHANCED - Medium servers (256-512MB): 15 products, 30 categories per batch, 3s delays
-* ENHANCED - High-resource servers (512MB+): 50 products, 75 categories per batch, 2s delays
-* UX - Server capability info shown at sync start (memory, timeout, batch sizes)
-* UX - Visual tier indicator: 🚀 High, ⚡ Medium, 🐢 Low resource servers
-
-2025-12-16 - version 1.4.7
-* NEW FEATURE - SERVER DOWN RECOVERY: Handles Cloudflare server crash/overload errors (520, 521, 522, 523, 525, 526, 527, 530)
-* NEW - Extended Cooldown: When server is overloaded, waits 30-120 seconds before retrying (increases with each failure)
-* NEW - Aggressive Batch Reduction: On server crash, batch size reduced by 75% (double reduction) to ease server load
-* NEW - Visual Countdown: Shows countdown timer during server recovery cooldown period
-* NEW - Cloudflare Error Messages: Human-readable descriptions for all Cloudflare origin errors
-* ENHANCED - 521 "Web Server Down" now properly detected and triggers recovery mode
-* ENHANCED - 520 "Unknown Error" (server crash) now waits 30s+ instead of 3s retry
-* ENHANCED - 525 SSL Handshake failures (server overload) now trigger cooldown period
-* UX - Server recovery status shown in sync log with 🔥 SERVER OVERLOAD DETECTED message
-* UX - Clear suggestions when server repeatedly crashes (wait, off-peak hours, contact host)
-
-2025-12-16 - version 1.4.6
-* NEW FEATURE - ADAPTIVE BATCH SIZING: Automatically reduces batch size when timeout errors occur
-* NEW - Cloudflare 524 Detection: Specifically handles Cloudflare's 100-second timeout errors
-* NEW - Multi-Timeout Support: Detects 524 (Cloudflare), 504 (Gateway), 408 (Request), and jQuery timeouts
-* NEW - Auto-Retry with Reduction: On timeout, batch size halves (100→50→25→12→6→3→1) and retries automatically
-* NEW - FAST SKIP OPTIMIZATION: Pre-loads existing product IDs in single query for 100x faster duplicate detection
-* PERFORMANCE - Batch Skip: Now skips 100 previously imported products per request instead of checking individually
-* PERFORMANCE - Single Query Lookup: Replaced N individual DB queries with 1 batch query per sync request
-* ENHANCED - Higher Default Batches: Increased default batch sizes (products: 100, categories: 100, customers/orders: 50)
-* ENHANCED - Smarter Retry Logic: Up to 8 retries with progressive batch reduction before failing
-* UX - Live Feedback: Shows batch size reduction messages in sync log (⚡ Reducing batch size...)
-* UX - Timeout Recovery: Displays clear error messages with suggestions when max retries exceeded
-* FIX - 524 Error Handling: 524 errors now properly trigger adaptive sizing instead of generic retry
-
-2025-12-16 - version 1.4.5
-* NEW FEATURE - PAUSE/RESUME SYNC: Added pause button for Full Sync page
-* NEW - Pause Button: Located between Start and Stop buttons for easy access
-* NEW - Resume Capability: Resumes from exact position including current step, offset, and variation queue
-* NEW - Visual Feedback: Button changes from yellow "PAUSE" to green "RESUME" when paused
-* NEW - State Preservation: Saves complete sync state including variation processing progress
-* UX - Log Messages: Clear icons (⏸️/▶️) indicate pause and resume actions in sync log
-* FIX - CATEGORY BATCH LOADING: Category sync page now fetches ALL categories in batches
-* FIX - Categories beyond 100 now load properly via recursive batch fetching
-* FIX - PRODUCT BATCH LOADING: Product sync page now fetches ALL products in batches
-* FIX - Products beyond 100 now load properly via recursive batch fetching
-* UX - Live progress display during category/product loading shows batch count and progress percentage
-
-2025-12-16 - version 1.4.4
-* ENHANCED - SYSTEM DIAGNOSTICS: Expanded diagnostics panel with comprehensive server information
-* NEW - Memory Usage: Shows current PHP memory usage with visual progress bar and peak usage
-* NEW - Disk Space: Displays available/used disk space with percentage and visual indicator
-* NEW - Execution Limits: Shows max execution time and max input time settings
-* NEW - Environment Info: Displays PHP version, WordPress version, WooCommerce version, plugin version
-* NEW - WooCommerce Stats: Shows product count, category count, order count, and currency
-* NEW - Database Info: Displays database size, table prefix, and multisite status
-* NEW - Issue Detection: Automatically detects high memory usage and low execution time limits
-* UX - Visual Progress Bars: Color-coded bars (green/yellow/red) for memory and disk usage
-* UX - Modern Card Layout: Professional grid-based display with color-coded sections
-
-2025-12-15 - version 1.4.3
-* ENHANCED RELIABILITY - EXPONENTIAL BACKOFF RETRY: Smart retry delays (3s→6s→12s) for better server recovery during 500 errors
-* IMPROVED - Category Batch Loading: Categories now load in batches with full retry logic, matching product sync reliability
-* CRITICAL FIX - FULL SYNC RETRY BUG: Fixed bug where retry counter was not reset after successful batches
-* ENHANCED - Cloudflare 524 Handling: Explicit handling for Cloudflare timeout errors with automatic retry
-* UX - Better Status Messages: Users see retry countdown and server status during transient errors
-* Performance - Increased Batch Delays: 3-second delays between batches to reduce server load
-* REFACTOR - Text Domain Update: Changed text domain from 'ecwid2woo' to 'metrotechs-e2w-sync' for WordPress compliance
-* CLEANUP - Repository Cleanup: Removed development documentation files for cleaner production releases
-
-2025-12-15 - version 1.4.2
-* NEW FEATURE - BATCH LOADING SYSTEM: Products load in manageable batches with progress tracking
-* ENHANCED - Retry Logic: Automatic 3-attempt retry on transient 500 errors
-* UX - Progress Display: Real-time batch progress with item counts
-* Performance - Memory Optimization: Prevents browser and server memory issues with large catalogs
-* REFACTOR - Server-side Pagination: Product sync now uses server-side pagination to avoid memory exhaustion
-
-2025-12-15 - version 1.4.1
-* ENHANCED - Output Buffering: Added output buffering to prevent PHP notices from corrupting JSON responses
-* FIXED - API Category Fetch: Fixed category API calls to use proper authorization headers
-* IMPROVED - Error Handling: Better error handling throughout product sync operations
-* STABILITY - Debug Mode Improvements: Enhanced debug logging wrapped in WP_DEBUG checks
-
-2025-09-02 - version 1.4.0
-* NEW FEATURE - STOP SYNC BUTTON FOR CATEGORIES: Added "Stop Sync" button to cancel bulk category imports in progress
-* UX - Users can now cancel long-running category imports without waiting for completion
-* UX - Stop button appears during import and hides when import completes or is cancelled
-* UX - Confirmation dialog prevents accidental cancellation of bulk imports
-* Performance - AJAX request abortion immediately stops category import processing
-* Consistency - Both product and category sync pages now have stop functionality
-
-2025-09-02 - version 1.3.9
-* NEW FEATURE - STOP SYNC BUTTON: Added "Stop Sync" button to cancel bulk product imports in progress
-* UX - Users can now cancel long-running product imports without waiting for completion
-* UX - Stop button appears during import and hides when import completes or is cancelled
-* UX - Confirmation dialog prevents accidental cancellation of bulk imports
-* Performance - Allows users to stop imports if they take too long or encounter issues
-
-2025-09-02 - version 1.3.8
-* CRITICAL FIX - TIMEOUT PREVENTION: Reduced bulk product import batch size from 50 to 5 products
-* Fixed - Prevents timeout errors during "Import All Products" for servers with shorter execution limits
-* Performance - Smaller batches ensure reliable processing of large product catalogs
-* Stability - Better compatibility with various hosting environments and server configurations
-
-2025-09-02 - version 1.3.7
-* MAJOR FIX - BULK PRODUCT IMPORT: Fixed "Import All Products" to process ALL products instead of stopping after first 50
-* Fixed - Implemented batch processing to handle large product catalogs (6756+ products) 
-* Fixed - Progress bar now shows accurate progress during bulk product imports
-* Fixed - Final statistics display total counts across all batches
-* Performance - Added 500ms delay between batches to prevent server overload
-* UX - Better status messages showing current batch and progress during import
-
-2025-09-02 - version 1.3.6
-* MAJOR CHANGE - PLUGIN RENAMED: Changed plugin display name from "Ecwid2Woo" to "Metrotechs E2W Sync" for WordPress repository compliance
-* Updated - Plugin display name and description updated for repository submission
-* Fixed - Reverted internal structure to original working version to maintain stability
-* Performance - Reduced category batch size to 10 for better server compatibility
-* Note - File names and internal class structure remain unchanged for maximum compatibility
-
-2025-09-02 - version 1.3.5
-* CRITICAL FIX - DISABLED PRODUCTS: Added check to skip disabled products that have incomplete data
-* Fixed - Disabled products (enabled=false) are now properly skipped instead of causing import failures
-* Fixed - Eliminates "[CRITICAL] Product missing Ecwid ID or SKU" errors for disabled products
-* Performance - Reduces processing time by skipping non-relevant disabled products
-* Stability - Prevents sync failures due to incomplete disabled product data from Ecwid API
-
-2025-09-02 - version 1.3.4
-* CRITICAL FIX - PHP WARNING: Fixed "Undefined array key 'error_data'" warning in full-sync-page.php line 256
-* Fixed - Enhanced error handling to always include all expected array keys (error_data, is_server_error, retry_recommended)
-* Fixed - Improved API error response handling with consistent data structure
-* Stability - Eliminated PHP warnings that could appear in server error logs
-
-2025-09-02 - version 1.3.3
-* CRITICAL FIX - PRODUCT SYNC: Removed 'enabled=true' filter that was causing product sync to be skipped
-* Fixed - Products sync now includes all products (enabled and disabled) to match Ecwid behavior
-* Fixed - Enhanced debugging for empty API responses to track sync skipping issues
-* Stability - Resolved issue where sync would skip from categories directly to customers
-
-2025-09-02 - version 1.3.2
-* CRITICAL FIX - BATCH PROCESSING: Reduced batch sizes to prevent server overload (Categories: 50→10, Products: 25→5)
-* CRITICAL FIX - AJAX TIMING: Added 1-2 second delays between AJAX requests to prevent rapid-fire 404 errors
-* CRITICAL FIX - 404 HANDLING: Enhanced error handling specifically for AJAX handler not found issues
-* Fixed - Added 60-second timeout to AJAX requests to prevent connection hanging
-* Fixed - Improved error detection and retry logic for server connectivity problems
-* Stability - Gallery images continue working from v1.3.0 with corrected API field mapping
-
-2025-09-02 - version 1.3.1
-* CRITICAL FIX - AJAX HANDLERS: Added missing 'ecwid_wc_process_variation_batch' AJAX handler registration
-* Fixed - 404 errors in admin-ajax.php calls for variation processing during sync operations
-* Fixed - Missing AJAX action registration that was causing JavaScript sync errors
-* Enhanced - Complete AJAX handler coverage for all sync functionality
-* Stability - Resolved admin console errors related to missing AJAX endpoints
+2025-12-16 - version 1.4.0
+* NEW FEATURE - PAUSE/RESUME SYNC: Pause button with complete state preservation for Full Sync
+* NEW FEATURE - API PERMISSION ERROR DETECTION: Smart error classification for permission issues
+* NEW FEATURE - AUTO SERVER DETECTION: Detects server resources and adjusts batch sizes automatically
+* NEW FEATURE - SERVER DOWN RECOVERY: Handles Cloudflare 520-530 errors with extended cooldowns
+* NEW FEATURE - FAST SKIP OPTIMIZATION: Pre-loads existing IDs in single query for 100x faster duplicate detection
+* NEW FEATURE - SYSTEM DIAGNOSTICS: Comprehensive server info panel with memory, disk, WooCommerce stats
+* NEW - Server Tier Detection: Categorizes servers as 🚀 High, ⚡ Medium, 🐢 Low
+* NEW - Dynamic Batch Sizing: Batch sizes auto-configured based on detected server tier
+* NEW - Pause/Resume: Resumes from exact position including variation queue
+* NEW - Visual Countdown: Shows countdown timer during server recovery cooldown
+* NEW - Permission Error Guidance: Specific guidance for customer/order API permission errors
+* ENHANCED - EXPONENTIAL BACKOFF RETRY: Smart retry delays (3s→6s→12s) for server recovery
+* ENHANCED - Cloudflare Error Messages: Human-readable descriptions for all Cloudflare origin errors
+* ENHANCED - Memory Usage display with visual progress bar
+* ENHANCED - Output Buffering: Prevents PHP notices from corrupting JSON responses
+* FIX - Category/Product batch loading now fetches ALL items via recursive batch fetching
+* FIX - Items beyond 100 now load properly on selective sync pages
+* FIX - Retry counter reset bug in Full Sync
+* REFACTOR - Text Domain: Changed to 'metrotechs-e2w-sync' for WordPress compliance
 
 2025-09-02 - version 1.3.0
-* CRITICAL FIX - GALLERY IMAGE IMPORT: Fixed gallery images not importing during full sync by using correct API field name
-* CRITICAL FIX - API FIELD MAPPING: Changed gallery image URL detection from 'hdUrl' to 'url' field (confirmed from API testing)
-* Enhanced - GALLERY URL DETECTION: Added comprehensive fallback support for multiple possible gallery image URL field names
-* Enhanced - SMART FIELD SELECTION: Primary choice 'url', with fallbacks to 'originalImageUrl', 'hdUrl', and 'imageUrl'
-* Fixed - Gallery images now import correctly during both individual product sync and full sync operations
-* Fixed - Gallery image preservation logic updated to use correct field names for existing image comparison
-* Performance - More reliable gallery image import with proper API field mapping
+* NEW FEATURE - STOP SYNC BUTTON: Cancel running product and category imports instantly
+* NEW FEATURE - BULK PRODUCT IMPORT FIX: Batch processing handles large catalogs (6756+ products)
+* MAJOR CHANGE - PLUGIN RENAMED: "Ecwid2Woo" → "Metrotechs E2W Sync" for WordPress compliance
+* CRITICAL FIX - GALLERY IMAGE IMPORT: Fixed with correct API field mapping
+* CRITICAL FIX - AJAX HANDLERS: Added missing registrations for variation processing
+* CRITICAL FIX - WOOCOMMERCE DEPENDENCY: Check ensures WooCommerce is active before initializing
+* CRITICAL FIX - TIMEOUT PREVENTION: Reduced batch sizes for server compatibility
+* CRITICAL FIX - DISABLED PRODUCTS: Skip disabled products with incomplete data
+* ENHANCED - GALLERY URL DETECTION: Fallbacks for 'url', 'originalImageUrl', 'hdUrl', 'imageUrl'
+* ENHANCED - CATEGORY LOOKUP: Uses parent plugin's get_term_id_by_ecwid_id helper
+* UX - Confirmation dialogs prevent accidental cancellation
+* Performance - AJAX request abortion immediately stops import processing
 
-2025-09-02 - version 1.2.1
-* DEBUG - GALLERY IMAGE DATA STRUCTURE: Added comprehensive debugging to identify exact gallery image field names in API response
-* DEBUG - ENHANCED GALLERY LOGGING: Added detailed logging of raw gallery image data structure from Ecwid API
-* DEBUG - MULTIPLE URL FIELD DETECTION: Added support for detecting gallery image URLs in multiple possible field names (hdUrl, url, imageUrl)
-* Enhanced - GALLERY IMPORT TROUBLESHOOTING: Added step-by-step logging to track exactly why gallery images aren't importing during full sync
-* Debug - FIELD NAME VALIDATION: Enhanced debugging to show which URL field contains the gallery image data
-
-2025-09-02 - version 1.2.0
-* CRITICAL FIX - WOOCOMMERCE DEPENDENCY: Added check to ensure WooCommerce is active before initializing sync handlers
-* CRITICAL FIX - PLUGIN ACTIVATION: Fixed fatal error when WooCommerce is not installed or activated
-* Enhanced - ADMIN NOTICES: Added user-friendly notice when WooCommerce dependency is missing
-* Enhanced - GRACEFUL DEGRADATION: Plugin now loads safely without WooCommerce and displays helpful error message
-* Fixed - Prevents critical error during plugin activation when WooCommerce is not available
-* Stability - Better error handling for missing dependencies during WordPress initialization
-
-2025-09-02 - version 1.1.9
-* ENHANCED DEBUGGING - FULL SYNC GALLERY IMAGES: Added comprehensive debugging for gallery image import during full sync operations
-* Enhanced - DETAILED GALLERY LOGGING: Added enhanced logging to track gallery image processing differences between individual and full sync
-* Debug - FULL SYNC IMAGE TRACKING: Added debug logs to track API gallery image data and processing flow during full sync
-* Debug - API RESPONSE VALIDATION: Enhanced debugging to verify gallery image data is correctly passed through full sync API calls
-* Maintenance - TROUBLESHOOTING TOOLS: Added diagnostic logging to identify why gallery images work in individual sync but not full sync
-
-2025-09-02 - version 1.1.8
-* CRITICAL FIX - CATEGORY LOOKUP METHOD: Switched to using parent plugin's get_term_id_by_ecwid_id helper function for more reliable category lookup
-* Enhanced - IMPROVED CATEGORY DEBUGGING: Better error reporting and category term validation during assignment
-* Fixed - Category assignment now uses the same proven lookup method as other parts of the plugin
-* Fixed - Better error handling when category terms can't be loaded after finding term ID
-* Performance - More efficient category lookup using cached helper function instead of direct database queries
-
-2025-09-02 - version 1.1.7
-* CRITICAL FIX - GALLERY IMAGE IMPORT: Fixed bug where gallery images weren't imported even when products had no gallery images
-* CRITICAL FIX - CATEGORY COUNT DISPLAY: Fixed "Array" display issue in category debugging - now shows actual number count
-* Enhanced - IMPROVED GALLERY LOGIC: Gallery images now properly import when products have main image but no gallery images
-* Enhanced - ENHANCED CATEGORY API DEBUGGING: Added detailed error logging for category auto-creation failures
-* Fixed - Category lookup now correctly reports total imported categories count
-* Fixed - Gallery image import logic no longer blocked by presence of main image
-* Performance - Better error handling and debugging for category API requests
-
-2025-09-01 - version 1.1.6
-* CRITICAL FIX - FORCE IMAGE IMPORT: Fixed bug where products with no images weren't getting Ecwid images imported
-* Enhanced - SMART IMAGE LOGIC: Products with no images now force-import all available Ecwid images
-* Added - DETAILED IMAGE DEBUGGING: Comprehensive logging shows exactly what happens during image import process  
-* Added - IMAGE VERIFICATION: Final status check confirms images were properly assigned to products
-* Fixed - Main product images now properly set with error handling and detailed status reporting
-* Fixed - Gallery images properly imported when products have no existing images
-* Performance - Better error handling for failed image downloads with detailed error messages
-
-2025-09-01 - version 1.1.5
-* CRITICAL FIX - CATEGORY ASSIGNMENT: Fixed major bug where products weren't being assigned to imported categories
-* Enhanced - DETAILED CATEGORY DEBUGGING: Added comprehensive logging to track category assignment process
-* Added - AUTO-CATEGORY CREATION: Products now auto-create missing categories during import instead of skipping
-* Added - CATEGORY LOOKUP VERIFICATION: Enhanced debugging shows exact category search process and results
-* Fixed - Products now properly assigned to their Ecwid categories instead of remaining uncategorized
-* Performance - Better category lookup process with detailed status reporting
-
-2025-09-01 - version 1.1.4
-* CRITICAL FIX - IMAGE PRESERVATION: Fixed major bug where existing product images were deleted during re-import
-* Enhanced - SMART IMAGE DETECTION: Now checks if images already exist before importing to prevent duplicates
-* Added - IMAGE URL COMPARISON: Intelligent filename-based comparison to avoid re-importing same images
-* Fixed - Gallery images are now preserved when updating existing products
-* Fixed - Main product images are only updated when they're actually different
-* Performance - Reduced unnecessary image processing for products with existing images
-
-2025-09-01 - version 1.1.3
-* Enhanced - ADVANCED TIMESTAMP DETECTION: Expanded Ecwid timestamp field support for better skip accuracy
-* Enhanced - CONSERVATIVE SKIP LOGIC: Products imported within 24 hours now skip automatically to reduce re-processing
-* Added - DEBUG TIMESTAMP LOGGING: Shows available Ecwid timestamp fields in debug mode for troubleshooting
-* Added - COMPREHENSIVE DATE FIELD SUPPORT: Now checks updated, lastUpdated, dateUpdated, modifiedDate, createTimestamp, created fields
-* Performance - REDUCED PROCESSING OVERHEAD: Recently imported products skip processing unless clear update signals present
-* Fixed - Better handling of products with missing Ecwid timestamp data
-* Fixed - More intelligent skip decisions for legacy products
-
-2025-09-01 - version 1.1.2
-* Added - SMART SKIP TECHNOLOGY: Intelligent duplicate prevention for large migrations
-* Added - Resume Migration Support: Full Sync now skips already imported products and continues from where it left off
-* Added - Timestamp-Based Skip Logic: Compares Ecwid product update time with local import timestamp to determine if update needed
-* Added - Efficient Large Batch Handling: 4500+ product imports now resume intelligently instead of re-processing existing products
-* Added - Import Timestamp Tracking: Each product saves _ecwid_last_import_time meta field for smart skip comparison
-* Added - Migration Recovery: When Full Sync errors out, restart continues from unimported products only
-* Added - Legacy Product Handling: Automatically adds timestamps to previously imported products for future smart skipping
-* Added - Fallback Skip Logic: Uses WooCommerce product modification date when Ecwid timestamps unavailable
-* Fixed - Prevents duplicate processing overhead during large store migrations
-* Fixed - Eliminates unnecessary re-importing of unchanged products
-* Fixed - Handles products imported before timestamp tracking was implemented
-* Performance - Significantly reduces migration time for stores with thousands of products (70-90% improvement)
-* Performance - Optimized memory usage and processing for enterprise-scale migrations
-
-2025-09-01 - version 1.1.1
-* Added - MAJOR FEATURE: Customer Import Functionality - Complete customer profile synchronization from Ecwid to WooCommerce
-* Added - MAJOR FEATURE: Order Import Functionality - Full order history migration with customer association and status preservation
-* Added - Customer Sync Page: Dedicated interface for importing customer accounts with filtering and selection options
-* Added - Order Sync Page: Dedicated interface for importing order history with advanced filtering by status and date
-* Added - Full Sync Enhancement: 4-step sync process now includes Categories → Products → Customers → Orders
-* Added - Intelligent Customer Matching: Multi-tier matching system using email, ID, and name similarity for duplicate prevention
-* Added - Order-Customer Association: Automatic linking of imported orders to existing customer accounts
-* Added - Navigation Enhancement: Added Customer Sync and Order Sync buttons to all sync pages for unified navigation
-* Added - UI Consistency Enhancement: Full Sync page now matches polished interface of other sync pages
-* Added - Professional Loading Interface: Full Sync initial info container with loading states and success feedback
-* Added - Enhanced Status Display: 4-column grid showing Categories, Products, Customers, and Orders counts with visual icons
-* Added - Unified Experience: Consistent selective-sync-initial-info container pattern across all sync pages
-* Added - Professional Loading Animation: Yellow banner with spinner during data loading, blue success state with detailed metrics
-* Added - Error Handling Enhancement: Red error banners for API failures and connection issues with specific error messages
-* Added - Debug Information Panel: Expandable details section showing sync configuration and data source information
-* Fixed - Visual Consistency: Full Sync page now provides same professional user experience as Product/Category sync pages
+2025-09-01 - version 1.2.0
+* NEW FEATURE - SMART SKIP TECHNOLOGY: Intelligent duplicate prevention for large migrations
+* NEW FEATURE - CUSTOMER IMPORT: Complete customer profile synchronization from Ecwid to WooCommerce
+* NEW FEATURE - ORDER IMPORT: Full order history migration with customer association
+* NEW - Customer Sync Page: Dedicated interface for importing customer accounts
+* NEW - Order Sync Page: Dedicated interface for importing order history
+* NEW - Full Sync Enhancement: 4-step process (Categories → Products → Customers → Orders)
+* NEW - Resume Migration Support: Skips already imported products, continues from interruption point
+* NEW - Timestamp-Based Skip Logic: Compares Ecwid update time with local import timestamp
+* NEW - Intelligent Customer Matching: Multi-tier matching using email, ID, and name similarity
+* ADDED - CRITICAL IMAGE PRESERVATION: Existing product images preserved during re-import
+* ADDED - Smart Image Detection: Checks if images already exist before importing
+* ADDED - AUTO-CATEGORY CREATION: Products auto-create missing categories during import
+* ADDED - FORCE IMAGE IMPORT: Products with no images get Ecwid images imported
+* ENHANCED - Navigation: Customer Sync and Order Sync buttons on all sync pages
+* ENHANCED - 4-Column Status Display: Shows Categories, Products, Customers, Orders counts
+* ENHANCED - Professional Loading Interface with success/error states
+* Performance - 70-90% improvement when restarting large migrations (4500+ products tested)
 
 2025-08-30 - version 1.1.0
-* Added - MAJOR BREAKTHROUGH: Complete Product Loading System
-* Added - Handles stores with 6000+ products (previously limited to 100)
-* Added - Advanced Pagination Engine - Makes 70+ API calls to load entire product catalog instead of stopping at first 100
-* Added - Successfully tested with stores containing 6,974 products across 70+ API calls
-* Added - Enabled/Disabled Product Separation - Toggle between product types with smart button interface
-* Added - Real-time Loading Metrics - Shows exact API call count, total products loaded, and performance data
-* Fixed - Enhanced API Response Handling - Fixed critical count field parsing issue that prevented full product loading
-* Added - Professional Status Panel - "Product Loading Complete" with comprehensive loading statistics
-* Added - Advanced Debug Information - Console and server-side logging showing pagination progress and API response analysis
-* Fixed - API responseFields - Now includes total parameter ensuring correct pagination
-* Fixed - Improved Count Logic - Uses actual item count instead of unreliable API count field
-* Fixed - Enhanced Loop Condition - Robust pagination logic: count>0 && offset<total
-* Added - Raw Response Debugging - Displays actual API response data for troubleshooting
-* Added - Complete Store Support - Successfully tested with 6,974 products across 70 API calls
-* Added - Visual Selection Interface - Enhanced checkbox design with alternating row colors and detailed product information
-* Added - Smart Selection Controls - "Select All/None" with indeterminate state and dynamic import button text
-* Added - Individual Progress Tracking - Monitor each selected product with enhanced feedback
-* Added - Enhanced Timeout Handling - 120-second timeout for large product catalogs
-* Added - Comprehensive Debug Logging - Raw API response analysis and pagination troubleshooting
+* MAJOR BREAKTHROUGH - Complete Product Loading System
+* NEW - Handles stores with 6000+ products (previously limited to 100)
+* NEW - Advanced Pagination Engine: Makes 70+ API calls to load entire product catalog
+* NEW - Successfully tested with stores containing 6,974 products across 70+ API calls
+* NEW - Enabled/Disabled Product Separation with smart toggle interface
+* NEW - Real-time Loading Metrics: Shows API call count, total products loaded, performance data
+* NEW - Visual Selection Interface with alternating row colors and detailed product info
+* NEW - Smart Selection Controls: "Select All/None" with indeterminate state
+* NEW - Individual Progress Tracking for each selected product
+* FIXED - API responseFields now includes total parameter for correct pagination
+* FIXED - Enhanced count logic uses actual item count instead of unreliable API count field
+* FIXED - Robust pagination loop condition: count>0 && offset<total
+* Performance - Enhanced Timeout Handling: 120-second timeout for large catalogs
 
 2025-07-22 - version 1.0.5
-* Fixed - 500 Error Resolution - Comprehensive error handling prevents server timeouts during large imports
-* Added - Dynamic Batch Sizing - Optimized processing: 15 categories/batch (5x faster), 3 products/batch for stability
-* Fixed - SKU Conflict Resolution - Automatic unique SKU generation prevents "Invalid or duplicated SKU" errors
-* Added - Enhanced Error Recovery - Try-catch blocks with user-friendly error messages and automatic retry logic
-* Added - Memory Management - Improved resource allocation prevents memory exhaustion during full sync
-* Added - API Retry Logic - Exponential backoff for rate limiting and server errors with intelligent retry
-* Added - Comprehensive fatal error handling for PHP 7+ with graceful degradation
-* Added - Enhanced AJAX error classification and automatic retry mechanisms
-* Added - Dynamic resource limits based on content type and batch size
-* Added - Unique variation SKU generation with wc_get_product_id_by_sku() validation
-* Added - Progressive retry delays for improved API reliability
-* Added - Enhanced logging for better debugging and troubleshooting
-* Added - Faster category synchronization with optimized batch processing
-* Fixed - Reduced sync failures through improved error handling
-* Added - Better progress feedback during large import operations
-* Added - Automatic conflict resolution without user intervention
+* FIXED - 500 Error Resolution: Comprehensive error handling prevents server timeouts
+* ADDED - Dynamic Batch Sizing: 15 categories/batch (5x faster), 3 products/batch for stability
+* FIXED - SKU Conflict Resolution: Automatic unique SKU generation prevents duplicate SKU errors
+* ADDED - Enhanced Error Recovery: Try-catch blocks with user-friendly messages and auto-retry
+* ADDED - Memory Management: Improved resource allocation prevents memory exhaustion
+* ADDED - API Retry Logic: Exponential backoff for rate limiting and server errors
+* ADDED - Comprehensive fatal error handling for PHP 7+ with graceful degradation
+* ADDED - Dynamic resource limits based on content type and batch size
 
 2025-06-28 - version 1.0.4
-* Fixed - Client-side pagination - Resolves browser freezing issues with large product catalogs (6000+ products)
-* Added - 50 products per page display - Optimized DOM rendering for smooth performance
-* Added - Cross-page selection tracking - Maintains product selections across pagination
-* Added - Enhanced loading indicators - Professional animated spinners with success/error states
-* Added - Improved pagination controls - Independent positioning outside scroll areas for better UX
-* Added - API token interface clarity - Updated labeling to support both public and secret tokens
-* Fixed - Complete API pagination support - Fixed responseFields to load all products (not just first 100)
-* Added - Enhanced error handling - Better feedback for API failures and connection issues
-* Added - Implemented Set-based selection management for optimal performance
-* Added - Independent pagination container for improved UI layout
-* Added - Optimized API calls with proper total count retrieval
-* Added - Enhanced JavaScript architecture for large dataset handling
-* Added - Improved memory management for browser stability
-* Fixed - Eliminated browser freezing with large product catalogs
-* Added - Faster page load times with pagination
-* Added - Clearer progress feedback during sync operations
-* Added - Better responsive design for pagination controls
-* Added - Improved accessibility for selection management
+* FIXED - Client-side pagination: Resolves browser freezing with large catalogs (6000+ products)
+* ADDED - 50 products per page display: Optimized DOM rendering for smooth performance
+* ADDED - Cross-page selection tracking: Maintains selections across pagination
+* ADDED - Enhanced loading indicators: Professional animated spinners with success/error states
+* ADDED - Improved pagination controls: Independent positioning for better UX
+* FIXED - Complete API pagination support: Fixed responseFields to load all products
+* ADDED - Enhanced error handling for API failures and connection issues
+* ADDED - Set-based selection management for optimal performance
 
 2025-06-10 - version 1.0.3
-* Fixed - Minor UI inconsistencies in admin interface
-* Fixed - Edge case issues with empty category descriptions
-* Added - Improved error messages for better user understanding
-* Fixed - Potential memory leaks in large batch operations
-* Added - Enhanced input validation for API credentials
-* Added - Improved WordPress hooks compatibility
-* Added - Better handling of network timeouts
-* Added - Optimized database queries for better performance
+* FIXED - Minor UI inconsistencies in admin interface
+* FIXED - Edge case issues with empty category descriptions
+* ADDED - Improved error messages for better user understanding
+* FIXED - Potential memory leaks in large batch operations
+* ADDED - Enhanced input validation for API credentials
+* ADDED - Better handling of network timeouts
+* ADDED - Optimized database queries for better performance
 
 2025-05-25 - version 1.0.2
-* Added - Robust multilingual-safe slug generation for categories (transliteration + unique, length-limited slugs)
-* Added - Category thumbnail import - downloads and attaches images to WooCommerce category terms
-* Added - Better diagnostics for DB insert errors (logs charset/collation and name byte/char lengths)
-* Fixed - Correctly mark category imports as success after ASCII-safe retry (no false FAILED status)
-* Fixed - Reuse existing ASCII fallback categories instead of failing on duplicates
-* Fixed - Activation fatal error caused by invalid "break 2" usage
-* Fixed - Improved handling of Ecwid HTTP 500 with clearer feedback and resilience
+* ADDED - Robust multilingual-safe slug generation for categories
+* ADDED - Category thumbnail import: Downloads and attaches images to category terms
+* ADDED - Better diagnostics for DB insert errors (logs charset/collation info)
+* FIXED - Correctly mark category imports as success after ASCII-safe retry
+* FIXED - Reuse existing ASCII fallback categories instead of failing on duplicates
+* FIXED - Activation fatal error caused by invalid "break 2" usage
+* FIXED - Improved handling of Ecwid HTTP 500 with clearer feedback
 
 2025-04-30 - version 1.0.1
-* Fixed - Initial activation issues on some server configurations
-* Fixed - CSS conflicts with certain WordPress themes
-* Fixed - Error handling for invalid API credentials
-* Fixed - Minor translation issues
-* Added - Enhanced compatibility with older PHP versions (7.2+)
-* Added - Better error messages for troubleshooting
-* Added - Improved admin interface responsiveness
-* Added - Optimized asset loading
+* FIXED - Initial activation issues on some server configurations
+* FIXED - CSS conflicts with certain WordPress themes
+* FIXED - Error handling for invalid API credentials
+* ADDED - Enhanced compatibility with older PHP versions (7.2+)
+* ADDED - Better error messages for troubleshooting
+* ADDED - Improved admin interface responsiveness
 
 2025-04-15 - version 1.0.0
 * Initial release
-* Added - Professional, responsive admin interface with modern design
-* Added - Modular code architecture with clean separation of concerns
-* Added - Enhanced connection testing with visual feedback
-* Added - Stop sync functionality for user control
-* Added - Comprehensive error handling and recovery systems
-* Added - Real-time progress tracking with animated indicators
-* Added - Advanced batch processing for large catalogs
-* Added - Smart duplicate prevention using Ecwid IDs
-* Added - Auto-creation of missing WooCommerce attributes and terms
-* Added - Organized asset structure (CSS/JS in dedicated folders)
-* Added - WordPress coding standards compliance
-* Added - Enhanced security with proper input validation
-* Added - Optimized memory usage and performance
-* Added - Improved API error handling and debugging
-* Added - Clean, well-documented codebase for maintainability
-* Added - Intuitive navigation between sync options
-* Added - Color-coded logging system for easy troubleshooting
-* Added - One-click connection testing
-* Added - Clear progress indicators and status messages
-* Added - Responsive design for all screen sizes
-* Added - Full Sync: Complete catalog migration with preview capabilities
-* Added - Category Sync: Independent category import with hierarchy management
-* Added - Selective Product Sync: Choose specific products for targeted import
-* Added - Batch Processing: Smart chunking prevents server timeouts
-* Added - Complete product information (names, SKUs, descriptions, prices, stock, dimensions, weight)
-* Added - Category hierarchies with full parent-child relationships
-* Added - Product variations with complete option combinations
-* Added - Image management (featured images, galleries, variation-specific images)
-* Added - Inventory data (stock status, quantities, unlimited stock settings)
-* Added - Currency synchronization
-* Added - AJAX-powered processing with real-time feedback
-* Added - Memory optimization for large product catalogs
-* Added - Smart duplicate prevention using Ecwid IDs and SKU matching
-* Added - Auto-recovery systems for API timeouts and connection issues
-* Added - Intelligent attribute handling for WooCommerce's 28-character limits
-* Added - WordPress standards compliant
-* Added - Multilingual-safe slug generation
-* Added - Stop sync control for immediate cancellation
-* Added - Comprehensive error handling and recovery mechanisms
-* Added - Safe re-syncing with idempotent operations
-* Added - Debug integration with WordPress logging
-* Added - Secure API credential storage
-* Added - Input validation and sanitization
+* Professional, responsive admin interface with modern design
+* Full Sync: Complete catalog migration with preview capabilities
+* Category Sync: Independent category import with hierarchy management
+* Selective Product Sync: Choose specific products for targeted import
+* Batch Processing: Smart chunking prevents server timeouts
+* Complete product information (names, SKUs, descriptions, prices, stock, dimensions, weight)
+* Category hierarchies with full parent-child relationships
+* Product variations with complete option combinations
+* Image management (featured images, galleries, variation-specific images)
+* Inventory data (stock status, quantities, unlimited stock settings)
+* Currency synchronization
+* AJAX-powered processing with real-time feedback
+* Smart duplicate prevention using Ecwid IDs and SKU matching
+* Auto-recovery systems for API timeouts and connection issues
+* WordPress standards compliant with secure API credential storage

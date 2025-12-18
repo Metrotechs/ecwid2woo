@@ -242,136 +242,109 @@ The plugin uses intelligent multi-tier matching:
 == Changelog ==
 
 = 1.5.0 =
-**Category Hierarchy & Parent-First Sorting**
+**Real-Time Batch Processing & Adaptive Sizing**
 
 **Major Features:**
-* **Parent-First Sorting** - Categories are now sorted before import to ensure parents are processed before children
-* **Auto-Fix Orphaned Children** - When a parent category is imported, any previously orphaned children are automatically re-parented
-* **Missing Parent Tracking** - Stores parent-child relationships and fixes them automatically when parent appears
-* **Next Step Messaging** - Shows what sync step is coming next ("Next: Syncing Customers...")
+* **Real-Time Batch Logging** - All sync pages now show detailed logs as each batch processes
+* **Adaptive Batch Sizing** - Batch size automatically reduces on timeouts (100 → 50 → 25 → ...)
+* **Batch Size Recovery** - After 5 successful batches, size increases back toward default (50%↑)
+* **Batch Size Display** - Current batch size shown in status bar on all sync pages
+* **100 Items/Batch Default** - Products and Categories now start at 100 items per batch for faster syncs
 
-**Enhanced Batch Control:**
-* Server detection now respects PHP constants (ECWID2WOO_PRODUCT_BATCH_SIZE, ECWID2WOO_CATEGORY_BATCH_SIZE)
-* High-tier servers use 100% of your configured batch sizes
-* Medium/Low tiers scale proportionally
+**Sync Page Parity:**
+* Product Sync Page now has identical batch processing to Full Sync with real-time logs
+* Category Sync Page now has identical batch processing to Full Sync with real-time logs
+* All pages show batch size in status: "Syncing Products: 50 of 1000 [batch size: 100]"
+
+**Timeout Recovery:**
+* **Smart Recovery** - On 524/504/408 errors, batch size is halved and retried automatically
+* **Progressive Cooldowns** - Server recovery waits increase with consecutive timeouts (5s → 30s)
+* **Memory-Aware** - PHP automatically reduces batch size if memory is low (<128MB free)
+* **Performance Recovery** - Batch size increases after stable performance (5 consecutive successes)
+* **5 Retries** - Up to 5 retry attempts before giving up on a batch
+
+**Category Hierarchy:**
+* **Parent-First Sorting** - Categories sorted before import to ensure parents are processed first
+* **Auto-Fix Orphaned Children** - Previously orphaned children automatically re-parented
+* **Missing Parent Tracking** - Stores parent-child relationships and fixes them automatically
 
 **Variation SKU Validation Fixes:**
-* **Proper Variation Detection** - SKU validation now correctly identifies variations belonging to same Ecwid product
-* **Standardized Meta Keys** - Uses `_ecwid_variation_id` with backward compatibility for legacy `_ecwid_combination_id`
-* **Meta Backfill** - Auto-populates missing Ecwid IDs when updating existing variations
-* **Fixed Empty ID Warning** - Variation Ecwid IDs now properly displayed in SKU integrity warnings
+* **Proper Variation Detection** - SKU validation correctly identifies variations belonging to same product
+* **Standardized Meta Keys** - Uses `_ecwid_variation_id` with backward compatibility
+* **Meta Backfill** - Auto-populates missing Ecwid IDs when updating variations
 
 **Bug Fixes:**
 * "Parent category not found" warnings significantly reduced
 * Categories with deep nesting now import correctly
-* Step completion shows clear ✅ success messages
+* Variation Ecwid IDs now properly displayed in SKU warnings
 
-= 1.4.9 =
-**API Permission Error Detection**
-
-**Major Features:**
-* **Empty Response Detection** - Detects when Ecwid API returns empty response (common for permission issues)
-* **Permission Error Guidance** - Shows specific guidance for customer/order API permission errors
-* **Smart Error Classification** - Distinguishes between server errors (retry) and permission errors (check settings)
-
-**Enhanced Error Handling:**
-* Customer API errors now suggest checking "Read customers" permission
-* Order API errors now suggest checking "Read orders" permission
-* Direct link to Ecwid Admin → Apps → API → Access Tokens
-
-**UX Improvements:**
-* 🔑 Clear icon when API permissions are likely the issue
-* Actionable steps to resolve permission problems
-* No longer recommends retry for permission-based errors
-
-= 1.4.8 =
-**Automatic Server Resource Detection**
+= 1.4.5 =
+**Server Intelligence & Pause/Resume**
 
 **Major Features:**
-* **Auto Server Detection** - Automatically detects server resources (memory, timeout limits) and adjusts batch sizes
-* **Server Tier System** - Categorizes servers as Low/Medium/High and configures optimal settings
-* **Dynamic Batch Sizing** - Batch sizes auto-configured based on detected server capabilities
-* **Adaptive Delays** - Delay between batches adjusted automatically (2-5 seconds based on server tier)
+* **Pause/Resume Sync** - Added pause button with complete state preservation for Full Sync
+* **API Permission Detection** - Smart error classification for customer/order API permission errors
+* **Auto Server Detection** - Automatically detects server resources and adjusts batch sizes
+* **Server Down Recovery** - Handles Cloudflare server crash/overload errors (520-530) with extended cooldowns
+* **Adaptive Batch Sizing** - Auto-reduces batch size on timeout errors (524, 504, 408)
+* **Fast Skip Optimization** - Pre-loads existing IDs in single query for 100x faster duplicate detection
 
-**Server Tier Configurations:**
-* 🐢 **Low (< 256MB RAM):** 5 products, 15 categories, 5s delays
-* ⚡ **Medium (256-512MB RAM):** 15 products, 30 categories, 3s delays
-* 🚀 **High (512MB+ RAM):** 50 products, 75 categories, 2s delays
-
-**UX Improvements:**
-* Server capability info shown at sync start
-* Visual tier indicator with emoji (🚀 High, ⚡ Medium, 🐢 Low)
-* Memory and timeout limits displayed in sync log
-
-= 1.4.7 =
-**Server Crash Recovery & Extended Cloudflare Support**
-
-**Major Features:**
-* **Server Down Recovery** - Handles Cloudflare server crash/overload errors (520, 521, 522, 523, 525, 526, 527, 530)
-* **Extended Cooldown Periods** - Waits 30-120 seconds (increasing) when server is overloaded before retrying
-* **Aggressive Batch Reduction** - On server crash, batch size reduced by 75% to ease server load
-* **Visual Countdown Timer** - Shows countdown during server recovery cooldown period
+**Server Tier System:**
+* 🐢 **Low (< 256MB RAM):** Conservative batch sizes, 5s delays
+* ⚡ **Medium (256-512MB RAM):** Balanced performance, 3s delays
+* 🚀 **High (512MB+ RAM):** Maximum performance, 2s delays
 
 **Technical Enhancements:**
-* 520 (Web server crashed) - Now triggers 30s+ recovery cooldown
-* 521 (Web server down) - Properly detected with long cooldown
-* 522 (Connection timed out) - Server unreachable handling
-* 523 (Origin unreachable) - DNS/routing issue recovery
-* 525 (SSL handshake failed) - Server overload detection
-* Human-readable error messages for all Cloudflare origin errors
-
-**UX Improvements:**
-* 🔥 SERVER OVERLOAD DETECTED message in sync log
-* Clear countdown showing "Server recovery cooldown: X seconds remaining"
-* Helpful suggestions when server crashes repeatedly
-
-= 1.4.6 =
-**Adaptive Batch Sizing & Fast Skip Optimization**
-
-**Major Features:**
-* **Adaptive Batch Sizing** - Automatically reduces batch size when server timeouts occur (524, 504, 408)
-* **Fast Skip Optimization** - Pre-loads existing Ecwid IDs in single query for 100x faster duplicate detection
-* **Intelligent Timeout Recovery** - Detects Cloudflare 524, Gateway 504, Request 408, and jQuery timeouts
-* **Higher Default Batches** - Products and categories now start at 100 items per batch for faster syncing
-* **Client-Side Batch Control** - Batch sizes dynamically adjust based on server response times
-
-**Technical Enhancements:**
+* Server capability info shown at sync start (memory, timeout, batch sizes)
+* Visual countdown timer during server recovery cooldown
 * Batch size halves automatically on timeout (100→50→25→12→6→3→1)
-* Up to 8 timeout retries before giving up on a batch
-* Single SQL query with IN clause replaces individual lookups
-* O(1) hash map lookup for existing product detection
-* Reduced AJAX timeout from 300s to 90s for faster error detection
+* Pause/Resume saves exact position including variation queue
 
-**UX Improvements:**
-* Clear status messages when batch size is reduced
-* Shows current batch size in sync progress
-* Automatic recovery continues sync after batch reduction
+**Bug Fixes:**
+* Category batch loading now fetches ALL categories via recursive batching
+* Product batch loading now fetches ALL products via recursive batching
+* Items beyond 100 now load properly on selective sync pages
 
-= 1.4.3 =
-**Enhanced Reliability & Retry Logic**
-
-**Major Improvements:**
-* **Exponential Backoff Retry** - Smart retry delays (3s→6s→12s) for better server recovery during 500 errors
-* **Category Batch Loading** - Categories now load in batches with full retry logic, matching product sync reliability
-* **Full Sync Retry Fix** - Fixed critical bug where retry counter was not reset after successful batches
-* **Cloudflare 524 Handling** - Explicit handling for Cloudflare timeout errors with automatic retry
-* **Better Status Messages** - Users see retry countdown and server status during transient errors
-* **Increased Batch Delays** - 3-second delays between batches to reduce server load
-
-**Technical Enhancements:**
-* Reset retry counter immediately after each successful AJAX response
-* Added explicit HTTP 524 status code handling for Cloudflare-hosted sites
-* Improved user feedback during retry attempts with countdown display
-* Extended batch delay from 2 to 3 seconds for server breathing room
-
-= 1.4.2 =
-**Batch Loading System**
+= 1.4.1 =
+**Batch Loading & Diagnostics**
 
 **Major Features:**
-* **Product Batch Loading** - Products load in manageable batches with progress tracking
-* **Retry Logic** - Automatic 3-attempt retry on transient 500 errors
-* **Progress Display** - Real-time batch progress with item counts
-* **Memory Optimization** - Prevents browser and server memory issues with large catalogs
+* **Batch Loading System** - Products load in manageable batches with progress tracking
+* **System Diagnostics** - Expanded diagnostics panel with comprehensive server information
+* **Exponential Backoff Retry** - Smart retry delays (3s→6s→12s) for better server recovery
+
+**Diagnostics Panel:**
+* Memory usage with visual progress bar and peak usage
+* Disk space display with percentage indicator
+* WooCommerce stats: product count, category count, order count
+* Issue detection for high memory usage and low execution time
+
+**Technical Enhancements:**
+* Category batch loading with full retry logic
+* Output buffering prevents PHP notices from corrupting JSON
+* Cloudflare 524 explicit handling with automatic retry
+* Text domain changed to 'metrotechs-e2w-sync' for WordPress compliance
+
+= 1.4.0 =
+**Stop Sync & Major Stability**
+
+**Major Features:**
+* **Stop Sync Button** - Cancel running product and category imports instantly
+* **Bulk Import Fix** - Batch processing handles large catalogs (6756+ products)
+* **Gallery Image Fix** - Fixed gallery images not importing with correct API field mapping
+
+**Critical Fixes:**
+* WooCommerce dependency check prevents fatal errors
+* AJAX handler registrations for variation processing
+* Timeout prevention with reduced batch sizes
+* Disabled products properly skipped
+* Plugin renamed to "Metrotechs E2W Sync" for WordPress compliance
+
+**Technical Enhancements:**
+* Gallery URL detection with fallbacks: 'url', 'originalImageUrl', 'hdUrl', 'imageUrl'
+* AJAX request abortion immediately stops import processing
+* Confirmation dialogs prevent accidental cancellation
+* Better compatibility with various hosting environments
 
 = 1.1.4 =
 **Critical Image Preservation Fix**

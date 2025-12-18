@@ -1,8 +1,8 @@
 # Metrotechs E2W Sync - Complete E-commerce Migration Suite 🚀
 
-**Professional-grade WordPress plugin for seamless Ecwid to WooCommerce migration with revolutionary Smart Skip Technology and advanced image preservation**
+**Professional-grade WordPress plugin for seamless Ecwid to WooCommerce migration with self-optimizing batch processing, Smart Skip Technology, and advanced image preservation**
 
-Transform your e-commerce presence with the most advanced, reliable, and feature-complete Ecwid to WooCommerce synchronization plugin available. Built by industry experts with enterprise-level architecture, Smart Skip Technology for large migrations, bulletproof image preservation, and bulletproof reliability.
+Transform your e-commerce presence with the most advanced, reliable, and feature-complete Ecwid to WooCommerce synchronization plugin available. Built by industry experts with enterprise-level architecture featuring **self-healing adaptive batch sizing** that automatically optimizes for your server's capabilities - no configuration required.
 
 [![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-blue.svg)](https://wordpress.org)
 [![WooCommerce](https://img.shields.io/badge/WooCommerce-3.0%2B-purple.svg)](https://woocommerce.com)
@@ -49,6 +49,23 @@ Revolutionary migration recovery system that intelligently skips already importe
 - **Debug Visibility** – Comprehensive logging of skip decisions and timestamp analysis
 - **Enterprise Scale** – Tested with 4500+ product migrations
 
+### ⚡ Self-Optimizing Batch Processing (v1.5.0)
+
+**Enterprise-grade bidirectional adaptive sizing** – Unlike typical plugins with fixed batch sizes, E2W Sync automatically adjusts to your server's real-time capabilities. No configuration needed.
+
+- **Real-Time Logging** – All sync pages show detailed logs as each batch processes (not just at the end)
+- **Bidirectional Batch Sizing** – Batch size decreases on timeouts AND recovers after stable performance
+- **Self-Healing Recovery** – After 5 successful batches, size increases by 50% (e.g., 50→75→100)
+- **Zero Configuration** – Works optimally on shared hosting AND high-end VPS without manual tuning
+- **100 Items/Batch Default** – Products and Categories start at 100 items per batch for faster syncs
+- **Batch Size Display** – Current batch size shown in status: "Syncing Products: 50/1000 [batch size: 75]"
+- **Sync Page Parity** – Full Sync, Product Sync, and Category Sync all use identical adaptive logic
+- **Progressive Cooldowns** – Server recovery waits increase with consecutive timeouts (5s→10s→30s)
+- **Memory-Aware** – PHP automatically reduces batch size if memory is low (<128MB free)
+- **5 Retry Attempts** – Up to 5 retries with batch size reduction before giving up
+
+**Example Recovery Path:** `100 → [timeout] → 50 → [5 successes] → 75 → [5 successes] → 100 ✓`
+
 ### 🛑 Stop Sync Control (v1.4.0)
 
 - **Immediate Cancellation** – Stop any running bulk import operation instantly
@@ -59,12 +76,11 @@ Revolutionary migration recovery system that intelligently skips already importe
 - **Batch Interruption** – Product imports stop cleanly between batches
 - **Universal Coverage** – Available on both Product and Category sync pages
 
-### ⚡ Enhanced Performance & Reliability (v1.3.8-1.4.8)
+### 🔧 Enhanced Performance & Reliability (v1.3.8-1.4.8)
 
 - **Auto Server Detection** – Automatically detects server resources and configures optimal batch sizes
 - **Server Tier System** – 🚀 High (512MB+), ⚡ Medium (256-512MB), 🐢 Low (<256MB) with auto-tuned settings
 - **Server Crash Recovery** – Handles Cloudflare 520/521/522/523/525 errors with 30-120s cooldown periods
-- **Adaptive Batch Sizing** – Automatically reduces batch size on server timeouts (100→50→25→12→6→3→1)
 - **Fast Skip Optimization** – Pre-loads existing Ecwid IDs in single query for 100x faster duplicate detection
 - **Intelligent Timeout Recovery** – Detects Cloudflare 524, Gateway 504, Request 408, and jQuery timeouts
 - **Exponential Backoff Retry** – Smart retry logic with increasing delays (3s→6s→12s) for server recovery
@@ -513,79 +529,49 @@ Revolutionary migration recovery system that intelligently skips already importe
 - **Import/Export Settings** – Backup and restore plugin configurations
 
 ### Version History
-- **v1.5.0** – **CATEGORY HIERARCHY & PARENT-FIRST SORTING**: Proper category hierarchy with auto-fix
-  - 🏗️ **Parent-First Sorting** – Categories sorted before import so parents are always processed first
-  - 🔧 **Auto-Fix Orphaned Children** – When parent is imported, orphaned children are automatically re-parented
-  - 📝 **Missing Parent Tracking** – Stores relationships and fixes them when parent appears
-  - ➡️ **Next Step Messaging** – Shows upcoming sync step ("Next: Syncing Customers...")
-  - ⚙️ **Batch Size Constants** – Server detection respects your PHP constants
-  - ✅ **Step Completion Logs** – Clear success messages when each step completes
-  - 🔍 **Variation SKU Validation** – Properly identifies variations from same Ecwid product
-  - 🔑 **Standardized Meta Keys** – Uses `_ecwid_variation_id` with backward compatibility
-  - 🛠️ **Meta Backfill** – Auto-populates missing Ecwid IDs on existing variations
-- **v1.4.9** – **API PERMISSION ERROR DETECTION**: Smart handling of empty API responses and permission issues
-  - 🔑 **Empty Response Detection** – Detects when Ecwid API returns empty response (permission issues)
-  - 📋 **Permission Guidance** – Specific guidance for customer/order API permission errors
-  - 🎯 **Smart Classification** – Distinguishes server errors (retry) from permission errors (check settings)
-  - 💡 **Actionable Steps** – Direct link to Ecwid Admin → Apps → API → Access Tokens
-  - ⚡ **No Wasted Retries** – Doesn't retry permission-based errors
-- **v1.4.8** – **AUTO SERVER DETECTION**: Intelligent server resource detection and auto-configuration
-  - 💻 **Server Detection** – Automatically detects PHP memory limit and timeout settings
-  - 🎯 **Tier System** – Categorizes servers as 🚀 High, ⚡ Medium, 🐢 Low and auto-tunes
-  - ⚙️ **Dynamic Batch Sizes** – 5-50 products based on detected server capability
-  - ⏱️ **Adaptive Delays** – 2-5 second delays between batches based on tier
-  - 📊 **Status Display** – Shows memory, timeout, and batch config at sync start
-- **v1.4.7** – **SERVER CRASH RECOVERY**: Extended Cloudflare error handling with recovery cooldowns
-  - 🔥 **Server Down Detection** – Handles 520, 521, 522, 523, 525, 526, 527, 530 Cloudflare errors
-  - ⏳ **Extended Cooldown** – 30-120 second wait periods for server recovery
-  - ⚡ **Aggressive Batch Reduction** – 75% batch size reduction on server crash
-  - 🔄 **Visual Countdown** – Shows cooldown timer during recovery
-  - 💬 **Better Messaging** – 🔥 SERVER OVERLOAD DETECTED with clear recovery status
-- **v1.4.6** – **ADAPTIVE BATCH SIZING & FAST SKIP**: Automatic timeout recovery with intelligent batch management
-  - ⚡ **Adaptive Batch Sizing** – Automatically reduces batch size when timeouts occur (100→50→25→12→6→3→1)
-  - 🚀 **Fast Skip Optimization** – Pre-loads existing Ecwid IDs in single SQL query for 100x faster duplicate detection
-  - 🛡️ **Multi-Timeout Support** – Detects Cloudflare 524, Gateway 504, Request 408, and jQuery timeouts
-  - 📦 **Higher Default Batches** – Products and categories now start at 100 items per batch
-  - 🔧 **Client-Side Batch Control** – Batch sizes dynamically adjust based on server response
-  - 💬 **UX Improvements** – Clear status messages showing batch size reductions and recovery
-- **v1.4.3** – **ENHANCED RELIABILITY**: Improved retry logic and batch loading across all sync pages
-  - 🔄 **Exponential Backoff Retry** – Smart retry delays (3s→6s→12s) for better server recovery
-  - 📦 **Category Batch Loading** – Categories now load in batches with retry logic like products
-  - 🔁 **Full Sync Retry Fix** – Fixed retry counter reset bug ensuring each batch gets full retry attempts
-  - ⏱️ **Cloudflare 524 Handling** – Explicit handling for Cloudflare timeout errors
-  - 💬 **Better Status Messages** – Users see retry countdown and server status during errors
-  - ⏸️ **Increased Batch Delays** – 3-second delays between batches to reduce server load
-- **v1.4.2** – **BATCH LOADING SYSTEM**: Robust product/category loading with retry logic
-  - ✅ **Batch Loading** – Products and categories load in manageable batches
-  - ✅ **Retry Logic** – Automatic 3-attempt retry on transient 500 errors
-  - ✅ **Progress Tracking** – Real-time batch progress display
-- **v1.1.4** – **CRITICAL IMAGE PRESERVATION FIX**: Complete image safety during migrations
-  - 🛡️ **Image Preservation** – Fixed critical bug where existing product images were deleted during updates
-  - 🔍 **Smart Image Detection** – Intelligently checks if images already exist before importing
-  - 📝 **Image URL Comparison** – Advanced filename-based comparison prevents duplicate imports
-  - 🖼️ **Gallery Protection** – Gallery images fully preserved during product updates
-  - ⚡ **Performance Boost** – Reduced unnecessary image processing for existing images
-- **v1.1.3** – **ADVANCED SMART SKIP**: Enhanced timestamp detection & conservative skip logic
-  - ✅ **Advanced Timestamp Detection** – Support for 6 different Ecwid timestamp fields
-  - ✅ **Conservative Skip Logic** – Products imported within 24 hours skip automatically
-  - ✅ **Debug Timestamp Logging** – Comprehensive timestamp field analysis
-  - ✅ **Enhanced Legacy Handling** – Better decisions for pre-Smart Skip products
-- **v1.1.2** – **SMART SKIP TECHNOLOGY**: Revolutionary migration recovery system
-  - ✅ **Migration Recovery** – 70-90% time savings when restarting large migrations
-  - ✅ **Timestamp Intelligence** – Compares Ecwid vs. local modification dates
-  - ✅ **Resume Support** – Automatically continues from interruption point
-  - ✅ **Legacy Product Support** – Handles products imported before Smart Skip
-- **v1.1.1** – **COMPLETE MIGRATION SUITE**: Customer & Order Sync + Enhanced UI
-  - ✅ **Customer Sync** – Full customer import with profiles and addresses
-  - ✅ **Order Sync** – Complete order history with automatic customer association
-  - ✅ **Enhanced Admin Interface** – Colorful gradient buttons and professional design
-  - ✅ **Smart Error Handling** – Detailed 403 permission error messages with solutions
-  - ✅ **Auto-loading Pages** – All sync pages load data automatically
-  - ✅ **Improved JavaScript** – Resolved i18n and sanitizeHTML scope issues
-  - ✅ **Better Documentation** – Comprehensive setup guides and troubleshooting
-- **v1.1.0** – Enhanced product loading system, major pagination improvements
-- **v1.0.5** – Advanced technical features, comprehensive error handling
-- **v1.0.0** – Initial release with core sync functionality
+- **v1.5.0** (2025-12-18) – **SELF-OPTIMIZING BATCH PROCESSING**
+  - 🔄 **Bidirectional Batch Sizing** – Decreases on timeouts AND recovers after stable performance
+  - 📈 **Self-Healing Recovery** – Batch size increases by 50% after 5 consecutive successes
+  - ⚡ **Real-Time Logging** – All sync pages show detailed logs as each batch processes
+  - 📊 **Batch Size Display** – Current batch size shown in status: "[batch size: 75]"
+  - 🎯 **Zero Configuration** – Works optimally on shared hosting AND high-end VPS
+  - 📦 **100 Items/Batch Default** – Products and Categories start at 100 per batch
+  - 🎯 **Sync Page Parity** – Full Sync, Product Sync, Category Sync all use identical adaptive logic
+  - ⏳ **Progressive Cooldowns** – Server recovery waits increase with timeouts (5s→10s→30s)
+  - 💾 **Memory-Aware Batching** – PHP auto-reduces batch size if memory low (<128MB free)
+  - 🏗️ **Parent-First Sorting** – Categories sorted so parents process before children
+  - 🌳 **Topological Sort** – Breadth-first traversal ensures parent categories exist first
+  - 🔗 **Auto-Fix Orphaned Children** – Orphans re-parented when parent is imported
+  - 📝 **Next Step Messaging** – Shows what sync step is coming next
+  - 🔍 **Variation SKU Validation** – Properly identifies variations from same product
+  - 🐛 **Category Nesting Fix** – Deep nested categories now import correctly
+- **v1.4.0** (2025-12-16) – **SERVER INTELLIGENCE & PAUSE/RESUME**
+  - ⏸️ **Pause/Resume Sync** – Pause and resume from exact position including variation queue
+  - 💻 **Auto Server Detection** – Detects server resources and adjusts batch sizes
+  - 🔥 **Server Down Recovery** – Handles Cloudflare 520-530 errors with extended cooldowns
+  - 🚀 **Fast Skip Optimization** – 100x faster duplicate detection with single SQL query
+  - 🎯 **Server Tier System** – 🚀 High, ⚡ Medium, 🐢 Low with auto-tuned settings
+  - 🔍 **System Diagnostics** – Memory, disk space, WooCommerce stats panel
+- **v1.3.0** (2025-09-02) – **STOP SYNC & STABILITY**
+  - 🛑 **Stop Sync Button** – Cancel running product and category imports instantly
+  - 📦 **Bulk Import Fix** – Batch processing handles 6756+ products
+  - 🖼️ **Gallery Image Fix** – Fixed with correct API field mapping
+  - 🏷️ **Plugin Renamed** – "Metrotechs E2W Sync" for WordPress compliance
+- **v1.2.0** (2025-09-01) – **SMART SKIP & CUSTOMER/ORDER SYNC**
+  - 🧠 **Smart Skip Technology** – 70-90% time savings when restarting large migrations
+  - 👥 **Customer Sync** – Full customer import with profiles and addresses
+  - 📋 **Order Sync** – Complete order history with automatic customer association
+  - 🛡️ **Image Preservation** – Existing product images preserved during re-import
+- **v1.1.0** (2025-08-30) – **COMPLETE PRODUCT LOADING**
+  - 📦 **6000+ Products** – Handles stores with thousands of products
+  - 🔄 **Pagination Engine** – Makes 70+ API calls to load entire catalog
+  - ✅ **Tested at Scale** – 6,974 products across 70+ API calls
+- **v1.0.5** (2025-07-22) – 500 error resolution, SKU conflict handling
+- **v1.0.4** (2025-06-28) – Client-side pagination, browser freezing fix
+- **v1.0.3** (2025-06-10) – UI fixes, memory leak fixes
+- **v1.0.2** (2025-05-25) – Multilingual slugs, category thumbnails
+- **v1.0.1** (2025-04-30) – Activation fixes, PHP 7.2+ compatibility
+- **v1.0.0** (2025-04-15) – Initial release with core sync functionality
 
 ---
 
