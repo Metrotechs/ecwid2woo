@@ -159,6 +159,7 @@ class Ecwid2Woo_Product_Sync {
         ]);
 
         if (is_wp_error($response)) {
+            /* translators: %s: Error message from the API request */
             wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'metrotechs-e2w-sync'), $response->get_error_message())]);
             return;
         }
@@ -402,6 +403,7 @@ class Ecwid2Woo_Product_Sync {
 
         if (is_wp_error($response)) {
             ob_end_clean();
+            /* translators: %s: Error message from the API request */
             wp_send_json_error([
                 'message' => sprintf(__('API Request Error: %s', 'metrotechs-e2w-sync'), $response->get_error_message()),
                 'is_server_error' => true,
@@ -415,6 +417,7 @@ class Ecwid2Woo_Product_Sync {
 
         if ($http_code !== 200 || (isset($body['errorMessage']) && !empty($body['errorMessage']))) {
             ob_end_clean();
+            /* translators: %1$s: HTTP status code, %2$s: Error message from Ecwid API */
             wp_send_json_error([
                 'message' => sprintf(__('Ecwid API Error (HTTP %1$s): %2$s', 'metrotechs-e2w-sync'), $http_code, ($body['errorMessage'] ?? 'Unknown error')),
                 'is_server_error' => $http_code >= 500,
@@ -555,6 +558,7 @@ class Ecwid2Woo_Product_Sync {
             $product_id_by_ecwid_id = $existing_ecwid_ids_map[$ecwid_id_for_log];
         } else {
             // Fallback: Individual query (slower, but works for single product imports)
+            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find existing products by Ecwid ID
             $existing_products_by_ecwid_id_query = get_posts(['post_type' => 'product', 'meta_key' => '_ecwid_product_id', 'meta_value' => $ecwid_id_for_log, 'post_status' => 'any', 'numberposts' => 1, 'fields' => 'ids']);
             if (!empty($existing_products_by_ecwid_id_query)) $product_id_by_ecwid_id = $existing_products_by_ecwid_id_query[0];
         }
@@ -768,6 +772,7 @@ class Ecwid2Woo_Product_Sync {
                         $product_logs[] = "✗ Category with Ecwid ID $ecwid_category_id NOT FOUND via helper function";
                         
                         // Debug: Check total categories
+                        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Meta query required to find imported categories by Ecwid ID
                         $all_imported_categories = get_terms([
                             'taxonomy' => 'product_cat',
                             'meta_key' => '_ecwid_category_id',
@@ -1115,6 +1120,7 @@ class Ecwid2Woo_Product_Sync {
      */
     private function get_variation_by_ecwid_id($parent_id, $ecwid_combination_id) {
         // First try the standard key
+        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find variations by Ecwid variation ID
         $variations = get_posts([
             'post_type' => 'product_variation',
             'post_parent' => $parent_id,
@@ -1129,6 +1135,7 @@ class Ecwid2Woo_Product_Sync {
         }
 
         // Fallback to legacy key for backward compatibility
+        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find variations by legacy Ecwid combination ID
         $variations = get_posts([
             'post_type' => 'product_variation',
             'post_parent' => $parent_id,

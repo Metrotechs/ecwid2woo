@@ -1243,17 +1243,21 @@ class Ecwid_WC_Sync {
             if (!empty($ecwid_ids_to_check)) {
                 global $wpdb;
                 // Single query to find all existing products with these Ecwid IDs
-                $placeholders = implode(',', array_fill(0, count($ecwid_ids_to_check), '%s'));
+                $placeholders = implode( ', ', array_fill( 0, count( $ecwid_ids_to_check ), '%s' ) );
+                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $placeholders is safely generated above using array_fill with %s
                 $query = $wpdb->prepare(
+                    // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- Placeholders are dynamically generated for IN clause
                     "SELECT pm.meta_value as ecwid_id, pm.post_id 
                      FROM {$wpdb->postmeta} pm 
                      INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID 
                      WHERE pm.meta_key = '_ecwid_product_id' 
                      AND pm.meta_value IN ($placeholders)
                      AND p.post_type = 'product'",
-                    $ecwid_ids_to_check
+                    ...$ecwid_ids_to_check
                 );
-                $results = $wpdb->get_results($query);
+                // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared above with $wpdb->prepare()
+                // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Direct query needed for batch lookup performance; results are used immediately and not suitable for caching
+                $results = $wpdb->get_results( $query );
                 foreach ($results as $row) {
                     $existing_ecwid_ids_map[$row->ecwid_id] = (int) $row->post_id;
                 }
@@ -1403,6 +1407,7 @@ class Ecwid_WC_Sync {
 
         // --- PRODUCT IDENTIFICATION AND TYPE HANDLING ---
         $product_id_by_ecwid_id = null;
+        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find existing products by Ecwid ID
         $existing_products_by_ecwid_id_query = get_posts(['post_type' => 'product', 'meta_key' => '_ecwid_product_id', 'meta_value' => $ecwid_id_for_log, 'post_status' => 'any', 'numberposts' => 1, 'fields' => 'ids']);
         if (!empty($existing_products_by_ecwid_id_query)) $product_id_by_ecwid_id = $existing_products_by_ecwid_id_query[0];
 
@@ -2106,6 +2111,7 @@ class Ecwid_WC_Sync {
             $variation_id = 0;
             $should_skip_variation = false; // Flag to control whether to skip this variation
             
+            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Meta query required to find existing variations by Ecwid variation ID
             $existing_vars_query = new WP_Query([
                 'post_type' => 'product_variation', 'post_status' => 'any',
                 'post_parent' => $parent_product_id,
@@ -2497,6 +2503,7 @@ class Ecwid_WC_Sync {
 
     private function get_or_create_missing_parent_placeholder($parent_ecwid_id) {
         // Fall back to creating a placeholder for missing parent categories
+        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find existing placeholder by Ecwid parent ID
         $existing_term_query = new WP_Query([
             'post_type' => 'ecwid_placeholder', // Query the CPT
             'meta_key' => '_ecwid_placeholder_parent_id',
@@ -2555,6 +2562,7 @@ class Ecwid_WC_Sync {
      */
     private function reconcile_children_after_parent_import($parent_ecwid_id, $real_parent_term_id, &$logs) {
         // Find placeholder post by Ecwid parent ID
+        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find placeholder by Ecwid parent ID
         $q = new WP_Query([
             'post_type'      => 'ecwid_placeholder',
             'posts_per_page' => 1,
@@ -2714,6 +2722,7 @@ class Ecwid_WC_Sync {
         // Database info
         global $wpdb;
         $db_size = 0;
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- SHOW TABLE STATUS requires direct query; result is transient diagnostic data not suitable for caching
         $table_results = $wpdb->get_results("SHOW TABLE STATUS", ARRAY_A);
         if ($table_results) {
             foreach ($table_results as $table) {

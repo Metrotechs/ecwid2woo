@@ -23,15 +23,15 @@ delete_option( 'ecwid_wc_sync_missing_parents' );
 
 // Delete custom post type posts only if functions exist
 if ( function_exists( 'get_posts' ) && function_exists( 'wp_delete_post' ) ) {
-    $posts_to_delete = get_posts( array(
+    $metrotechs_e2w_posts_to_delete = get_posts( array(
         'post_type'      => 'ecwid_placeholder',
         'posts_per_page' => 50,
         'fields'         => 'ids',
         'post_status'    => array( 'any', 'trash', 'auto-draft' ),
     ) );
 
-    if ( ! empty( $posts_to_delete ) ) {
-        foreach ( $posts_to_delete as $post_id ) {
+    if ( ! empty( $metrotechs_e2w_posts_to_delete ) ) {
+        foreach ( $metrotechs_e2w_posts_to_delete as $post_id ) {
             wp_delete_post( $post_id, true );
         }
     }
@@ -54,12 +54,14 @@ global $wpdb;
 if ( $wpdb ) {
     // Delete term meta
     if ( isset( $wpdb->termmeta ) ) {
+        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Direct deletion of plugin meta data during uninstall
         $wpdb->delete( $wpdb->termmeta, array( 'meta_key' => '_ecwid_category_id' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Direct deletion of plugin meta data during uninstall
         $wpdb->delete( $wpdb->termmeta, array( 'meta_key' => '_ecwid_placeholder_category' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
     }
     
     // Delete post meta
-    $meta_keys = array(
+    $metrotechs_e2w_meta_keys = array(
         '_ecwid_product_id',
         '_ecwid_product_sku_ref',
         '_ecwid_last_sync_time',
@@ -70,8 +72,9 @@ if ( $wpdb ) {
         '_ecwid_placeholder_term_id',
     );
     
-    foreach ( $meta_keys as $meta_key ) {
-        $wpdb->delete( $wpdb->postmeta, array( 'meta_key' => $meta_key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+    foreach ( $metrotechs_e2w_meta_keys as $metrotechs_e2w_meta_key ) {
+        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Direct deletion of plugin meta data during uninstall
+        $wpdb->delete( $wpdb->postmeta, array( 'meta_key' => $metrotechs_e2w_meta_key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
     }
 }
 
@@ -85,19 +88,19 @@ if ( function_exists( 'wp_filesystem' ) ) {
     }
     
     if ( $wp_filesystem ) {
-        $plugin_dir = plugin_dir_path( __FILE__ );
+        $metrotechs_e2w_plugin_dir = plugin_dir_path( __FILE__ );
         // Try to set proper permissions before deletion
-        if ( $wp_filesystem->is_dir( $plugin_dir . 'assets' ) ) {
-            $wp_filesystem->chmod( $plugin_dir . 'assets', 0755, true );
-            $wp_filesystem->chmod( $plugin_dir . 'assets/css', 0755, true );
-            $wp_filesystem->chmod( $plugin_dir . 'assets/js', 0755, true );
+        if ( $wp_filesystem->is_dir( $metrotechs_e2w_plugin_dir . 'assets' ) ) {
+            $wp_filesystem->chmod( $metrotechs_e2w_plugin_dir . 'assets', 0755, true );
+            $wp_filesystem->chmod( $metrotechs_e2w_plugin_dir . 'assets/css', 0755, true );
+            $wp_filesystem->chmod( $metrotechs_e2w_plugin_dir . 'assets/js', 0755, true );
             
             // Set file permissions
-            if ( $wp_filesystem->exists( $plugin_dir . 'assets/css/admin-styles.css' ) ) {
-                $wp_filesystem->chmod( $plugin_dir . 'assets/css/admin-styles.css', 0644 );
+            if ( $wp_filesystem->exists( $metrotechs_e2w_plugin_dir . 'assets/css/admin-styles.css' ) ) {
+                $wp_filesystem->chmod( $metrotechs_e2w_plugin_dir . 'assets/css/admin-styles.css', 0644 );
             }
-            if ( $wp_filesystem->exists( $plugin_dir . 'assets/js/admin-sync.js' ) ) {
-                $wp_filesystem->chmod( $plugin_dir . 'assets/js/admin-sync.js', 0644 );
+            if ( $wp_filesystem->exists( $metrotechs_e2w_plugin_dir . 'assets/js/admin-sync.js' ) ) {
+                $wp_filesystem->chmod( $metrotechs_e2w_plugin_dir . 'assets/js/admin-sync.js', 0644 );
             }
         }
     }

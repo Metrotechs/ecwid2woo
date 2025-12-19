@@ -989,6 +989,7 @@ class Ecwid2Woo_Category_Sync {
         ]);
 
         if (is_wp_error($response)) {
+            /* translators: %s: Error message from the API request */
             wp_send_json_error(['message' => sprintf(__('API Request Error: %s', 'metrotechs-e2w-sync'), $response->get_error_message())]);
             return;
         }
@@ -1444,6 +1445,7 @@ class Ecwid2Woo_Category_Sync {
 
         wp_send_json_success([
             'total' => $total,
+            /* translators: %d: Number of categories found */
             'message' => sprintf(__('%d categories found in Ecwid', 'metrotechs-e2w-sync'), $total)
         ]);
     }
@@ -1464,6 +1466,7 @@ class Ecwid2Woo_Category_Sync {
         }
 
         // Enhanced resource management
+        // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- set_time_limit is necessary for long-running sync operations
         set_time_limit(300);
         wp_raise_memory_limit('admin');
 
@@ -1611,6 +1614,7 @@ class Ecwid2Woo_Category_Sync {
 
         wp_send_json_success([
             'message' => sprintf(
+                /* translators: %1$d: Number of processed items, %2$d: Imported count, %3$d: Updated count, %4$d: Skipped count, %5$d: Failed count, %6$d: Total count */
                 __('Categories: Processed %1$d items (Imported: %2$d, Updated: %3$d, Skipped: %4$d, Failed: %5$d). Total: %6$d.', 'metrotechs-e2w-sync'),
                 count($categories_from_api),
                 $imported_count,
