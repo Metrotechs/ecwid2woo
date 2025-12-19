@@ -343,9 +343,9 @@ class Ecwid2Woo_Order_Sync {
         if (isset($order['customerId']) && !empty($order['customerId'])) {
             // Look for users with Ecwid customer ID meta
             $users = get_users([
-                // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find existing users by Ecwid customer ID
+                // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Meta query required to find existing users by Ecwid customer ID
                 'meta_key' => '_ecwid_customer_id',
-                'meta_value' => $order['customerId'],
+                'meta_value' => $order['customerId'], // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
                 'number' => 1
             ]);
             

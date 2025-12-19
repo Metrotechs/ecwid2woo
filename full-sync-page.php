@@ -401,7 +401,7 @@ class Ecwid2Woo_Full_Sync {
                 global $wpdb;
                 // Single query to find all existing products with these Ecwid IDs
                 $placeholders = implode( ', ', array_fill( 0, count( $ecwid_ids_to_check ), '%s' ) );
-                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $placeholders is safely generated using array_fill with %s; placeholders are dynamically generated for IN clause
+                // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
                 $query = $wpdb->prepare(
                     "SELECT pm.meta_value as ecwid_id, pm.post_id 
                      FROM {$wpdb->postmeta} pm 
@@ -411,6 +411,7 @@ class Ecwid2Woo_Full_Sync {
                      AND p.post_type = 'product'",
                     ...$ecwid_ids_to_check
                 );
+                // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
                 // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Query is prepared above with $wpdb->prepare(); direct query needed for batch lookup performance
                 $results = $wpdb->get_results( $query );
                 foreach ($results as $row) {

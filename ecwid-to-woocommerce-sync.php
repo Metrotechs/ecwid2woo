@@ -1249,7 +1249,7 @@ class Ecwid_WC_Sync {
                 global $wpdb;
                 // Single query to find all existing products with these Ecwid IDs
                 $placeholders = implode( ', ', array_fill( 0, count( $ecwid_ids_to_check ), '%s' ) );
-                // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- $placeholders is safely generated using array_fill with %s; placeholders are dynamically generated for IN clause
+                // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
                 $query = $wpdb->prepare(
                     "SELECT pm.meta_value as ecwid_id, pm.post_id 
                      FROM {$wpdb->postmeta} pm 
@@ -1259,6 +1259,7 @@ class Ecwid_WC_Sync {
                      AND p.post_type = 'product'",
                     ...$ecwid_ids_to_check
                 );
+                // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
                 // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Query is prepared above with $wpdb->prepare(); direct query needed for batch lookup performance
                 $results = $wpdb->get_results( $query );
                 foreach ($results as $row) {
@@ -2508,9 +2509,9 @@ class Ecwid_WC_Sync {
         // Fall back to creating a placeholder for missing parent categories
         $existing_term_query = new WP_Query([
             'post_type' => 'ecwid_placeholder', // Query the CPT
-            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find existing placeholder by Ecwid parent ID
+            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Meta query required to find existing placeholder by Ecwid parent ID
             'meta_key' => '_ecwid_placeholder_parent_id',
-            'meta_value' => $parent_ecwid_id,
+            'meta_value' => $parent_ecwid_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
             'posts_per_page' => 1,
             'fields' => 'ids' // Only get IDs
         ]);
@@ -2569,9 +2570,9 @@ class Ecwid_WC_Sync {
             'post_type'      => 'ecwid_placeholder',
             'posts_per_page' => 1,
             'fields'         => 'ids',
-            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find placeholder by Ecwid parent ID
+            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Meta query required to find placeholder by Ecwid parent ID
             'meta_key'       => '_ecwid_placeholder_parent_id',
-            'meta_value'     => $parent_ecwid_id,
+            'meta_value'     => $parent_ecwid_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
         ]);
 
         if (empty($q->posts)) {

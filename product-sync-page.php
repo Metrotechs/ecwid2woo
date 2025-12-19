@@ -1123,9 +1123,9 @@ class Ecwid2Woo_Product_Sync {
         $variations = get_posts([
             'post_type' => 'product_variation',
             'post_parent' => $parent_id,
-            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find variations by Ecwid variation ID
+            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Meta query required to find variations by Ecwid variation ID
             'meta_key' => '_ecwid_variation_id',
-            'meta_value' => $ecwid_combination_id,
+            'meta_value' => $ecwid_combination_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
             'numberposts' => 1,
             'fields' => 'ids'
         ]);
@@ -1138,9 +1138,9 @@ class Ecwid2Woo_Product_Sync {
         $variations = get_posts([
             'post_type' => 'product_variation',
             'post_parent' => $parent_id,
-            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find variations by legacy Ecwid combination ID
+            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Meta query required to find variations by legacy Ecwid combination ID
             'meta_key' => '_ecwid_combination_id',
-            'meta_value' => $ecwid_combination_id,
+            'meta_value' => $ecwid_combination_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
             'numberposts' => 1,
             'fields' => 'ids'
         ]);
