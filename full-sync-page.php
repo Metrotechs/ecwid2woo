@@ -19,7 +19,8 @@ if (!defined('ABSPATH')) {
 class Ecwid2Woo_Full_Sync {
     
     private $parent_plugin;
-    private $sync_steps = ['categories', 'products', 'customers', 'orders']; // Define order of sync for full sync
+    // Customer and order sync disabled until fully tested
+    private $sync_steps = ['categories', 'products']; // Define order of sync for full sync
     
     public function __construct($parent_plugin) {
         $this->parent_plugin = $parent_plugin;
@@ -36,7 +37,7 @@ class Ecwid2Woo_Full_Sync {
         ?>
         <div class="ecwid-page-header">
             <h1><?php esc_html_e('Full Data Sync', 'metrotechs-e2w-sync'); ?></h1>
-            <p class="description"><?php esc_html_e('This will sync all categories, products, customers, and orders from Ecwid to WooCommerce. The sync happens in order: Categories → Products → Customers → Orders. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'metrotechs-e2w-sync'); ?></p>
+            <p class="description"><?php esc_html_e('This will sync all categories and products from Ecwid to WooCommerce. The sync happens in order: Categories → Products. It is recommended to backup your WooCommerce data before running a full sync for the first time.', 'metrotechs-e2w-sync'); ?></p>
         </div>
 
         <!-- Navigation Bar -->
@@ -53,12 +54,14 @@ class Ecwid2Woo_Full_Sync {
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->partial_sync_slug)); ?>" class="nav-link">
                 <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'metrotechs-e2w-sync'); ?>
             </a>
+            <?php /* Customer and Order sync nav links hidden until fully tested
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->customer_sync_slug)); ?>" class="nav-link">
                 <span class="nav-icon">👥</span> <?php esc_html_e('Customer Sync', 'metrotechs-e2w-sync'); ?>
             </a>
             <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->order_sync_slug)); ?>" class="nav-link">
                 <span class="nav-icon">📦</span> <?php esc_html_e('Order Sync', 'metrotechs-e2w-sync'); ?>
             </a>
+            */ ?>
         </div>
 
         <div class="ecwid-sync-container">
@@ -78,6 +81,7 @@ class Ecwid2Woo_Full_Sync {
                         <h3><?php esc_html_e('Products to be Synced:', 'metrotechs-e2w-sync'); ?></h3>
                         <div id="full-sync-product-preview-list" class="sync-preview-list"></div>
                     </div>
+                    <?php /* Customer and Order preview columns hidden until fully tested
                     <div class="sync-preview-column">
                         <h3><?php esc_html_e('Customers to be Synced:', 'metrotechs-e2w-sync'); ?></h3>
                         <div id="full-sync-customer-preview-list" class="sync-preview-list"></div>
@@ -86,6 +90,7 @@ class Ecwid2Woo_Full_Sync {
                         <h3><?php esc_html_e('Orders to be Synced:', 'metrotechs-e2w-sync'); ?></h3>
                         <div id="full-sync-order-preview-list" class="sync-preview-list"></div>
                     </div>
+                    */ ?>
                 </div>
             </div>
             
