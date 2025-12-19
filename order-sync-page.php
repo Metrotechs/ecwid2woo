@@ -342,8 +342,8 @@ class Ecwid2Woo_Order_Sync {
         // Method 2: Try to find by customer ID if available
         if (isset($order['customerId']) && !empty($order['customerId'])) {
             // Look for users with Ecwid customer ID meta
-            // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find existing users by Ecwid customer ID
             $users = get_users([
+                // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key, WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- Meta query required to find existing users by Ecwid customer ID
                 'meta_key' => '_ecwid_customer_id',
                 'meta_value' => $order['customerId'],
                 'number' => 1
@@ -365,8 +365,8 @@ class Ecwid2Woo_Order_Sync {
                 $first_name = trim($name_parts[0]);
                 $last_name = trim(implode(' ', array_slice($name_parts, 1)));
                 
-                // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Meta query required to find users by first and last name
                 $users = get_users([
+                    // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Meta query required to find users by first and last name
                     'meta_query' => [
                         'relation' => 'AND',
                         [

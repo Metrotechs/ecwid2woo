@@ -23,6 +23,7 @@ delete_option( 'ecwid_wc_sync_missing_parents' );
 
 // Delete custom post type posts only if functions exist
 if ( function_exists( 'get_posts' ) && function_exists( 'wp_delete_post' ) ) {
+    // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Variable is prefixed with metrotechs_e2w_ and is local to uninstall.php
     $metrotechs_e2w_posts_to_delete = get_posts( array(
         'post_type'      => 'ecwid_placeholder',
         'posts_per_page' => 50,
@@ -54,13 +55,12 @@ global $wpdb;
 if ( $wpdb ) {
     // Delete term meta
     if ( isset( $wpdb->termmeta ) ) {
-        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Direct deletion of plugin meta data during uninstall
-        $wpdb->delete( $wpdb->termmeta, array( 'meta_key' => '_ecwid_category_id' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
-        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Direct deletion of plugin meta data during uninstall
-        $wpdb->delete( $wpdb->termmeta, array( 'meta_key' => '_ecwid_placeholder_category' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+        $wpdb->delete( $wpdb->termmeta, array( 'meta_key' => '_ecwid_category_id' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Direct deletion of plugin meta data during uninstall
+        $wpdb->delete( $wpdb->termmeta, array( 'meta_key' => '_ecwid_placeholder_category' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Direct deletion of plugin meta data during uninstall
     }
     
     // Delete post meta
+    // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Variable is prefixed with metrotechs_e2w_ and is local to uninstall.php
     $metrotechs_e2w_meta_keys = array(
         '_ecwid_product_id',
         '_ecwid_product_sku_ref',
@@ -72,9 +72,9 @@ if ( $wpdb ) {
         '_ecwid_placeholder_term_id',
     );
     
+    // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Variable is prefixed with metrotechs_e2w_ and is local to uninstall.php
     foreach ( $metrotechs_e2w_meta_keys as $metrotechs_e2w_meta_key ) {
-        // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Direct deletion of plugin meta data during uninstall
-        $wpdb->delete( $wpdb->postmeta, array( 'meta_key' => $metrotechs_e2w_meta_key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+        $wpdb->delete( $wpdb->postmeta, array( 'meta_key' => $metrotechs_e2w_meta_key ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- Direct deletion of plugin meta data during uninstall
     }
 }
 
@@ -88,6 +88,7 @@ if ( function_exists( 'wp_filesystem' ) ) {
     }
     
     if ( $wp_filesystem ) {
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Variable is prefixed with metrotechs_e2w_ and is local to uninstall.php
         $metrotechs_e2w_plugin_dir = plugin_dir_path( __FILE__ );
         // Try to set proper permissions before deletion
         if ( $wp_filesystem->is_dir( $metrotechs_e2w_plugin_dir . 'assets' ) ) {
