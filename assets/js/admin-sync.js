@@ -699,7 +699,7 @@
                 fullSyncInitialInfoDiv.html(`
                     <div style="padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; margin: 10px 0;">
                         <strong>⏳ Loading Full Sync Data...</strong><br>
-                        <span style="font-size: 12px; color: #856404;">Fetching Categories, Products, Customers, and Orders from Ecwid API</span>
+                        <span style="font-size: 12px; color: #856404;">Fetching Categories and Products from Ecwid API</span>
                     </div>
                 `);
             }
@@ -737,7 +737,8 @@
                     totalProductsToSync = parseInt(response.data.products_count) || 0;
                     totalCustomersToSync = parseInt(response.data.customers_count) || 0;
                     totalOrdersToSync = parseInt(response.data.orders_count) || 0;
-                    grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync + totalCustomersToSync + totalOrdersToSync;
+                    // Only count categories and products for now (customers/orders disabled)
+                    grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync;
 
                     const categories = response.data.categories_preview || [];
                     const products = response.data.products_preview || [];
@@ -811,10 +812,9 @@
                         }
                     }
                     
+                    // Only show categories and products in count text (customers/orders disabled)
                     let countText = (i18n.categories_to_sync_info || 'Categories to sync: {count}').replace('{count}', totalCategoriesToSync) + ', ' +
-                                    (i18n.products_to_sync_info || 'Products to sync: {count}').replace('{count}', totalProductsToSync) + ', ' +
-                                    (i18n.customers_to_sync_info || 'Customers to sync: {count}').replace('{count}', totalCustomersToSync) + ', ' +
-                                    (i18n.orders_to_sync_info || 'Orders to sync: {count}').replace('{count}', totalOrdersToSync);
+                                    (i18n.products_to_sync_info || 'Products to sync: {count}').replace('{count}', totalProductsToSync);
                     fullSyncCountsInfoDiv.text(countText);
 
                     updateStatus(fullSyncStatusDiv, i18n.preview_loaded_ready_to_sync || 'Preview loaded. Ready to start full sync.');
@@ -824,8 +824,8 @@
                         const styledStatusHtml = `
                             <div style="padding: 15px; background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; margin: 10px 0;">
                                 <p style="margin: 0 0 5px 0; font-weight: bold;">🎯 Full Sync Data Loaded Successfully!</p>
-                                <p style="margin: 0 0 10px 0; font-size: 12px; color: #0c5460; font-style: normal;">Ready to sync all store data: Categories, Products, Customers, and Orders</p>
-                                <div style="margin: 10px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; font-size: 11px;">
+                                <p style="margin: 0 0 10px 0; font-size: 12px; color: #0c5460; font-style: normal;">Ready to sync all store data: Categories and Products</p>
+                                <div style="margin: 10px 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; font-size: 11px;">
                                     <div style="background: #f8f9fa; padding: 8px; border-radius: 3px; text-align: center;">
                                         <strong>📂 Categories</strong><br>
                                         <span style="color: #28a745; font-weight: bold;">${totalCategoriesToSync}</span>
@@ -834,20 +834,12 @@
                                         <strong>📦 Products</strong><br>
                                         <span style="color: #28a745; font-weight: bold;">${totalProductsToSync}</span>
                                     </div>
-                                    <div style="background: #f8f9fa; padding: 8px; border-radius: 3px; text-align: center;">
-                                        <strong>👥 Customers</strong><br>
-                                        <span style="color: #28a745; font-weight: bold;">${totalCustomersToSync}</span>
-                                    </div>
-                                    <div style="background: #f8f9fa; padding: 8px; border-radius: 3px; text-align: center;">
-                                        <strong>🛒 Orders</strong><br>
-                                        <span style="color: #28a745; font-weight: bold;">${totalOrdersToSync}</span>
-                                    </div>
                                 </div>
                                 <details style="margin-top: 10px; font-size: 11px; color: #6c757d;">
                                     <summary style="cursor: pointer;">🔍 Full Sync Details (click to expand)</summary>
                                     <div style="margin-top: 5px; padding: 5px; background: #f9f9f9; border-radius: 3px;">
                                         <strong>Total Items:</strong> ${grandTotalAllItemsForSync}<br>
-                                        <strong>Sync Steps:</strong> Categories → Products → Customers → Orders<br>
+                                        <strong>Sync Steps:</strong> Categories → Products<br>
                                         <strong>Progress Tracking:</strong> Real-time with weighted calculations<br>
                                         <strong>Data Source:</strong> Ecwid Store API
                                     </div>
@@ -962,7 +954,8 @@
                 currentFullSyncStepIndex = 0;
                 currentFullSyncStepOffset = 0;
                 fullSyncOverallProgress = 0;
-                grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync + totalCustomersToSync + totalOrdersToSync; // Recalculate here or ensure it's fresh
+                // Only count categories and products for now (customers/orders disabled)
+                grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync;
 
                 fullSyncProgressBar.css('width', '0%').text('0%');
                 fullSyncProgressContainer.show();
