@@ -377,6 +377,8 @@ class Ecwid_WC_Sync {
             [$this, 'options_page_router']
         );
 
+        // Customer and Order sync menus hidden until fully tested
+        /*
         add_submenu_page(
             $this->settings_slug,
             __('Customer Sync', 'metrotechs-e2w-sync'),
@@ -394,6 +396,7 @@ class Ecwid_WC_Sync {
             $this->order_sync_slug,
             [$this, 'options_page_router']
         );
+        */
 
         // Add the Placeholders CPT as the last submenu item
         add_submenu_page(
@@ -683,6 +686,7 @@ class Ecwid_WC_Sync {
                         </div>
                     </a>
                     
+                    <?php /* Customer and Order sync buttons hidden until fully tested
                     <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->customer_sync_slug)); ?>" class="nav-button nav-button-quinary">
                         <div class="nav-button-icon">👥</div>
                         <div class="nav-button-content">
@@ -698,6 +702,7 @@ class Ecwid_WC_Sync {
                             <p><?php esc_html_e('Import order data', 'metrotechs-e2w-sync'); ?></p>
                         </div>
                     </a>
+                    */ ?>
                     
                     <a href="<?php echo esc_url(admin_url('edit.php?post_type=ecwid_placeholder')); ?>" class="nav-button nav-button-septenary">
                         <div class="nav-button-icon">📋</div>
