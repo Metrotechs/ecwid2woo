@@ -2,7 +2,7 @@
 
 **Professional-grade WordPress plugin for seamless Ecwid to WooCommerce migration with self-optimizing batch processing, Smart Skip Technology, and advanced image preservation**
 
-Transform your e-commerce presence with the most advanced, reliable, and feature-complete Ecwid to WooCommerce synchronization plugin available. Built by industry experts with enterprise-level architecture featuring **self-healing adaptive batch sizing** that automatically optimizes for your server's capabilities - no configuration required.
+Transform your e-commerce presence with the most advanced, reliable, and feature-complete Ecwid to WooCommerce product synchronization plugin available. Built by industry experts with enterprise-level architecture featuring **self-healing adaptive batch sizing** that automatically optimizes for your server's capabilities - no configuration required.
 
 [![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-blue.svg)](https://wordpress.org)
 [![WooCommerce](https://img.shields.io/badge/WooCommerce-3.0%2B-purple.svg)](https://woocommerce.com)
@@ -37,15 +37,15 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 
 ## 🌟 Why Choose Metrotechs E2W Sync?
 
-**The ONLY plugin that handles complete e-commerce migration with enterprise recovery** – Successfully tested with stores containing 6,974 products across 70+ API calls with advanced pagination, intelligent memory management, plus full customer and order migration capabilities.
+**The ONLY plugin that handles complete e-commerce catalog migration with enterprise recovery** – Successfully tested with stores containing 6,974 products across 70+ API calls with advanced pagination and intelligent memory management.
 
 ### 🎯 **Perfect For:**
 - **Large Store Migrations** – Handles 4500+ products with Smart Skip recovery
-- **Complete Store Migration** – Products, customers, and orders in one solution
+- **Complete Catalog Migration** – Products and categories in one solution
 - **E-commerce Agencies** – Reliable client migrations with professional tools
 - **Store Owners** – Seamless platform switching without data loss
 - **Developers** – Enterprise-grade architecture with comprehensive debugging
-- **Enterprise Catalogs** – Handles thousands of products, customers, and orders with interruption recovery
+- **Enterprise Catalogs** – Handles thousands of products with interruption recovery
 
 ---
 
@@ -106,19 +106,9 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Full Sync** – Complete catalog migration with Smart Skip capabilities
 - **Category Sync** – Independent category import with hierarchy management
 - **Product Sync** – Selective and bulk product import with variations
-- **Customer Sync** – Import customer accounts with billing/shipping information
-- **Order Sync** – Import orders with automatic customer association
 - **Batch Processing** – Smart chunking prevents server timeouts on large catalogs
 
-### 👥 Customer & Order Management
-
-- **Customer Import** – Full customer profiles with contact information
-- **Customer Association** – Smart matching of orders to customer accounts
-- **Order History** – Complete order data with status and payment information
-- **Address Management** – Billing and shipping addresses preserved
-- **Order Filtering** – Filter by status, date range, and payment status
-
-### 📊 Complete Data Synchronization
+###  Complete Data Synchronization
 
 - **Product Information** – Names, SKUs, descriptions, prices, stock levels, dimensions, weight
 - **Category Hierarchies** – Full parent-child relationships preserved
@@ -205,8 +195,6 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
      - ✅ Read store profile
      - ✅ Read products
      - ✅ Read categories
-     - ✅ **Read customers** (required for Customer Sync)
-     - ✅ **Read orders** (required for Order Sync)
    - Copy the generated token immediately (it won't be shown again)
 
 4. **Enter Credentials**
@@ -303,49 +291,7 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 4. **Stop if Needed:** Use the **Stop Sync** button to cancel long-running operations immediately
 5. **Timeout Protection:** Operations automatically use small batch sizes to prevent server timeouts
 
-### 👥 Customer Sync
-
-**Location:** `E2W Sync → Customer Sync`
-
-**Perfect for:** Importing customer accounts and contact information
-
-#### Features:
-- **Complete Customer Import** – Full customer profiles with contact details
-- **Address Management** – Billing and shipping addresses preserved
-- **Customer Statistics** – Order count and total order value imported
-- **Automatic Loading** – Customers load immediately when page opens
-- **Selective Import** – Choose individual customers to import
-- **Professional Interface** – Modern UI matching other sync pages
-
-#### Requirements:
-- **API Permission:** Your Ecwid API token must have **"Read customers"** permission
-- **403 Error?** See troubleshooting section below
-
-### 📦 Order Sync
-
-**Location:** `E2W Sync → Order Sync`
-
-**Perfect for:** Importing order history with customer association
-
-#### Features:
-- **Complete Order Import** – Full order data with items and totals
-- **Customer Association** – Automatically links orders to existing customers
-- **Smart Filtering** – Filter by order status, payment status, and date range
-- **Multi-tier Customer Matching** – Email, customer ID, and name similarity matching
-- **Order Status Preservation** – Maintains payment and fulfillment status
-- **Professional Interface** – Enhanced UI with filtering capabilities
-
-#### Requirements:
-- **API Permission:** Your Ecwid API token must have **"Read orders"** permission
-- **403 Error?** See troubleshooting section below
-
-#### Technical Features:
-- **Enhanced Timeout Handling** – Improved processing for large order datasets
-- **Smart Customer Matching** – Multi-tier customer association system
-- **Comprehensive Debug Logging** – Detailed API response analysis for troubleshooting
-- **Professional Interface** – Modern UI with enhanced filtering and status updates
-
-### 📋 Placeholders Management
+###  Placeholders Management
 
 **Location:** `E2W Sync → Placeholders`
 
@@ -407,24 +353,18 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 3. Ensure store is active and accessible
 4. Test API connection in Ecwid admin
 
-#### Customer/Order Sync "HTTP 403" Error
+#### "HTTP 403" Error
 **Most Common Issue**: Missing API permissions
 
 **Quick Fix:**
 1. Go to Ecwid Dashboard → Apps → My Apps → API
-2. Create new API token with ALL permissions:
+2. Create new API token with required permissions:
    - ✅ Read catalog
    - ✅ Read store profile
    - ✅ Read products
    - ✅ Read categories
-   - ✅ **Read customers** (required for Customer Sync)
-   - ✅ **Read orders** (required for Order Sync)
 3. Update plugin settings with new token
 4. Test connection - should show "Connection successful!"
-
-**Why this happens**: Customer and Order APIs require special permissions that are separate from basic product/category permissions.
-
-**See also**: [Customer & Order Sync Setup Guide](CUSTOMER_ORDER_SYNC_SETUP.md) for detailed troubleshooting
 
 #### "Memory Limit" Errors
 1. Increase PHP memory limit (512MB+ recommended)
@@ -466,7 +406,7 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 
 ### Real-World Performance
 - **⚡ Processing Speed** – Up to 1,000 products per hour (including variations)
-- **✅ Complete Migration Tested** – 6,974 products + customers + orders processed successfully
+- **✅ Complete Migration Tested** – 6,974 products processed successfully
 - **✅ 70+ API Calls** – Efficient pagination handling for large catalogs
 - **✅ Memory Optimized** – Processes large datasets without memory issues
 - **✅ Zero Timeouts** – Robust error handling and recovery
@@ -477,9 +417,10 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Large Store (1000+ items)** – 20-60 minutes depending on variations
 - **Extra Large Store (6000+ items)** – 1-6 hours depending on server specifications
 
-### New Feature Performance
-- **Customer Sync** – Imports 1000+ customers in minutes
-- **Order Sync** – Processes order history with customer association efficiently
+### Feature Performance
+- **Full Sync** – Complete catalog import with Smart Skip optimization
+- **Category Sync** – Handles complex hierarchies efficiently
+- **Product Sync** – Processes variations and images with precision
 - **Enhanced UI** – Instant loading with professional progress indicators
 
 ---
@@ -493,13 +434,13 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Real-time Status** – Live progress indicators and success/error states
 
 ### Navigation Improvements
-- **Quick Actions Dashboard** – 6 main sync options accessible from settings
+- **Quick Actions Dashboard** – Main sync options accessible from settings
 - **Breadcrumb Navigation** – Easy movement between sync pages
 - **Visual Hierarchy** – Clear distinction between different sync types
 - **Enhanced Typography** – Professional fonts and spacing
 
 ### User Experience
-- **Auto-loading Data** – Customer, order, product, and category data loads automatically
+- **Auto-loading Data** – Product and category data loads automatically
 - **Smart Progress Tracking** – Real-time updates with detailed logging
 - **Error Prevention** – Clear warnings and confirmations for destructive actions
 - **Accessibility Focus** – Screen reader friendly and keyboard navigable
@@ -509,7 +450,7 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 ## 🆘 Support & Documentation
 
 ### Getting Help
-- **Documentation:** This README and [Customer/Order Setup Guide](CUSTOMER_ORDER_SYNC_SETUP.md)
+- **Documentation:** This README file
 - **Debug Logging:** Enable WordPress debug mode for detailed logs
 - **Error Messages:** Clear, actionable error descriptions with troubleshooting steps
 - **Community Support:** GitHub Issues for bug reports and feature requests
@@ -569,11 +510,10 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
   - 📦 **Bulk Import Fix** – Batch processing handles 6756+ products
   - 🖼️ **Gallery Image Fix** – Fixed with correct API field mapping
   - 🏷️ **Plugin Renamed** – "Metrotechs E2W Sync" for WordPress compliance
-- **v1.2.0** (2025-09-01) – **SMART SKIP & CUSTOMER/ORDER SYNC**
+- **v1.2.0** (2025-09-01) – **SMART SKIP TECHNOLOGY**
   - 🧠 **Smart Skip Technology** – 70-90% time savings when restarting large migrations
-  - 👥 **Customer Sync** – Full customer import with profiles and addresses
-  - 📋 **Order Sync** – Complete order history with automatic customer association
   - 🛡️ **Image Preservation** – Existing product images preserved during re-import
+  - 🎨 **Enhanced UI** – Professional interface improvements
 - **v1.1.0** (2025-08-30) – **COMPLETE PRODUCT LOADING**
   - 📦 **6000+ Products** – Handles stores with thousands of products
   - 🔄 **Pagination Engine** – Makes 70+ API calls to load entire catalog

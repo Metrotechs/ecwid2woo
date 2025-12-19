@@ -11,19 +11,19 @@ License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
 WC tested up to: 9.2
 
-Professional Ecwid to WooCommerce migration with Smart Skip Technology. Sync products, categories, customers, and orders efficiently.
+Professional Ecwid to WooCommerce migration with Smart Skip Technology. Sync products and categories efficiently.
 
 == Description ==
 
-Metrotechs E2W Sync is the most comprehensive WordPress plugin for migrating your entire e-commerce store from Ecwid to WooCommerce.
-Go beyond basic product sync with full customer and order migration capabilities, plus revolutionary Smart Skip Technology for large-scale migrations.
+Metrotechs E2W Sync is a comprehensive WordPress plugin for migrating your product catalog from Ecwid to WooCommerce.
+Features revolutionary Smart Skip Technology for large-scale migrations with intelligent resume capabilities.
 
 **NEW: Smart Skip Technology** - Revolutionary migration recovery system that intelligently skips already imported products, making large store migrations (1000+ products) resume seamlessly from interruptions.
 
 **Perfect for:**
-- Complete store migrations from Ecwid to WooCommerce (tested with 6000+ products)
+- Complete product catalog migrations from Ecwid to WooCommerce (tested with 6000+ products)
 - E-commerce agencies managing client migrations  
-- Store owners transferring customer data and order history
+- Store owners needing reliable product synchronization
 - Businesses needing comprehensive data synchronization
 - Developers requiring enterprise-grade migration tools
 - Large stores needing interruption-resistant migrations
@@ -40,23 +40,12 @@ Go beyond basic product sync with full customer and order migration capabilities
 
 **🔄 Complete Migration Suite**
 - **Products & Categories:** Full catalog with variations, images, and hierarchies
-- **Customer Import:** Complete customer profiles with billing/shipping addresses
-- **Order History:** Import orders with automatic customer association
 - **Smart Data Handling:** Prevents duplicates and maintains data integrity
-
-**👥 Customer & Order Management**
-- Import customer accounts with contact information and order statistics
-- Link orders to existing customer accounts automatically
-- Preserve billing and shipping addresses
-- Filter orders by status, payment status, and date range
-- Multi-tier customer matching (email, ID, name similarity)
 
 **🎯 Multiple Sync Options**
 - **Full Sync:** Complete catalog migration with preview capabilities and Smart Skip
 - **Category Sync:** Import categories independently with hierarchy management
 - **Product Sync:** Selective product import with variation support
-- **Customer Sync:** Import customer accounts and profiles
-- **Order Sync:** Import order history with customer association
 
 **🚀 Professional User Interface**
 - Modern admin interface with colorful gradient buttons
@@ -86,12 +75,10 @@ Go beyond basic product sync with full customer and order migration capabilities
 
 == What's New in Version 1.1.0+ ==
 
-**MAJOR UPDATE:** Complete Customer & Order Sync + Enhanced UI
+**MAJOR UPDATE:** Enhanced UI + Smart Skip Technology
 
-- **Customer Sync:** Full customer import with profiles, addresses, and statistics
-- **Order Sync:** Complete order history with automatic customer association  
 - **Enhanced Admin Interface:** Colorful gradient buttons and professional design
-- **Smart Error Handling:** Detailed 403 permission error messages with solutions
+- **Smart Error Handling:** Detailed error messages with solutions
 - **Auto-loading Pages:** All sync pages load data automatically
 - **Improved JavaScript:** Resolved scope issues for better reliability
 - **Better Documentation:** Comprehensive setup guides and troubleshooting
@@ -202,43 +189,29 @@ The plugin provides comprehensive debugging tools:
 - Detailed error reporting
 - WordPress debug log integration
 
-= Why am I getting "HTTP 403" errors for Customer/Order Sync? =
+= Why am I getting "HTTP 403" errors? =
 
-This is the most common issue with Customer and Order sync. The error means your API token doesn't have the required permissions.
+This error means your API token doesn't have the required permissions.
 
 **Quick Fix:**
 1. Go to Ecwid Dashboard → Apps → My Apps → API
-2. Create new API token with ALL permissions:
+2. Create new API token with required permissions:
    * Read catalog
    * Read store profile
    * Read products  
    * Read categories
-   * **Read customers** (required for Customer Sync)
-   * **Read orders** (required for Order Sync)
 3. Update plugin settings with new token
 4. Test connection - should show "Connection successful!"
-
-**Why this happens:** Customer and Order APIs require special permissions that are separate from basic product/category permissions.
-
-= How does Customer/Order association work? =
-
-The plugin uses intelligent multi-tier matching:
-- **Primary:** Email address matching
-- **Secondary:** Ecwid customer ID matching  
-- **Tertiary:** Name similarity matching
-- Orders are automatically linked to existing WordPress users when possible
 
 == Screenshots ==
 
 1. **Settings Page** - Configure Ecwid API credentials with connection testing
-2. **Enhanced Dashboard** - Colorful gradient navigation with 6 sync options
+2. **Enhanced Dashboard** - Colorful gradient navigation with sync options
 3. **Full Sync Interface** - Complete catalog synchronization with progress tracking
 4. **Category Sync** - Auto-loading categories with professional UI
 5. **Product Sync** - Selective product import with advanced filtering
-6. **Customer Sync** - Import customer accounts with profiles and addresses
-7. **Order Sync** - Import order history with customer association and filtering
-8. **Sync in Progress** - Real-time progress bars and detailed logging
-6. **Navigation Interface** - Modern, intuitive admin navigation
+6. **Sync in Progress** - Real-time progress bars and detailed logging
+7. **Navigation Interface** - Modern, intuitive admin navigation
 
 == Changelog ==
 
@@ -393,22 +366,16 @@ The plugin uses intelligent multi-tier matching:
 * Seamless recovery from migration interruptions and server errors
 
 = 1.1.1 =
-**Complete E-commerce Migration Suite**
+**Enhanced Migration Suite**
 
 **Major Features:**
-* **Customer Import System** - Complete customer profile synchronization from Ecwid to WooCommerce
-* **Order Import System** - Full order history migration with customer association and status preservation
-* **Customer Sync Page** - Dedicated interface for importing customer accounts with filtering options
-* **Order Sync Page** - Dedicated interface for importing order history with advanced filtering
-* **Full Sync Enhancement** - 4-step sync process: Categories → Products → Customers → Orders
-* **Intelligent Customer Matching** - Multi-tier matching using email, ID, and name similarity
-* **Order-Customer Association** - Automatic linking of imported orders to existing customer accounts
+* **Full Sync Enhancement** - Streamlined 2-step sync process: Categories → Products
+* **Smart Skip Technology** - Intelligent skip for already-imported items
 
 **UI & Experience:**
-* **Navigation Enhancement** - Added Customer Sync and Order Sync buttons to all sync pages
 * **UI Consistency** - Full Sync page matches polished interface of other sync pages
 * **Professional Loading Interface** - Enhanced loading states and success feedback
-* **4-Column Status Display** - Shows Categories, Products, Customers, Orders counts with icons
+* **2-Column Status Display** - Shows Categories and Products counts with icons
 
 = 1.0.5 =
 **Reliability & Conflict Resolution**
@@ -611,23 +578,20 @@ This plugin:
 = 1.1.0+ - MAJOR UPDATE: Complete Migration Suite =
 
 **New Features:**
-* Customer Sync - Full customer import with profiles, addresses, and statistics
-* Order Sync - Complete order history with automatic customer association
 * Enhanced Admin Interface - Colorful gradient buttons and professional design
 * Auto-loading Pages - All sync pages load data automatically on page visit
+* Smart Skip Technology - Intelligent resume for interrupted migrations
 
 **Improvements:**
-* Enhanced error handling with specific 403 permission guidance
+* Enhanced error handling with detailed guidance
 * Improved JavaScript reliability (resolved i18n and sanitizeHTML scope issues)
-* Smart customer-order association with multi-tier matching
 * Professional UI consistency across all sync pages
 * Better documentation with comprehensive setup guides
 
 **Technical:**
 * Moved utility functions to global scope for better accessibility
 * Enhanced API error messages with actionable solutions
-* Updated README with customer/order sync requirements
-* Added troubleshooting documentation for common permission issues
+* Added troubleshooting documentation for common issues
 
 = 1.1.0 - Enhanced Product Loading System =
 * Major pagination improvements for large catalogs
