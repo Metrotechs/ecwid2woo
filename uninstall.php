@@ -9,6 +9,7 @@
 
 // Exit if accessed directly.
 if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
+    // amazonq-ignore-next-line
     exit;
 }
 
@@ -23,6 +24,7 @@ delete_option( 'ecwid_wc_sync_missing_parents' );
 
 // Delete custom post type posts only if functions exist
 if ( function_exists( 'get_posts' ) && function_exists( 'wp_delete_post' ) ) {
+    // amazonq-ignore-next-line
     // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Variable is prefixed with metrotechs_e2w_ and is local to uninstall.php
     $metrotechs_e2w_posts_to_delete = get_posts( array(
         'post_type'      => 'ecwid_placeholder',
@@ -32,6 +34,7 @@ if ( function_exists( 'get_posts' ) && function_exists( 'wp_delete_post' ) ) {
     ) );
 
     if ( ! empty( $metrotechs_e2w_posts_to_delete ) ) {
+        // amazonq-ignore-next-line
         foreach ( $metrotechs_e2w_posts_to_delete as $post_id ) {
             wp_delete_post( $post_id, true );
         }

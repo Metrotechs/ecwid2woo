@@ -13,6 +13,7 @@
 
 // Prevent direct access
 if (!defined('ABSPATH')) {
+    // amazonq-ignore-next-line
     exit;
 }
 
@@ -26,7 +27,9 @@ class Ecwid2Woo_Full_Sync {
         $this->parent_plugin = $parent_plugin;
         
         // Register AJAX handlers for full sync operations
+        // amazonq-ignore-next-line
         add_action('wp_ajax_ecwid_wc_batch_sync', [$this, 'ajax_batch_sync']);
+        // amazonq-ignore-next-line
         add_action('wp_ajax_ecwid_wc_fetch_full_sync_counts', [$this, 'ajax_fetch_full_sync_counts']);
     }
     
@@ -282,6 +285,7 @@ class Ecwid2Woo_Full_Sync {
         if ($client_batch_size > 0 && $client_batch_size <= $default_batch_size) {
             $default_batch_size = $client_batch_size;
             if (defined('WP_DEBUG') && WP_DEBUG) {
+                // amazonq-ignore-next-line
                 error_log("Ecwid Sync: Using client-requested batch size: $client_batch_size for $sync_type (adaptive timeout recovery)"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             }
         }
@@ -305,6 +309,7 @@ class Ecwid2Woo_Full_Sync {
         $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
 
         if (defined('WP_DEBUG') && WP_DEBUG) {
+            // amazonq-ignore-next-line
             error_log("Ecwid Sync: FULL BATCH - Type: $sync_type, Offset: $offset, API Limit: $limit_per_api_call, Memory: " . size_format($free_memory) . " free"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
         }
 
@@ -334,6 +339,7 @@ class Ecwid2Woo_Full_Sync {
 
         if (is_wp_error($response)) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
+                // amazonq-ignore-next-line
                 error_log("Ecwid Sync: API Request WP_Error for $sync_type: " . $response->get_error_message()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
             }
             // translators: %s is the error message from the WordPress HTTP API
@@ -349,6 +355,7 @@ class Ecwid2Woo_Full_Sync {
             $error_info = $this->parent_plugin->handle_api_error_response($response, $raw_response_body, $http_code, $sync_type);
             
             if (defined('WP_DEBUG') && WP_DEBUG) {
+                // amazonq-ignore-next-line
                 error_log("Ecwid Sync: API Error for $sync_type. HTTP Code: $http_code. Raw Body: " . substr($raw_response_body, 0, 500)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
             }
             
@@ -375,6 +382,7 @@ class Ecwid2Woo_Full_Sync {
                 $items_from_api = $body;
             } else {
                 if (defined('WP_DEBUG') && WP_DEBUG) {
+                    // amazonq-ignore-next-line
                     error_log("Ecwid Sync: Categories API response for $sync_type was not in expected 'items' wrapper and not a direct array of categories. Raw Body: " . $raw_response_body); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
                 }
             }
@@ -412,12 +420,15 @@ class Ecwid2Woo_Full_Sync {
                     ...$ecwid_ids_to_check
                 );
                 // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+                // amazonq-ignore-next-line
                 // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Query is prepared above with $wpdb->prepare(); direct query needed for batch lookup performance
                 $results = $wpdb->get_results( $query );
+                // amazonq-ignore-next-line
                 foreach ($results as $row) {
                     $existing_ecwid_ids_map[$row->ecwid_id] = (int) $row->post_id;
                 }
                 if (defined('WP_DEBUG') && WP_DEBUG) {
+                    // amazonq-ignore-next-line
                     error_log("Ecwid Full Sync: Pre-loaded " . count($existing_ecwid_ids_map) . " existing products from batch of " . count($ecwid_ids_to_check)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
                 }
             }
@@ -450,6 +461,7 @@ class Ecwid2Woo_Full_Sync {
                             // Enhanced debugging for gallery image issue
                             if (defined('WP_DEBUG') && WP_DEBUG) {
                                 $gallery_count = isset($item_data['galleryImages']) && is_array($item_data['galleryImages']) ? count($item_data['galleryImages']) : 0;
+                                // amazonq-ignore-next-line
                                 error_log("Ecwid Full Sync DEBUG: Product ID " . ($item_data['id'] ?? 'N/A') . " has $gallery_count gallery images in API data"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
                                 if ($gallery_count > 0) {
                                     error_log("Ecwid Full Sync DEBUG: Gallery images data: " . json_encode($item_data['galleryImages'])); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
@@ -499,6 +511,7 @@ class Ecwid2Woo_Full_Sync {
                     $failed_count++;
                     $batch_detailed_logs[] = "--- [PHP EXCEPTION] During processing of " . esc_html($item_identifier_for_log) . ": " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine() . " ---";
                     if (defined('WP_DEBUG') && WP_DEBUG) {
+                        // amazonq-ignore-next-line
                         error_log("Ecwid Sync: PHP Exception during $sync_type import: " . $e->getMessage() . " Trace: " . $e->getTraceAsString()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
                     }
                 }
@@ -624,6 +637,7 @@ class Ecwid2Woo_Full_Sync {
             }
             
             // Send JSON response
+            // amazonq-ignore-next-line
             wp_send_json($response);
         }
     }

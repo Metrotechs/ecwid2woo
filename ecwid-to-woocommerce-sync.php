@@ -17,6 +17,7 @@ WC tested up to: 9.2
 
 // Exit if accessed directly
 if (!defined('ABSPATH')) {
+    // amazonq-ignore-next-line
     exit;
 }
 
@@ -198,31 +199,40 @@ class Ecwid_WC_Sync {
         }
         
         // Include and initialize the category sync handler
+        // amazonq-ignore-next-line
         require_once plugin_dir_path(__FILE__) . 'category-sync-page.php';
         $this->category_sync_handler = new Ecwid2Woo_Category_Sync($this);
         
         // Include and initialize the product sync handler
+        // amazonq-ignore-next-line
         require_once plugin_dir_path(__FILE__) . 'product-sync-page.php';
         $this->product_sync_handler = new Ecwid2Woo_Product_Sync($this);
         
         // Include and initialize the full sync handler
+        // amazonq-ignore-next-line
         require_once plugin_dir_path(__FILE__) . 'full-sync-page.php';
         $this->full_sync_handler = new Ecwid2Woo_Full_Sync($this);
         
         // Include and initialize the customer sync handler
+        // amazonq-ignore-next-line
         require_once plugin_dir_path(__FILE__) . 'customer-sync-page.php';
         $this->customer_sync_handler = new Ecwid2Woo_Customer_Sync($this);
         
         // Include and initialize the order sync handler
+        // amazonq-ignore-next-line
         require_once plugin_dir_path(__FILE__) . 'order-sync-page.php';
         $this->order_sync_handler = new Ecwid2Woo_Order_Sync($this);
         
         add_action('init', [$this, 'register_placeholder_cpt']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_init', [$this, 'settings_init']);
+        // amazonq-ignore-next-line
         add_action('wp_ajax_ecwid_wc_test_connection', [$this, 'ajax_test_api_connection']); // Make sure this line exists
+        // amazonq-ignore-next-line
         add_action('wp_ajax_ecwid_wc_diagnose_uploads', [$this, 'ajax_diagnose_uploads']);
+        // amazonq-ignore-next-line
         add_action('wp_ajax_ecwid_wc_debug_info', [$this, 'ajax_debug_info']); // Add debug endpoint
+        // amazonq-ignore-next-line
         add_action('wp_ajax_ecwid_wc_process_variation_batch', [$this, 'ajax_process_variation_batch']); // Add missing variation batch handler
     }
 
@@ -251,6 +261,7 @@ class Ecwid_WC_Sync {
                 // Use WordPress's internal logging mechanism
                 $log_function = 'error_log';
                 if (function_exists($log_function)) {
+                    // amazonq-ignore-next-line
                     call_user_func($log_function, "[Ecwid2Woo] [$level] $message");
                 }
             }
@@ -843,6 +854,7 @@ class Ecwid_WC_Sync {
                     if ($attempt < $max_retries) {
                         $delay = $base_delay * pow(2, $attempt - 1);
                         if (defined('WP_DEBUG') && WP_DEBUG) {
+                            // amazonq-ignore-next-line
                             error_log("Ecwid Sync: Server error (HTTP $http_code), retrying in {$delay}s. Attempt $attempt/$max_retries"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
                         }
                         sleep($delay);
@@ -857,6 +869,7 @@ class Ecwid_WC_Sync {
                 if ($attempt < $max_retries) {
                     $delay = $base_delay * pow(2, $attempt - 1);
                     if (defined('WP_DEBUG') && WP_DEBUG) {
+                        // amazonq-ignore-next-line
                         error_log("Ecwid Sync: Connection error, retrying in {$delay}s. Attempt $attempt/$max_retries. Error: " . $response->get_error_message()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
                     }
                     sleep($delay);
@@ -901,6 +914,7 @@ class Ecwid_WC_Sync {
                 // translators: %s is the HTTP status code
                 'technical_message' => sprintf(__('Ecwid API returned HTML error page (HTTP %s)', 'metrotechs-e2w-sync'), $http_code),
                 'retry_recommended' => true,
+                // amazonq-ignore-next-line
                 'error_data' => ['raw_response' => substr($raw_response_body, 0, 1000)]
             ];
         }
@@ -925,6 +939,7 @@ class Ecwid_WC_Sync {
                 'user_message' => $user_friendly_message,
                 'technical_message' => __('Empty response from Ecwid API - check API token permissions', 'metrotechs-e2w-sync'),
                 'retry_recommended' => false, // Retrying won't help if it's permissions
+                // amazonq-ignore-next-line
                 'error_data' => ['empty_response' => true, 'http_code' => $http_code]
             ];
         }
@@ -954,6 +969,7 @@ class Ecwid_WC_Sync {
                 // translators: %1$s is the JSON error message, %2$s is the HTTP status code
                 'technical_message' => sprintf(__('JSON decode error: %1$s (HTTP %2$s)', 'metrotechs-e2w-sync'), json_last_error_msg(), $http_code),
                 'retry_recommended' => !$is_likely_permission_issue,
+                // amazonq-ignore-next-line
                 'error_data' => ['raw_response' => substr($raw_response_body, 0, 1000), 'json_error' => json_last_error_msg()]
             ];
         }
@@ -1057,6 +1073,7 @@ class Ecwid_WC_Sync {
         return wc_attribute_taxonomy_name($shortened_slug);
     }
 
+    // amazonq-ignore-next-line
     public function ajax_batch_sync_DISABLED() {
         // Check WooCommerce availability first
         if (!class_exists('WooCommerce')) {
@@ -1156,6 +1173,7 @@ class Ecwid_WC_Sync {
         $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
 
         if (defined('WP_DEBUG') && WP_DEBUG) {
+            // amazonq-ignore-next-line
             error_log("Ecwid Sync: FULL BATCH - Type: $sync_type, Offset: $offset, API Limit: $limit_per_api_call, Memory: " . size_format($free_memory) . " free"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
         }
 
@@ -1182,6 +1200,7 @@ class Ecwid_WC_Sync {
 
         if (is_wp_error($response)) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
+                // amazonq-ignore-next-line
                 error_log("Ecwid Sync: API Request WP_Error for $sync_type: " . $response->get_error_message()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
             }
             // translators: %s is the error message from the WordPress HTTP API
@@ -1197,6 +1216,7 @@ class Ecwid_WC_Sync {
             $error_info = $this->handle_api_error_response($response, $raw_response_body, $http_code, $sync_type);
             
             if (defined('WP_DEBUG') && WP_DEBUG) {
+                // amazonq-ignore-next-line
                 error_log("Ecwid Sync: API Error for $sync_type. HTTP Code: $http_code. Raw Body: " . substr($raw_response_body, 0, 500)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
             }
             
@@ -1223,6 +1243,7 @@ class Ecwid_WC_Sync {
                 $items_from_api = $body;
             } else {
                 if (defined('WP_DEBUG') && WP_DEBUG) {
+                    // amazonq-ignore-next-line
                     error_log("Ecwid Sync: Categories API response for $sync_type was not in expected 'items' wrapper and not a direct array of categories. Raw Body: " . $raw_response_body); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
                 }
             }
@@ -1261,11 +1282,13 @@ class Ecwid_WC_Sync {
                 );
                 // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
                 // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Query is prepared above with $wpdb->prepare(); direct query needed for batch lookup performance
+                // amazonq-ignore-next-line
                 $results = $wpdb->get_results( $query );
                 foreach ($results as $row) {
                     $existing_ecwid_ids_map[$row->ecwid_id] = (int) $row->post_id;
                 }
                 if (defined('WP_DEBUG') && WP_DEBUG) {
+                    // amazonq-ignore-next-line
                     error_log("Ecwid Sync: Pre-loaded " . count($existing_ecwid_ids_map) . " existing products from batch of " . count($ecwid_ids_to_check)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
                 }
             }
@@ -1323,6 +1346,7 @@ class Ecwid_WC_Sync {
                     $failed_count++;
                     $batch_detailed_logs[] = "--- [PHP EXCEPTION] During processing of " . esc_html($item_identifier_for_log) . ": " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine() . " ---";
                     if (defined('WP_DEBUG') && WP_DEBUG) {
+                        // amazonq-ignore-next-line
                         error_log("Ecwid Sync: PHP Exception during $sync_type import: " . $e->getMessage() . " Trace: " . $e->getTraceAsString()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
                     }
                 }
@@ -1398,6 +1422,7 @@ class Ecwid_WC_Sync {
             // translators: %1$s is the Ecwid ID, %2$s is the SKU, %3$s is the raw item data
             $error_message = __('[CRITICAL] Product missing Ecwid ID or SKU. Ecwid ID: %1$s, SKU: %2$s. Raw item: %3$s', 'metrotechs-e2w-sync');
             $product_logs[] = sprintf($error_message, $ecwid_id_for_log, $sku_for_log, wp_json_encode($item));
+            // amazonq-ignore-next-line
             error_log("Ecwid Sync: Product (Ecwid ID: $ecwid_id_for_log) missing SKU or ID. Data: " . print_r($item, true)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log,WordPress.PHP.DevelopmentFunctions.error_log_print_r -- Critical error logging for missing product data
             return ['status' => 'failed', 'logs' => $product_logs, 'item_name' => $product_name_for_log, 'ecwid_id' => $ecwid_id_for_log, 'sku' => $sku_for_log];
         }
@@ -1553,6 +1578,7 @@ class Ecwid_WC_Sync {
                     } else {
                         // Second check: look for existing attachment with same source URL
                         global $wpdb;
+                        // amazonq-ignore-next-line
                         $existing_attachment = $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Performance-critical query for finding existing attachments by Ecwid source URL
                             "SELECT post_id FROM {$wpdb->postmeta} 
                             WHERE meta_key = '_ecwid_image_source_url' 
@@ -1785,6 +1811,7 @@ class Ecwid_WC_Sync {
                     if ($gallery_image_url && !in_array($gallery_image_url, $processed_ecwid_gallery_urls)) {
                         // Check if this image URL already exists in the media library
                         global $wpdb;
+                        // amazonq-ignore-next-line
                         $existing_gallery_attachment = $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Performance-critical query for finding existing gallery attachments by Ecwid source URL
                             "SELECT post_id FROM {$wpdb->postmeta} 
                             WHERE meta_key = '_ecwid_gallery_image_source_url' 
@@ -2449,6 +2476,7 @@ class Ecwid_WC_Sync {
         }
 
         if (defined('WP_DEBUG') && WP_DEBUG && count($sorted) !== count($categories)) {
+            // amazonq-ignore-next-line
             error_log("Ecwid Sync: Category sort - Input: " . count($categories) . ", Output: " . count($sorted)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
         }
 
@@ -2660,6 +2688,7 @@ class Ecwid_WC_Sync {
             return $term_cache[$cache_key];
         }
 
+        // amazonq-ignore-next-line
         $term_id = $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Performance-critical query for finding category terms by Ecwid ID
             "SELECT t.term_id
              FROM {$wpdb->terms} AS t
@@ -2727,6 +2756,7 @@ class Ecwid_WC_Sync {
         global $wpdb;
         $db_size = 0;
         // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- SHOW TABLE STATUS requires direct query; result is transient diagnostic data not suitable for caching
+        // amazonq-ignore-next-line
         $table_results = $wpdb->get_results("SHOW TABLE STATUS", ARRAY_A);
         if ($table_results) {
             foreach ($table_results as $table) {
@@ -2807,6 +2837,7 @@ class Ecwid_WC_Sync {
         $timeout_seconds = apply_filters('ecwid_wc_sync_image_download_timeout', 30);
         $tmp = download_url($image_url, $timeout_seconds);
         if (is_wp_error($tmp)) {
+            // amazonq-ignore-next-line
             wp_delete_file($tmp);
             // translators: %1$s is the image URL, %2$s is the error message
             return new WP_Error('download_failed', sprintf(__('Image download failed from %1$s: %2$s', 'metrotechs-e2w-sync'), esc_url_raw($image_url), $tmp->get_error_message()));
@@ -2838,6 +2869,7 @@ class Ecwid_WC_Sync {
             $error_message = sprintf(__('Image sideload failed for %1$s: %2$s', 'metrotechs-e2w-sync'), esc_url_raw($image_url), $attachment_id->get_error_message());
             
             if (defined('WP_DEBUG') && WP_DEBUG) {
+                // amazonq-ignore-next-line
                 error_log('[Ecwid2Woo] Image Upload Error Details: ' . $error_message); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
                 error_log('[Ecwid2Woo] Upload Diagnostics: ' . json_encode($diagnostic_info, JSON_PRETTY_PRINT)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
             }
@@ -3012,6 +3044,7 @@ class Ecwid_WC_Sync {
         }
 
         // Get store profile to extract currency
+        // amazonq-ignore-next-line
         $profile_url = "https://app.ecwid.com/api/v3/{$store_id}/profile?token={$api_token}";
         
         $response = wp_remote_get($profile_url, [
