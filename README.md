@@ -482,6 +482,12 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Import/Export Settings** – Backup and restore plugin configurations
 
 ### Version History
+- **v1.5.1** (2026-02-21) – **SECURITY HARDENING**
+  - Input sanitization improvements across all sync pages
+  - Output escaping hardened to prevent XSS vulnerabilities
+  - Nonce verification strengthened on all AJAX endpoints
+  - Capability checks enforced consistently throughout the plugin
+  - Uninstall routine secured against unauthorized execution
 - **v1.5.0** (2025-12-18) – **SELF-OPTIMIZING BATCH PROCESSING**
   - 🔄 **Bidirectional Batch Sizing** – Decreases on timeouts AND recovers after stable performance
   - 📈 **Self-Healing Recovery** – Batch size increases by 50% after 5 consecutive successes

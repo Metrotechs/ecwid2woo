@@ -2809,7 +2809,7 @@ class Ecwid_WC_Sync {
             'db_size_formatted' => size_format($db_size),
             'db_prefix' => $wpdb->prefix,
             // Plugin info
-            'plugin_version' => defined('METROTECHS_E2W_VERSION') ? METROTECHS_E2W_VERSION : '1.4.3',
+            'plugin_version' => defined('METROTECHS_E2W_VERSION') ? METROTECHS_E2W_VERSION : '1.5.1',
             // Timestamps
             'server_time' => current_time('Y-m-d H:i:s'),
             'timezone' => wp_timezone_string(),

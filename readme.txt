@@ -215,6 +215,15 @@ This error means your API token doesn't have the required permissions.
 
 == Changelog ==
 
+= 1.5.1 =
+**Security Hardening**
+
+* Input sanitization improvements across all sync pages
+* Output escaping hardened to prevent XSS vulnerabilities
+* Nonce verification strengthened on all AJAX endpoints
+* Capability checks enforced consistently throughout the plugin
+* Uninstall routine secured against unauthorized execution
+
 = 1.5.0 =
 **Real-Time Batch Processing & Adaptive Sizing**
 
