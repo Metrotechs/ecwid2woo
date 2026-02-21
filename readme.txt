@@ -73,17 +73,16 @@ Features revolutionary Smart Skip Technology for large-scale migrations with int
 - WordPress coding standards compliant
 - Extensible architecture for customization
 
-== What's New in Version 1.1.0+ ==
+== What's New in Version 1.5.1 ==
 
-**MAJOR UPDATE:** Enhanced UI + Smart Skip Technology
+**SECURITY HARDENING UPDATE**
 
-- **Enhanced Admin Interface:** Colorful gradient buttons and professional design
-- **Smart Error Handling:** Detailed error messages with solutions
-- **Auto-loading Pages:** All sync pages load data automatically
-- **Improved JavaScript:** Resolved scope issues for better reliability
-- **Better Documentation:** Comprehensive setup guides and troubleshooting
-- **Security Improvements:** Enhanced input validation and secure API handling
-- **WordPress Standards:** Full compliance with WordPress coding and plugin development standards
+- **Input Sanitization** – Improvements across all sync pages
+- **Output Escaping** – Hardened to prevent XSS vulnerabilities
+- **Nonce Verification** – Strengthened on all AJAX endpoints
+- **Capability Checks** – Enforced consistently throughout the plugin
+- **Secure Uninstall** – Uninstall routine secured against unauthorized execution
+- **JS Bug Fix** – Resolved ReferenceError for initializeSettingsPage on settings page
 
 == Installation ==
 
@@ -483,6 +482,9 @@ This error means your API token doesn't have the required permissions.
 
 == Upgrade Notice ==
 
+= 1.5.1 =
+Security hardening update. Improves input sanitization, output escaping, nonce verification, capability checks, and uninstall security. Recommended for all users.
+
 = 1.4.3 =
 Enhanced reliability update! Adds exponential backoff retry logic, fixes retry counter bug in full sync, adds Cloudflare 524 timeout handling, and improves category batch loading. Recommended for all users experiencing intermittent 500 errors during sync.
 
@@ -536,8 +538,6 @@ This plugin:
 - Stores Ecwid IDs in WordPress meta fields for sync tracking and duplicate prevention
 - Customer and order data is only processed locally within your WordPress installation
 - All API communications use secure HTTPS connections
-
-== Changelog ==
 
 = 1.4.9 - API Permission Error Detection =
 * **NEW FEATURE** - Empty Response Detection: Detects when Ecwid API returns empty response
