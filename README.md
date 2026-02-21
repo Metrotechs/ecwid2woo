@@ -1,4 +1,4 @@
-# Metrotechs E2W Sync - Complete E-commerce Migration Suite 🚀
+# Metrotechs E2W Sync - Complete Ecwid to WooCommerce Product Migration Suite 🚀
 
 **Professional-grade WordPress plugin for seamless Ecwid to WooCommerce migration with self-optimizing batch processing, Smart Skip Technology, and advanced image preservation**
 
