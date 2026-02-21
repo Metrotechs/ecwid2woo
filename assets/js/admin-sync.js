@@ -4827,9 +4827,4 @@
         });
     }
 
-    // Initialize page-specific functionality
-    if (window.location.href.indexOf('ecwid-sync-settings') !== -1) {
-        initializeSettingsPage();
-    }
-    
 })(jQuery);
