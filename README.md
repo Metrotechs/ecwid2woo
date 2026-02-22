@@ -394,7 +394,7 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Multisite Support** – Compatible with WordPress multisite networks
 - **Translation Ready** – Prepared for internationalization
 
-### Security Features (v1.5.2 Enhanced)
+### Security Features (v1.6.0 Enhanced)
 - **Sanitized Inputs** – All data sanitized and validated across all sync pages
 - **Output Escaping** – XSS prevention enforced throughout the admin interface
 - **Nonce Protection** – CSRF protection strengthened on all AJAX endpoints and admin forms
@@ -479,6 +479,11 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Import/Export Settings** – Backup and restore plugin configurations
 
 ### Version History
+- **v1.6.0** (2026-02-22) – **SHARED HOSTING PERFORMANCE**
+  - 🛡️ **CPU Yield After Image Sideload** – 250ms breathing room after thumbnail generation prevents server overload
+  - 🎯 **Targeted Cache Clearing** – Replaced full cache flushes with surgical per-product cache invalidation
+  - ⏱️ **PHP Worker Protection** – Capped set_time_limit to 300s to prevent indefinitely locked workers
+  - 💾 **Cache Suspension During Imports** – Suspended object cache additions during batch loops to reduce memory/CPU waste
 - **v1.5.2** (2026-02-22) – **VARIATION & ATTRIBUTE FIXES**
   - 🎯 **Default Displayed Price on Variations** – Fallback to `defaultDisplayedPrice` field when price is missing
   - ✅ **Skip Duplicate Attributes on Re-import** – Idempotent attribute creation prevents duplicates during re-syncs
