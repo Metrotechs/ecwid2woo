@@ -841,7 +841,10 @@ class Ecwid2Woo_Product_Sync {
                     if (!isset($product_option['name']) || !isset($product_option['choices'])) continue;
                     
                     $attr_name = $this->parent_plugin->sanitize_attribute_name($product_option['name']);
-                    $attr_options = []; 
+                    $attr_options = [];
+                    
+                    // Skip if attribute already exists
+                    if (isset($wc_product_attributes[$attr_name]) || isset($wc_product_attributes['pa_' . $attr_name])) continue;
                     
                     foreach ($product_option['choices'] as $choice) {
                         $attr_options[] = sanitize_text_field($choice['text']);
