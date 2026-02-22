@@ -277,6 +277,8 @@
          */
         function isServerDownError(jqXHR) {
             const status = jqXHR.status;
+            // Server overload / unavailable
+            if (status === 503) return true; // Service Unavailable (server overloaded)
             // Cloudflare 5xx origin errors
             if (status === 520) return true; // Web server returned unknown error (server crashed)
             if (status === 521) return true; // Web server is down (server refusing connections)
@@ -294,6 +296,7 @@
          */
         function getCloudflareErrorMessage(status) {
             const messages = {
+                503: 'Service Unavailable (503). The server is overloaded.',
                 520: 'Web server crashed (520). The server returned an unexpected response.',
                 521: 'Web server is down (521). The origin server refused the connection.',
                 522: 'Connection timed out (522). Could not reach the origin server.',
@@ -303,7 +306,7 @@
                 527: 'Railgun connection error (527).',
                 530: 'Origin DNS error (530).'
             };
-            return messages[status] || `Cloudflare error (${status}).`;
+            return messages[status] || `Server error (${status}).`;
         }
 
         // Track server down recovery state
