@@ -25,13 +25,13 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 
 ### ⚡ **Self-Healing Batch Processing:**
 - **Bidirectional Sizing** – Batch size decreases on timeouts AND recovers after stability
-- **Auto-Recovery** – After 5 successful batches, size increases by 50% (50→75→100)
+- **Auto-Recovery** – After 5 successful batches, size increases by 50% (10→15→20)
 - **Zero Configuration** – Works optimally on shared hosting AND high-end VPS
 - **Timeout Protection** – Automatically halves batch size on 524/504/408 errors
 - **Progressive Cooldowns** – Server recovery waits increase with consecutive timeouts
 - **Memory-Aware** – Reduces batch size automatically if memory is low
 
-**Example:** `100 → [timeout] → 50 → [5 successes] → 75 → [5 successes] → 100 ✓`
+**Example:** `20 → [timeout] → 10 → [5 successes] → 15 → [5 successes] → 20 ✓`
 
 ---
 
@@ -69,7 +69,7 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Bidirectional Batch Sizing** – Batch size decreases on timeouts AND recovers after stable performance
 - **Self-Healing Recovery** – After 5 successful batches, size increases by 50% (e.g., 50→75→100)
 - **Zero Configuration** – Works optimally on shared hosting AND high-end VPS without manual tuning
-- **100 Items/Batch Default** – Products and Categories start at 100 items per batch for faster syncs
+- **Conservative Defaults** – Products start at 5-20/batch, categories at 10-50/batch based on server tier
 - **Batch Size Display** – Current batch size shown in status: "Syncing Products: 50/1000 [batch size: 75]"
 - **Sync Page Parity** – Full Sync, Product Sync, and Category Sync all use identical adaptive logic
 - **Progressive Cooldowns** – Server recovery waits increase with consecutive timeouts (5s→10s→30s)
@@ -91,13 +91,13 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 ### 🔧 Enhanced Performance & Reliability (v1.3.8-1.4.8)
 
 - **Auto Server Detection** – Automatically detects server resources and configures optimal batch sizes
-- **Server Tier System** – 🚀 High (512MB+), ⚡ Medium (256-512MB), 🐢 Low (<256MB) with auto-tuned settings
-- **Server Crash Recovery** – Handles Cloudflare 520/521/522/523/525 errors with 30-120s cooldown periods
+- **Server Tier System** – 🚀 High (2GB+/VPS), ⚡ Medium (512MB-2GB), 🐢 Low (<512MB) with conservative defaults
+- **Server Crash Recovery** – Handles HTTP 503 and Cloudflare 520-530 errors with 30-120s cooldown periods
 - **Fast Skip Optimization** – Pre-loads existing Ecwid IDs in single query for 100x faster duplicate detection
 - **Intelligent Timeout Recovery** – Detects Cloudflare 524, Gateway 504, Request 408, and jQuery timeouts
 - **Exponential Backoff Retry** – Smart retry logic with increasing delays (3s→6s→12s) for server recovery
 - **Batch Loading System** – Products, categories, and sync operations load in manageable batches
-- **Dynamic Delays** – Delay between batches auto-adjusted (2-5s) based on server capability
+- **Dynamic Delays** – Delay between batches auto-adjusted (3-8s) based on server capability
 - **Progress Tracking** – Real-time progress bars showing current batch and total progress
 - **Server Compatibility** – Works on shared hosting, VPS, and dedicated servers
 
@@ -150,7 +150,7 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **WordPress:** 6.0+
 - **WooCommerce:** 7.0+
 - **PHP:** 8.0+
-- **Server Memory:** 512MB+ for large catalogs
+- **Server Memory:** 512MB+ (2GB+ recommended for large catalogs with images)
 - **Reliable Internet:** Stable connection for API operations
 
 ---
@@ -484,6 +484,9 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
   - 🎯 **Targeted Cache Clearing** – Replaced full cache flushes with surgical per-product cache invalidation
   - ⏱️ **PHP Worker Protection** – Capped set_time_limit to 300s to prevent indefinitely locked workers
   - 💾 **Cache Suspension During Imports** – Suspended object cache additions during batch loops to reduce memory/CPU waste
+  - 🔥 **HTTP 503 Recovery** – 503 Service Unavailable now triggers full server-down recovery with cooldown and batch reduction
+  - 📊 **Conservative Server Tiers** – Raised tier thresholds (Low <512MB, Medium 512MB-2GB, High 2GB+/VPS) to prevent CPU overload on shared hosting
+  - 📉 **Reduced Batch Sizes** – Products default to 5-20/batch (was 10-50), categories to 10-50/batch (was 15-100), with longer delays between batches
 - **v1.5.2** (2026-02-22) – **VARIATION & ATTRIBUTE FIXES**
   - 🎯 **Default Displayed Price on Variations** – Fallback to `defaultDisplayedPrice` field when price is missing
   - ✅ **Skip Duplicate Attributes on Re-import** – Idempotent attribute creation prevents duplicates during re-syncs
@@ -495,11 +498,11 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
   - Uninstall routine secured against unauthorized execution
 - **v1.5.0** (2025-12-18) – **SELF-OPTIMIZING BATCH PROCESSING**
   - 🔄 **Bidirectional Batch Sizing** – Decreases on timeouts AND recovers after stable performance
-  - 📈 **Self-Healing Recovery** – Batch size increases by 50% after 5 consecutive successes
+  - 📈 **Self-Healing Recovery** – Batch size increases by 50% after 5 consecutive successes (e.g., 10→15→20)
   - ⚡ **Real-Time Logging** – All sync pages show detailed logs as each batch processes
   - 📊 **Batch Size Display** – Current batch size shown in status: "[batch size: 75]"
   - 🎯 **Zero Configuration** – Works optimally on shared hosting AND high-end VPS
-  - 📦 **100 Items/Batch Default** – Products and Categories start at 100 per batch
+  - 📦 **Auto-Tuned Batch Defaults** – Batch sizes auto-configured per server tier
   - 🎯 **Sync Page Parity** – Full Sync, Product Sync, Category Sync all use identical adaptive logic
   - ⏳ **Progressive Cooldowns** – Server recovery waits increase with timeouts (5s→10s→30s)
   - 💾 **Memory-Aware Batching** – PHP auto-reduces batch size if memory low (<128MB free)
@@ -514,7 +517,7 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
   - 💻 **Auto Server Detection** – Detects server resources and adjusts batch sizes
   - 🔥 **Server Down Recovery** – Handles Cloudflare 520-530 errors with extended cooldowns
   - 🚀 **Fast Skip Optimization** – 100x faster duplicate detection with single SQL query
-  - 🎯 **Server Tier System** – 🚀 High, ⚡ Medium, 🐢 Low with auto-tuned settings
+  - 🎯 **Server Tier System** – 🚀 High (2GB+), ⚡ Medium (512MB-2GB), 🐢 Low (<512MB) with conservative defaults
   - 🔍 **System Diagnostics** – Memory, disk space, WooCommerce stats panel
 - **v1.3.0** (2025-09-02) – **STOP SYNC & STABILITY**
   - 🛑 **Stop Sync Button** – Cancel running product and category imports instantly
