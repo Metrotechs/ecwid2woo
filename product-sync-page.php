@@ -832,6 +832,40 @@ class Ecwid2Woo_Product_Sync {
                 $product->set_attributes($wc_attributes);
             }
 
+            // --- PRODUCT OPTIONS ---
+            if (isset($item['options']) && is_array($item['options'])) {
+                $product_logs[] = "Processing " . count($item['options']) . " product options.";
+                $wc_product_attributes = $product->get_attributes();
+                
+                foreach ($item['options'] as $product_option) {
+                    if (!isset($product_option['name']) || !isset($product_option['choices'])) continue;
+                    
+                    $attr_name = $this->parent_plugin->sanitize_attribute_name($product_option['name']);
+                    $attr_options = [];
+                    
+                    // Skip if attribute already exists
+                    if (isset($wc_product_attributes[$attr_name]) || isset($wc_product_attributes['pa_' . $attr_name])) continue;
+                    
+                    foreach ($product_option['choices'] as $choice) {
+                        $attr_options[] = sanitize_text_field($choice['text']);
+                    }
+                    
+                    // Create WooCommerce attribute
+                    $attribute = new WC_Product_Attribute();
+                    $attribute->set_id(0);
+                    $attribute->set_name($attr_name);
+                    $attribute->set_options($attr_options);
+                    $attribute->set_position(count($wc_product_attributes));
+                    $attribute->set_visible(true);
+                    $attribute->set_variation(true);
+                    
+                    $wc_product_attributes[] = $attribute;
+                    $product_logs[] = "Added option attribute: $attr_name = " . implode(' | ', $attr_options);
+                }
+                
+                $product->set_attributes($wc_product_attributes);
+            }
+
             // --- SAVE PRODUCT ---
             $product_id = $product->save();
             update_post_meta($product_id, '_ecwid_product_id', $ecwid_id_for_log);
