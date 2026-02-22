@@ -987,11 +987,26 @@ class Ecwid2Woo_Product_Sync {
             
             // If product has no gallery images, force import all gallery images
             if (empty($existing_gallery_ids)) {
-                $product_logs[] = "Product has no gallery images - forcing import of all gallery images from Ecwid.";
+                // Get image throttle settings (server-tier-aware)
+                $image_throttle = get_transient('ecwid2woo_image_throttle');
+                $cooldown_every_n = ($image_throttle && isset($image_throttle['cooldown_every_n'])) ? $image_throttle['cooldown_every_n'] : 4;
+                $cooldown_delay_ms = ($image_throttle && isset($image_throttle['cooldown_delay_ms'])) ? $image_throttle['cooldown_delay_ms'] : 5000;
+                $max_gallery = ($image_throttle && isset($image_throttle['max_gallery_images'])) ? $image_throttle['max_gallery_images'] : 8;
+
+                $gallery_images = $item['galleryImages'];
+                $total_gallery = count($gallery_images);
+
+                // Cap gallery images to prevent server overload on shared hosting
+                if ($max_gallery > 0 && $total_gallery > $max_gallery) {
+                    $product_logs[] = "⚠ Capping gallery images from $total_gallery to $max_gallery to prevent server overload. Remaining images will import on next sync.";
+                    $gallery_images = array_slice($gallery_images, 0, $max_gallery);
+                }
+
+                $product_logs[] = "Product has no gallery images - importing " . count($gallery_images) . " of $total_gallery gallery images from Ecwid.";
                 $new_gallery_ids = [];
                 $imported_count = 0;
-                
-                foreach ($item['galleryImages'] as $index => $gallery_image) {
+
+                foreach ($gallery_images as $index => $gallery_image) {
                     // Use 'url' field as primary choice (confirmed from API testing), with fallbacks
                     $image_url = null;
                     if (isset($gallery_image['url']) && !empty($gallery_image['url'])) {
@@ -1006,7 +1021,13 @@ class Ecwid2Woo_Product_Sync {
                         $product_logs[] = "✗ No valid image URL found in gallery image " . ($index + 1);
                         continue;
                     }
-                    
+
+                    // Progressive cooldown: extra pause every N images to let CPU recover
+                    if ($imported_count > 0 && $imported_count % $cooldown_every_n === 0) {
+                        $product_logs[] = "⏸ CPU cooldown after $imported_count images (" . ($cooldown_delay_ms / 1000) . "s pause)...";
+                        usleep($cooldown_delay_ms * 1000);
+                    }
+
                     $product_logs[] = "Importing gallery image " . ($index + 1) . ": " . $image_url;
                     $attachment_id = $this->parent_plugin->attach_image_to_product_from_url($image_url, $product->get_id(), 'Gallery image ' . ($index + 1));
                     if ($attachment_id && !is_wp_error($attachment_id)) {
@@ -1027,7 +1048,12 @@ class Ecwid2Woo_Product_Sync {
             } else {
                 // Product has existing images - use smart preservation logic
                 $existing_gallery_urls = [];
-                
+
+                // Get image throttle settings (server-tier-aware)
+                $image_throttle = get_transient('ecwid2woo_image_throttle');
+                $cooldown_every_n = ($image_throttle && isset($image_throttle['cooldown_every_n'])) ? $image_throttle['cooldown_every_n'] : 4;
+                $cooldown_delay_ms = ($image_throttle && isset($image_throttle['cooldown_delay_ms'])) ? $image_throttle['cooldown_delay_ms'] : 5000;
+
                 // Get URLs of existing images for comparison
                 foreach ($existing_gallery_ids as $existing_id) {
                     $existing_url = wp_get_attachment_url($existing_id);
@@ -1035,10 +1061,10 @@ class Ecwid2Woo_Product_Sync {
                         $existing_gallery_urls[$existing_id] = $existing_url;
                     }
                 }
-                
+
                 $new_gallery_ids = $existing_gallery_ids; // Start with existing images
                 $imported_gallery_count = 0;
-                
+
                 foreach ($item['galleryImages'] as $index => $gallery_image) {
                     // Use 'url' field as primary choice (confirmed from API testing), with fallbacks
                     $image_url = null;
@@ -1054,7 +1080,7 @@ class Ecwid2Woo_Product_Sync {
                         $product_logs[] = "✗ No valid image URL found in gallery image " . ($index + 1);
                         continue;
                     }
-                    
+
                     // Check if this image is already in the gallery
                     $already_exists = false;
                     foreach ($existing_gallery_urls as $existing_url) {
@@ -1063,8 +1089,14 @@ class Ecwid2Woo_Product_Sync {
                             break;
                         }
                     }
-                    
+
                     if (!$already_exists) {
+                        // Progressive cooldown: extra pause every N new images to let CPU recover
+                        if ($imported_gallery_count > 0 && $imported_gallery_count % $cooldown_every_n === 0) {
+                            $product_logs[] = "⏸ CPU cooldown after $imported_gallery_count new images (" . ($cooldown_delay_ms / 1000) . "s pause)...";
+                            usleep($cooldown_delay_ms * 1000);
+                        }
+
                         $product_logs[] = "Importing new gallery image " . ($index + 1) . ": " . $image_url;
                         $attachment_id = $this->parent_plugin->attach_image_to_product_from_url($image_url, $product->get_id(), 'Gallery image ' . ($index + 1));
                         if ($attachment_id && !is_wp_error($attachment_id)) {

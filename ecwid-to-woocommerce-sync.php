@@ -160,7 +160,37 @@ function ecwid2woo_detect_server_capabilities() {
     ];
     
     $config = $batch_configs[$server_tier];
-    
+
+    // Image throttle settings per tier — thumbnail generation is the #1 CPU killer.
+    // Each media_handle_sideload() triggers GD/Imagick to create multiple thumbnail sizes.
+    // On shared hosting, 16 images back-to-back will crash the server (522 timeout).
+    $image_configs = [
+        'low' => [
+            'per_image_delay_ms' => 2000,  // 2s between each image
+            'cooldown_every_n'   => 4,     // Extra pause every 4 images
+            'cooldown_delay_ms'  => 5000,  // 5s cooldown pause
+            'max_gallery_images' => 8,     // Cap gallery images per product
+        ],
+        'medium' => [
+            'per_image_delay_ms' => 1000,  // 1s between each image
+            'cooldown_every_n'   => 6,     // Extra pause every 6 images
+            'cooldown_delay_ms'  => 3000,  // 3s cooldown pause
+            'max_gallery_images' => 12,    // Cap gallery images per product
+        ],
+        'high' => [
+            'per_image_delay_ms' => 500,   // 500ms between each image
+            'cooldown_every_n'   => 10,    // Extra pause every 10 images
+            'cooldown_delay_ms'  => 2000,  // 2s cooldown pause
+            'max_gallery_images' => 0,     // 0 = unlimited
+        ],
+    ];
+
+    $image_config = $image_configs[$server_tier];
+
+    // Store server tier and image config as transient so image functions can read it
+    set_transient('ecwid2woo_server_tier', $server_tier, HOUR_IN_SECONDS);
+    set_transient('ecwid2woo_image_throttle', $image_config, HOUR_IN_SECONDS);
+
     return [
         'server_tier' => $server_tier,
         'memory_limit_mb' => round($memory_mb),
@@ -170,6 +200,7 @@ function ecwid2woo_detect_server_capabilities() {
         'customers_batch' => $config['customers'],
         'orders_batch' => $config['orders'],
         'batch_delay_ms' => $config['batch_delay'],
+        'image_throttle' => $image_config,
         'description' => $config['description']
     ];
 }
@@ -1828,6 +1859,13 @@ class Ecwid_WC_Sync {
                 }
 
                 // 2. Add new gallery images from Ecwid that aren't already processed
+                // Get image throttle settings (server-tier-aware)
+                $image_throttle = get_transient('ecwid2woo_image_throttle');
+                $cooldown_every_n = ($image_throttle && isset($image_throttle['cooldown_every_n'])) ? $image_throttle['cooldown_every_n'] : 4;
+                $cooldown_delay_ms = ($image_throttle && isset($image_throttle['cooldown_delay_ms'])) ? $image_throttle['cooldown_delay_ms'] : 5000;
+                $max_gallery = ($image_throttle && isset($image_throttle['max_gallery_images'])) ? $image_throttle['max_gallery_images'] : 8;
+                $new_image_import_count = 0;
+
                 foreach ($item['galleryImages'] as $gallery_image_data) {
                     $gallery_image_url = $gallery_image_data['hdThumbnailUrl'] ?? $gallery_image_data['originalImageUrl'] ?? $gallery_image_data['url'] ?? null;
                     if ($gallery_image_url && !in_array($gallery_image_url, $processed_ecwid_gallery_urls)) {
@@ -1835,26 +1873,39 @@ class Ecwid_WC_Sync {
                         global $wpdb;
                         // amazonq-ignore-next-line
                         $existing_gallery_attachment = $wpdb->get_var($wpdb->prepare( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Performance-critical query for finding existing gallery attachments by Ecwid source URL
-                            "SELECT post_id FROM {$wpdb->postmeta} 
-                            WHERE meta_key = '_ecwid_gallery_image_source_url' 
-                            AND meta_value = %s 
+                            "SELECT post_id FROM {$wpdb->postmeta}
+                            WHERE meta_key = '_ecwid_gallery_image_source_url'
+                            AND meta_value = %s
                             LIMIT 1",
                             $gallery_image_url
                         ));
-                        
+
                         if ($existing_gallery_attachment) {
                             $new_gallery_ids_to_set[] = $existing_gallery_attachment;
                             $product_logs[] = "Found existing gallery attachment (ID: $existing_gallery_attachment) for URL: $gallery_image_url. Reusing.";
                             $processed_ecwid_gallery_urls[] = $gallery_image_url;
                         } else {
+                            // Cap new image imports to prevent server overload
+                            if ($max_gallery > 0 && $new_image_import_count >= $max_gallery) {
+                                $product_logs[] = "⚠ Gallery image cap reached ($max_gallery). Skipping remaining images to prevent server overload.";
+                                break;
+                            }
+
+                            // Progressive cooldown: extra pause every N new images
+                            if ($new_image_import_count > 0 && $new_image_import_count % $cooldown_every_n === 0) {
+                                $product_logs[] = "⏸ CPU cooldown after $new_image_import_count new images (" . ($cooldown_delay_ms / 1000) . "s pause)...";
+                                usleep($cooldown_delay_ms * 1000);
+                            }
+
                             $product_logs[] = "Attempting to attach new gallery image from Ecwid: $gallery_image_url";
                             $g_image_id = $this->attach_image_to_product_from_url($gallery_image_url, $product_saved_id, ($item['name'] ?? 'Product') . ' gallery image');
-                            
+
                             if ($g_image_id && !is_wp_error($g_image_id)) {
                                 $new_gallery_ids_to_set[] = $g_image_id;
                                 update_post_meta($g_image_id, '_ecwid_gallery_image_source_url', esc_url_raw($gallery_image_url));
                                 $product_logs[] = "New gallery image attached, WC Attachment ID: $g_image_id.";
                                 $processed_ecwid_gallery_urls[] = $gallery_image_url;
+                                $new_image_import_count++;
                             } else {
                                 $gallery_error = is_wp_error($g_image_id) ? $g_image_id->get_error_message() : 'Unknown error attaching gallery image';
                                 $product_logs[] = "[WARNING] Failed to attach gallery image ($gallery_image_url). Error: $gallery_error";
@@ -2872,9 +2923,13 @@ class Ecwid_WC_Sync {
 
         $attachment_id = media_handle_sideload($file_array, $post_id, $desc);
 
-        // Brief CPU yield after thumbnail generation (heaviest CPU operation)
-        // Prevents shared hosting from becoming unresponsive during bulk imports
-        usleep(250000); // 250ms
+        // CPU yield after thumbnail generation (heaviest CPU operation).
+        // Delay is server-tier-aware: shared hosting needs 2s, VPS needs 500ms.
+        $image_throttle = get_transient('ecwid2woo_image_throttle');
+        $delay_ms = ($image_throttle && isset($image_throttle['per_image_delay_ms']))
+            ? $image_throttle['per_image_delay_ms']
+            : 1500; // Default 1.5s if tier not yet detected
+        usleep($delay_ms * 1000); // Convert ms to microseconds
 
         // Initialize WP_Filesystem for file operations
         global $wp_filesystem;
