@@ -435,6 +435,9 @@ class Ecwid2Woo_Full_Sync {
         }
 
         if (!empty($items_from_api)) {
+            // Suspend object cache additions during batch import to reduce memory/CPU waste
+            // (cached queries are rarely reused during import)
+            wp_suspend_cache_addition(true);
             foreach ($items_from_api as $item_data) {
                 if (!is_array($item_data) || !isset($item_data['id'])) {
                     $batch_detailed_logs[] = "--- [CRITICAL ERROR] Encountered invalid item in API response for $sync_type. Skipping. Item data: " . print_r($item_data, true) . " ---"; // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r -- Debug logging for invalid API response data
@@ -517,6 +520,7 @@ class Ecwid2Woo_Full_Sync {
                 }
                 $batch_detailed_logs[] = " ";
             }
+            wp_suspend_cache_addition(false);
         } elseif ($offset === 0 && $limit_per_api_call > 0) {
              $batch_detailed_logs[] = "No items received from Ecwid API for $sync_type with offset $offset and limit $limit_per_api_call. This might be normal if there are no items of this type or all have been processed.";
              $batch_detailed_logs[] = "API Response Debug: HTTP Code: $http_code, Total reported: $total_items_reported_by_api, Count in response: $count_in_current_api_response";

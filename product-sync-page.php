@@ -244,7 +244,7 @@ class Ecwid2Woo_Product_Sync {
             wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
             return;
         }
-        set_time_limit(0); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Legitimate use for bulk import operations
+        set_time_limit(300); // Cap at 5 minutes to avoid locking a PHP worker indefinitely on shared hosting
 
         $api_essentials = $this->parent_plugin->_get_api_essentials();
         if (is_wp_error($api_essentials)) {

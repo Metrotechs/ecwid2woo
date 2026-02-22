@@ -1305,6 +1305,9 @@ class Ecwid_WC_Sync {
         }
 
         if (!empty($items_from_api)) {
+            // Suspend object cache additions during batch import to reduce memory/CPU waste
+            // (cached queries are rarely reused during import)
+            wp_suspend_cache_addition(true);
             foreach ($items_from_api as $item_data) {
                 if (!is_array($item_data) || !isset($item_data['id'])) {
                     $batch_detailed_logs[] = "--- [CRITICAL ERROR] Encountered invalid item in API response for $sync_type. Skipping. Item data: " . print_r($item_data, true) . " ---"; // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r -- Debug logging for invalid API response data
@@ -1362,6 +1365,7 @@ class Ecwid_WC_Sync {
                 }
                 $batch_detailed_logs[] = " ";
             }
+            wp_suspend_cache_addition(false);
         } elseif ($offset === 0 && $limit_per_api_call > 0) {
              $batch_detailed_logs[] = "No items received from Ecwid API for $sync_type with offset $offset and limit $limit_per_api_call. This might be normal if there are no items of this type or all have been processed.";
         }
@@ -1766,15 +1770,16 @@ class Ecwid_WC_Sync {
                     // Clear WooCommerce product caches
                     clean_product_caches($product_saved_id);
                     
-                    // Clear any SKU-related caches by flushing object cache
-                    wp_cache_flush();
-                    
+                    // Clear SKU-related caches with targeted clearing (avoid full cache flush)
+                    clean_post_cache($product_saved_id);
+                    wc_delete_product_transients($product_saved_id);
+
                     // Force refresh the parent product to ensure children list is updated
                     $product = wc_get_product($product_saved_id);
-                    
+
                     // Small delay to ensure database operations are fully committed
                     usleep(100000); // 100ms delay
-                    
+
                     $product_logs[] = "Cleared caches after deleting $deleted_variation_count stale variations to ensure SKUs are available for reuse.";
                 }
             }
@@ -1915,7 +1920,7 @@ class Ecwid_WC_Sync {
         }
         
         // Enhanced resource management for variation processing
-        set_time_limit(0); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Legitimate use for bulk variation processing
+        set_time_limit(300); // Cap at 5 minutes to avoid locking a PHP worker indefinitely on shared hosting
         wp_raise_memory_limit('admin'); // WordPress way to increase memory for admin operations
         
         // Wrap entire function in try-catch for better error handling
@@ -2860,6 +2865,10 @@ class Ecwid_WC_Sync {
 
         $attachment_id = media_handle_sideload($file_array, $post_id, $desc);
 
+        // Brief CPU yield after thumbnail generation (heaviest CPU operation)
+        // Prevents shared hosting from becoming unresponsive during bulk imports
+        usleep(250000); // 250ms
+
         // Initialize WP_Filesystem for file operations
         global $wp_filesystem;
         if (!function_exists('WP_Filesystem')) {
@@ -3154,10 +3163,9 @@ class Ecwid_WC_Sync {
                 wc_clear_notices();
             }
             
-            // Clear object cache if available
-            if (function_exists('wp_cache_flush')) {
-                wp_cache_flush();
-            }
+            // Clear WooCommerce transients after currency change
+            delete_transient('woocommerce_cache_prefix');
+            wp_cache_delete('woocommerce_currency', 'options');
 
             $logs[] = "[CURRENCY] ✅ Updated WooCommerce currency from {$wc_currency} to {$ecwid_currency}";
             
