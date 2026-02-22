@@ -1115,6 +1115,8 @@ class Ecwid2Woo_Product_Sync {
             
             if (isset($combination['price'])) {
                 $variation->set_regular_price($combination['price']);
+            } else if (isset($combination['defaultDisplayedPrice'])) {
+                $variation->set_regular_price($combination['defaultDisplayedPrice']);
             }
             
             if (isset($combination['compareToPrice'])) {
