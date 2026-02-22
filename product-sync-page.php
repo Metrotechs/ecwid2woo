@@ -836,15 +836,23 @@ class Ecwid2Woo_Product_Sync {
             if (isset($item['options']) && is_array($item['options'])) {
                 $product_logs[] = "Processing " . count($item['options']) . " product options.";
                 $wc_product_attributes = $product->get_attributes();
-                
+
+                // Build existing attribute names for comparison
+                $existing_attr_names = [];
+                foreach ($wc_product_attributes as $attr) {
+                    if (is_object($attr) && method_exists($attr, 'get_name')) {
+                        $existing_attr_names[] = $attr->get_name();
+                    }
+                }
+
                 foreach ($item['options'] as $product_option) {
                     if (!isset($product_option['name']) || !isset($product_option['choices'])) continue;
-                    
+
                     $attr_name = $this->parent_plugin->sanitize_attribute_name($product_option['name']);
                     $attr_options = [];
-                    
+
                     // Skip if attribute already exists
-                    if (isset($wc_product_attributes[$attr_name]) || isset($wc_product_attributes['pa_' . $attr_name])) continue;
+                    if (in_array($attr_name, $existing_attr_names) || in_array('pa_' . $attr_name, $existing_attr_names)) continue;
                     
                     foreach ($product_option['choices'] as $choice) {
                         $attr_options[] = sanitize_text_field($choice['text']);
