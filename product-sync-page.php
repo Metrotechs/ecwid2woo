@@ -641,7 +641,8 @@ class Ecwid2Woo_Product_Sync {
                     // Skip it to avoid unnecessary re-processing unless we can confirm it needs updating
                     if ($ecwid_updated_timestamp) {
                         // We have Ecwid timestamp but no local timestamp - check product modification date as fallback
-                        $product_modified_time = strtotime($product->get_date_modified()->date('Y-m-d H:i:s'));
+                        $date_modified = $product->get_date_modified();
+                        $product_modified_time = $date_modified ? strtotime($date_modified->date('Y-m-d H:i:s')) : 0;
                         if ($ecwid_updated_timestamp <= $product_modified_time) {
                             $should_skip = true;
                             $product_logs[] = "SKIPPING: Previously imported product with no changes. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", WC modified: " . gmdate('Y-m-d H:i:s', $product_modified_time);
@@ -832,32 +833,42 @@ class Ecwid2Woo_Product_Sync {
                 $product->set_attributes($wc_attributes);
             }
 
-            // --- PRODUCT OPTIONS ---
-            if (isset($item['options']) && is_array($item['options'])) {
+            // --- PRODUCT OPTIONS (for variation attributes) ---
+            if (isset($item['options']) && is_array($item['options']) && !empty($item['options'])) {
                 $product_logs[] = "Processing " . count($item['options']) . " product options.";
                 $wc_product_attributes = $product->get_attributes();
+                if (!is_array($wc_product_attributes)) {
+                    $wc_product_attributes = [];
+                }
 
                 // Build existing attribute names for comparison
                 $existing_attr_names = [];
                 foreach ($wc_product_attributes as $attr) {
                     if (is_object($attr) && method_exists($attr, 'get_name')) {
-                        $existing_attr_names[] = $attr->get_name();
+                        $existing_attr_names[] = strtolower($attr->get_name());
                     }
                 }
 
                 foreach ($item['options'] as $product_option) {
-                    if (!isset($product_option['name']) || !isset($product_option['choices'])) continue;
+                    if (!isset($product_option['name']) || !isset($product_option['choices']) || !is_array($product_option['choices'])) continue;
 
                     $attr_name = $this->parent_plugin->sanitize_attribute_name($product_option['name']);
-                    $attr_options = [];
+                    if (empty($attr_name)) continue;
 
-                    // Skip if attribute already exists
-                    if (in_array($attr_name, $existing_attr_names) || in_array('pa_' . $attr_name, $existing_attr_names)) continue;
-                    
-                    foreach ($product_option['choices'] as $choice) {
-                        $attr_options[] = sanitize_text_field($choice['text']);
+                    // Skip if attribute already exists (check both raw name and taxonomy name)
+                    if (in_array(strtolower($attr_name), $existing_attr_names) || in_array('pa_' . strtolower($attr_name), $existing_attr_names)) {
+                        $product_logs[] = "Skipping existing option attribute: $attr_name";
+                        continue;
                     }
-                    
+
+                    $attr_options = [];
+                    foreach ($product_option['choices'] as $choice) {
+                        if (isset($choice['text'])) {
+                            $attr_options[] = sanitize_text_field($choice['text']);
+                        }
+                    }
+                    if (empty($attr_options)) continue;
+
                     // Create WooCommerce attribute
                     $attribute = new WC_Product_Attribute();
                     $attribute->set_id(0);
@@ -866,11 +877,12 @@ class Ecwid2Woo_Product_Sync {
                     $attribute->set_position(count($wc_product_attributes));
                     $attribute->set_visible(true);
                     $attribute->set_variation(true);
-                    
+
                     $wc_product_attributes[] = $attribute;
+                    $existing_attr_names[] = strtolower($attr_name);
                     $product_logs[] = "Added option attribute: $attr_name = " . implode(' | ', $attr_options);
                 }
-                
+
                 $product->set_attributes($wc_product_attributes);
             }
 
@@ -906,12 +918,25 @@ class Ecwid2Woo_Product_Sync {
                 'logs' => $product_logs
             ];
 
+        } catch (Error $e) {
+            $product_logs[] = "[CRITICAL] Fatal error during product import: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine();
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log("Ecwid Sync: Fatal Error during product import for ID $ecwid_id_for_log: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
+
+            return [
+                'status' => 'failed',
+                'item_name' => $product_name_for_log,
+                'ecwid_id' => $ecwid_id_for_log,
+                'sku' => $sku_for_log,
+                'logs' => $product_logs
+            ];
         } catch (Exception $e) {
             $product_logs[] = "[CRITICAL] Exception during product import: " . $e->getMessage();
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log("Ecwid Sync: Exception during product import for ID $ecwid_id_for_log: " . $e->getMessage()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
             }
-            
+
             return [
                 'status' => 'failed',
                 'item_name' => $product_name_for_log,
