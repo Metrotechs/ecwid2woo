@@ -213,15 +213,21 @@ class Ecwid_WC_Sync {
         require_once plugin_dir_path(__FILE__) . 'full-sync-page.php';
         $this->full_sync_handler = new Ecwid2Woo_Full_Sync($this);
         
-        // Include and initialize the customer sync handler
-        // amazonq-ignore-next-line
-        require_once plugin_dir_path(__FILE__) . 'customer-sync-page.php';
-        $this->customer_sync_handler = new Ecwid2Woo_Customer_Sync($this);
-        
-        // Include and initialize the order sync handler
-        // amazonq-ignore-next-line
-        require_once plugin_dir_path(__FILE__) . 'order-sync-page.php';
-        $this->order_sync_handler = new Ecwid2Woo_Order_Sync($this);
+        // Include and initialize the customer sync handler (if available)
+        $customer_sync_file = plugin_dir_path(__FILE__) . 'customer-sync-page.php';
+        if (file_exists($customer_sync_file)) {
+            // amazonq-ignore-next-line
+            require_once $customer_sync_file;
+            $this->customer_sync_handler = new Ecwid2Woo_Customer_Sync($this);
+        }
+
+        // Include and initialize the order sync handler (if available)
+        $order_sync_file = plugin_dir_path(__FILE__) . 'order-sync-page.php';
+        if (file_exists($order_sync_file)) {
+            // amazonq-ignore-next-line
+            require_once $order_sync_file;
+            $this->order_sync_handler = new Ecwid2Woo_Order_Sync($this);
+        }
         
         add_action('init', [$this, 'register_placeholder_cpt']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
@@ -622,10 +628,14 @@ class Ecwid_WC_Sync {
                 $this->product_sync_handler->render_product_sync_page();
                 break;
             case $this->customer_sync_slug:
-                $this->customer_sync_handler->render_customer_sync_page();
+                if (isset($this->customer_sync_handler)) {
+                    $this->customer_sync_handler->render_customer_sync_page();
+                }
                 break;
             case $this->order_sync_slug:
-                $this->order_sync_handler->render_order_sync_page();
+                if (isset($this->order_sync_handler)) {
+                    $this->order_sync_handler->render_order_sync_page();
+                }
                 break;
             default:
                 $this->render_settings_page();
