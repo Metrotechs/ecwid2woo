@@ -124,6 +124,10 @@ ehthumbs.db
 /gulpfile.js
 /Gruntfile.js
 
+# Work in progress sync pages
+customer-sync-page.php
+order-sync-page.php
+
 # Version control
 .git/
 .gitmodules
