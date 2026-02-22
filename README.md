@@ -394,13 +394,15 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Multisite Support** – Compatible with WordPress multisite networks
 - **Translation Ready** – Prepared for internationalization
 
-### Security Features (v1.5.1 Hardened)
+### Security Features (v1.5.2 Enhanced)
 - **Sanitized Inputs** – All data sanitized and validated across all sync pages
 - **Output Escaping** – XSS prevention enforced throughout the admin interface
 - **Nonce Protection** – CSRF protection strengthened on all AJAX endpoints and admin forms
 - **Capability Checks** – Permission verification enforced consistently throughout the plugin
 - **Secure Uninstall** – Uninstall routine secured against unauthorized execution
 - **Secure API Handling** – Encrypted credential storage
+- **Idempotent Operations** – Safe re-syncing with duplicate attribute prevention
+- **Variation Price Fallback** – Intelligent price handling for variation imports
 
 ---
 
@@ -477,6 +479,9 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Import/Export Settings** – Backup and restore plugin configurations
 
 ### Version History
+- **v1.5.2** (2026-02-22) – **VARIATION & ATTRIBUTE FIXES**
+  - 🎯 **Default Displayed Price on Variations** – Fallback to `defaultDisplayedPrice` field when price is missing
+  - ✅ **Skip Duplicate Attributes on Re-import** – Idempotent attribute creation prevents duplicates during re-syncs
 - **v1.5.1** (2026-02-21) – **SECURITY HARDENING**
   - Input sanitization improvements across all sync pages
   - Output escaping hardened to prevent XSS vulnerabilities
