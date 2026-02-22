@@ -69,13 +69,14 @@ if (!defined('ECWID2WOO_VARIATION_BATCH_SIZE')) {
     define('ECWID2WOO_VARIATION_BATCH_SIZE', 50); // Batch size for variation processing
 }
 
-// Server capability detection will override these defaults
+// Maximum batch sizes — server capability detection applies multipliers to these.
+// Users can override in wp-config.php: define('ECWID2WOO_PRODUCT_BATCH_SIZE', 30);
 if (!defined('ECWID2WOO_CATEGORY_BATCH_SIZE')) {
-    define('ECWID2WOO_CATEGORY_BATCH_SIZE', 100); // Default, auto-adjusted by server detection
+    define('ECWID2WOO_CATEGORY_BATCH_SIZE', 50); // Categories are lightweight (no images)
 }
 
 if (!defined('ECWID2WOO_PRODUCT_BATCH_SIZE')) {
-    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 100); // Default, auto-adjusted by server detection
+    define('ECWID2WOO_PRODUCT_BATCH_SIZE', 20); // Products are heavy (image thumbnails = CPU-bound)
 }
 
 /**
@@ -95,60 +96,66 @@ function ecwid2woo_detect_server_capabilities() {
     }
     
     // Detect hosting environment hints
-    $is_low_memory = $memory_mb < 256;
-    $is_medium_memory = $memory_mb >= 256 && $memory_mb < 512;
-    $is_high_memory = $memory_mb >= 512;
-    
-    // Calculate server tier based primarily on memory (timeout is less important since we handle it with adaptive sizing)
-    // Memory is the key constraint - timeout issues are handled by our adaptive batch reduction
-    $server_tier = 'medium'; // Default: balanced
-    
+    // Conservative thresholds — image thumbnail generation (GD/Imagick) is CPU-bound,
+    // so even servers with plenty of RAM can choke on aggressive batch sizes.
+    // Shared hosting with 1-2GB RAM typically has limited CPU (2-4 vCPUs shared).
+    $is_medium_memory = $memory_mb >= 512 && $memory_mb < 2048;
+    $is_high_memory = $memory_mb >= 2048;
+
+    // Calculate server tier — default to low for safety on shared hosting
+    // The adaptive batch reducer will scale UP if the server handles it well,
+    // but starting too high causes 503/522 errors that knock the whole site offline.
+    $server_tier = 'low'; // Default: conservative
+
     if ($is_high_memory) {
-        // 512MB+ RAM = high tier (timeout doesn't matter much, we handle it)
+        // 2GB+ RAM = likely a VPS or dedicated server
         $server_tier = 'high';
     } elseif ($is_medium_memory) {
-        // 256-512MB RAM = medium tier
+        // 512MB-2GB RAM = typical shared hosting with decent allocation
         $server_tier = 'medium';
-    } elseif ($is_low_memory) {
-        // < 256MB RAM = low tier (memory is the real constraint)
+    }
+    // < 512MB stays 'low'
+
+    // Downgrade tier if timeout is short (< 60s is restrictive for image-heavy imports)
+    if ($max_execution_time > 0 && $max_execution_time < 60 && $server_tier === 'high') {
+        $server_tier = 'medium';
+    }
+    if ($max_execution_time > 0 && $max_execution_time < 30 && $server_tier !== 'low') {
         $server_tier = 'low';
     }
     
-    // Downgrade tier if timeout is extremely short (< 30s is very restrictive)
-    if ($max_execution_time > 0 && $max_execution_time < 30 && $server_tier !== 'low') {
-        $server_tier = 'medium'; // Downgrade high to medium, keep medium as medium
-    }
-    
     // Define batch sizes for each tier
-    // These are multipliers/percentages of the PHP constants defined above
-    // High tier = 100% of constant, Medium = 60%, Low = 20%
-    $product_max = defined('ECWID2WOO_PRODUCT_BATCH_SIZE') ? ECWID2WOO_PRODUCT_BATCH_SIZE : 50;
-    $category_max = defined('ECWID2WOO_CATEGORY_BATCH_SIZE') ? ECWID2WOO_CATEGORY_BATCH_SIZE : 100;
-    
+    // Conservative starting points — the JS adaptive reducer will scale DOWN further
+    // if errors occur, but starting too high causes 503/522 that take the whole site down.
+    // Image-heavy products are the bottleneck: each product with images triggers
+    // media_handle_sideload() → GD/Imagick thumbnail generation (CPU-bound).
+    $product_max = defined('ECWID2WOO_PRODUCT_BATCH_SIZE') ? ECWID2WOO_PRODUCT_BATCH_SIZE : 20;
+    $category_max = defined('ECWID2WOO_CATEGORY_BATCH_SIZE') ? ECWID2WOO_CATEGORY_BATCH_SIZE : 50;
+
     $batch_configs = [
         'low' => [
-            'products' => max(5, intval($product_max * 0.2)),
-            'categories' => max(15, intval($category_max * 0.15)),
+            'products' => max(3, intval($product_max * 0.25)),  // 5 products
+            'categories' => max(10, intval($category_max * 0.2)), // 10 categories
             'customers' => 10,
             'orders' => 10,
-            'batch_delay' => 5000, // 5 seconds
-            'description' => 'Low-resource server (< 256MB RAM)'
+            'batch_delay' => 8000, // 8 seconds — give shared hosting CPU time to recover
+            'description' => 'Low-resource server (< 512MB RAM)'
         ],
         'medium' => [
-            'products' => max(10, intval($product_max * 0.5)),
-            'categories' => max(30, intval($category_max * 0.3)),
+            'products' => max(5, intval($product_max * 0.5)),   // 10 products
+            'categories' => max(15, intval($category_max * 0.5)), // 25 categories
+            'customers' => 15,
+            'orders' => 15,
+            'batch_delay' => 5000, // 5 seconds
+            'description' => 'Medium-resource server (512MB-2GB RAM)'
+        ],
+        'high' => [
+            'products' => $product_max,                          // 20 products
+            'categories' => $category_max,                       // 50 categories
             'customers' => 25,
             'orders' => 25,
             'batch_delay' => 3000, // 3 seconds
-            'description' => 'Medium-resource server (256-512MB RAM)'
-        ],
-        'high' => [
-            'products' => $product_max,
-            'categories' => $category_max,
-            'customers' => 35,
-            'orders' => 35,
-            'batch_delay' => 2000, // 2 seconds
-            'description' => 'High-resource server (512MB+ RAM)'
+            'description' => 'High-resource server (2GB+ RAM / VPS)'
         ]
     ];
     
