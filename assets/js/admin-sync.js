@@ -312,7 +312,7 @@
         // Track server down recovery state
         let serverDownRecoveryCount = 0;
         const maxServerDownRetries = 5;
-        const serverDownCooldowns = [30, 45, 60, 90, 120]; // Increasing cooldown in seconds
+        const serverDownCooldowns = [45, 60, 90, 120, 180]; // Increasing cooldown in seconds
 
         /**
          * Get cooldown time for server down recovery
@@ -1151,7 +1151,7 @@
             $.ajax({
                 url: ajax_url,
                 method: 'POST',
-                timeout: 90000, // 90 seconds - stay under Cloudflare's 100s limit
+                timeout: 180000, // 180 seconds - image throttling makes batches slower; Cloudflare Enterprise allows 200s
                 data: { action: 'ecwid_wc_batch_sync', nonce: nonce, sync_type: syncType, offset: offset, batch_size: currentBatchSize },
                 success: function(response) {
                     stopBatchStatusAnimation();
@@ -1342,17 +1342,21 @@
                         if (!hasExceededTimeoutRetries(syncType)) {
                             // We haven't exhausted retries yet
                             logMessage(fullSyncLogDiv, `[WARNING] ${errorData.message}`, 'warning');
-                            
+
+                            // Progressive backoff: 10s, 15s, 20s, 30s, 30s... (server needs time to recover)
+                            const timeoutAttempt = adaptiveBatchConfig.timeoutCounts[syncType];
+                            const retryDelaySeconds = Math.min(30, 10 + (timeoutAttempt - 1) * 5);
+
                             if (canReduce) {
-                                logMessage(fullSyncLogDiv, `[INFO] ⚡ Reducing batch size from ${currentBatch} to ${newBatch} and retrying...`, 'info');
+                                logMessage(fullSyncLogDiv, `[INFO] ⚡ Reducing batch size from ${currentBatch} to ${newBatch}. Retrying in ${retryDelaySeconds}s...`, 'info');
                             } else {
-                                logMessage(fullSyncLogDiv, `[INFO] ⚡ Already at minimum batch size (${newBatch}). Retrying... (attempt ${adaptiveBatchConfig.timeoutCounts[syncType]}/${adaptiveBatchConfig.maxTimeoutRetries})`, 'info');
+                                logMessage(fullSyncLogDiv, `[INFO] ⚡ Already at minimum batch size (${newBatch}). Retrying in ${retryDelaySeconds}s... (attempt ${timeoutAttempt}/${adaptiveBatchConfig.maxTimeoutRetries})`, 'info');
                             }
-                            
+
                             // amazonq-ignore-next-line
                             setTimeout(() => {
                                 processFullSyncBatch(syncType, offset, totalKnownItems);
-                            }, 2000);
+                            }, retryDelaySeconds * 1000);
                             return;
                         } else {
                             // Exhausted all retries
