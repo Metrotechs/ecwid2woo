@@ -1321,70 +1321,42 @@
                         errorData.message = 'API rate limit exceeded. Will retry automatically.';
                         errorData.error_type = 'rate_limit';
                         shouldRetry = true;
-                    } else if (jqXHR.status === 524 || jqXHR.status === 504 || jqXHR.status === 408 || textStatus === 'timeout') {
-                        // Handle timeout errors (524, 504, 408, or jQuery timeout) with adaptive batch sizing
-                        const currentBatch = getAdaptiveBatchSize(syncType);
-                        const canReduce = reduceBatchSize(syncType);
-                        const newBatch = getAdaptiveBatchSize(syncType);
-                        
-                        if (jqXHR.status === 524) {
-                            errorData.message = `Cloudflare timeout (524). Request exceeded 100 second limit.`;
-                        } else if (jqXHR.status === 504) {
-                            errorData.message = `Gateway timeout (504). Server took too long to respond.`;
-                        } else {
-                            errorData.message = `Request timed out. The server is taking too long to respond.`;
-                        }
-                        
-                        errorData.error_type = 'timeout';
-                        errorData.retry_recommended = true;
-                        
-                        // Check if we should retry with adaptive batch sizing
-                        if (!hasExceededTimeoutRetries(syncType)) {
-                            // We haven't exhausted retries yet
-                            logMessage(fullSyncLogDiv, `[WARNING] ${errorData.message}`, 'warning');
-
-                            // Progressive backoff: 10s, 15s, 20s, 30s, 30s... (server needs time to recover)
-                            const timeoutAttempt = adaptiveBatchConfig.timeoutCounts[syncType];
-                            const retryDelaySeconds = Math.min(30, 10 + (timeoutAttempt - 1) * 5);
-
-                            if (canReduce) {
-                                logMessage(fullSyncLogDiv, `[INFO] ⚡ Reducing batch size from ${currentBatch} to ${newBatch}. Retrying in ${retryDelaySeconds}s...`, 'info');
-                            } else {
-                                logMessage(fullSyncLogDiv, `[INFO] ⚡ Already at minimum batch size (${newBatch}). Retrying in ${retryDelaySeconds}s... (attempt ${timeoutAttempt}/${adaptiveBatchConfig.maxTimeoutRetries})`, 'info');
-                            }
-
-                            // amazonq-ignore-next-line
-                            setTimeout(() => {
-                                processFullSyncBatch(syncType, offset, totalKnownItems);
-                            }, retryDelaySeconds * 1000);
-                            return;
-                        } else {
-                            // Exhausted all retries
-                            errorData.message += `\n\nFailed after ${adaptiveBatchConfig.maxTimeoutRetries} attempts at minimum batch size (${newBatch}).`;
-                            errorData.message += '\n\nSuggestions:\n• Try again during off-peak hours\n• Contact your hosting provider about timeout limits\n• Consider upgrading your hosting plan';
-                        }
-                        shouldRetry = false; // Don't use standard retry, we handle it above
-                    } else if (isServerDownError(jqXHR)) {
-                        // Handle Cloudflare server down/crash errors (520, 521, 522, 523, 525, 526, 527, 530)
-                        // These require a LONG cooldown as the server is overloaded/crashed
+                    } else if (isServerDownError(jqXHR) || textStatus === 'timeout' || jqXHR.status === 524 || jqXHR.status === 504 || jqXHR.status === 408) {
+                        // UNIFIED handler for ALL server overload / timeout errors.
+                        // Previous bug: timeouts (textStatus==='timeout') were handled separately with only
+                        // 2s retries, which hammered the already-crashed server. Now ALL of these use
+                        // the same long cooldown approach since they all mean "server can't handle this".
                         serverDownRecoveryCount++;
-                        
-                        const cfMessage = getCloudflareErrorMessage(jqXHR.status);
-                        errorData.message = cfMessage + ' The server is overloaded or crashed.';
+
+                        // Build descriptive error message based on actual error type
+                        let cfMessage;
+                        if (isServerDownError(jqXHR)) {
+                            cfMessage = getCloudflareErrorMessage(jqXHR.status);
+                        } else if (jqXHR.status === 524) {
+                            cfMessage = 'Cloudflare timeout (524). Request exceeded time limit.';
+                        } else if (jqXHR.status === 504) {
+                            cfMessage = 'Gateway timeout (504). Server took too long to respond.';
+                        } else if (jqXHR.status === 408) {
+                            cfMessage = 'Request timeout (408). Server timed out waiting.';
+                        } else {
+                            cfMessage = 'Connection timed out. Server is not responding.';
+                        }
+
+                        errorData.message = cfMessage + ' The server is overloaded or unresponsive.';
                         errorData.error_type = 'server_down';
-                        
+
                         if (serverDownRecoveryCount <= maxServerDownRetries) {
                             const cooldownSeconds = getServerDownCooldown();
-                            
-                            // Reduce batch size aggressively on server crash
+
+                            // Reduce batch size aggressively
                             reduceBatchSize(syncType);
                             reduceBatchSize(syncType); // Double reduction for server crashes
                             const newBatch = getAdaptiveBatchSize(syncType);
-                            
+
                             logMessage(fullSyncLogDiv, `[WARNING] 🔥 SERVER OVERLOAD DETECTED: ${cfMessage}`, 'warning');
                             logMessage(fullSyncLogDiv, `[INFO] ⏳ Waiting ${cooldownSeconds} seconds for server to recover... (attempt ${serverDownRecoveryCount}/${maxServerDownRetries})`, 'info');
                             logMessage(fullSyncLogDiv, `[INFO] ⚡ Reduced batch size to ${newBatch} to reduce server load.`, 'info');
-                            
+
                             // Show countdown in status
                             let countdown = cooldownSeconds;
                             const countdownInterval = setInterval(() => {
@@ -1395,7 +1367,7 @@
                                     clearInterval(countdownInterval);
                                 }
                             }, 1000);
-                            
+
                             // amazonq-ignore-next-line
                             setTimeout(() => {
                                 clearInterval(countdownInterval);
@@ -3573,7 +3545,7 @@
                     $.ajax({
                         url: ajax_url,
                         method: 'POST',
-                        timeout: 95000, // 95 seconds - stay under Cloudflare's 100s limit
+                        timeout: 180000, // 180 seconds - image throttling makes batches slower
                         data: {
                             action: 'ecwid_wc_sync_all_products',
                             nonce: nonce,
@@ -3667,37 +3639,42 @@
                             }
                         },
                         error: function(jqXHR, textStatus, errorThrown) {
-                            const isTimeout = textStatus === 'timeout' || 
-                                              jqXHR.status === 524 || 
-                                              jqXHR.status === 504 || 
+                            // Unified check: server-down errors (503, 520-530) AND timeouts
+                            // are all treated the same — server needs recovery time
+                            const isServerOverloaded = isServerDownError(jqXHR) ||
+                                              textStatus === 'timeout' ||
+                                              jqXHR.status === 524 ||
+                                              jqXHR.status === 504 ||
                                               jqXHR.status === 408;
-                            
-                            if (isTimeout) {
+
+                            if (isServerOverloaded) {
                                 state.consecutiveTimeouts++;
                                 state.consecutiveSuccesses = 0; // Reset success counter on failure
-                                
-                                // Reduce batch size on timeout (adaptive sizing)
+
+                                // Reduce batch size on timeout/crash (adaptive sizing)
                                 if (state.batchSize > state.minBatchSize) {
                                     const oldBatchSize = state.batchSize;
                                     state.batchSize = Math.max(state.minBatchSize, Math.floor(state.batchSize / 2));
-                                    logMessage(selectiveSyncLogDiv, `⚡ Timeout detected! Reducing batch size from ${oldBatchSize} to ${state.batchSize} and retrying...`, 'warning');
-                                    
-                                    // Add cooldown for server recovery
-                                    const cooldownSeconds = Math.min(30, 5 + (state.consecutiveTimeouts * 5));
+                                    logMessage(selectiveSyncLogDiv, `⚡ Server overload detected (${jqXHR.status || textStatus})! Reducing batch size from ${oldBatchSize} to ${state.batchSize}...`, 'warning');
+
+                                    // Add cooldown for server recovery (longer for server-down errors)
+                                    const baseCooldown = isServerDownError(jqXHR) ? 30 : 10;
+                                    const cooldownSeconds = Math.min(90, baseCooldown + (state.consecutiveTimeouts * 10));
                                     logMessage(selectiveSyncLogDiv, `⏳ Waiting ${cooldownSeconds} seconds for server recovery...`, 'info');
-                                    
+
                                     // amazonq-ignore-next-line
                                     setTimeout(function() {
                                         processProductBatch(state);
                                     }, cooldownSeconds * 1000);
                                 } else if (state.retryCount < state.maxRetries) {
                                     state.retryCount++;
-                                    logMessage(selectiveSyncLogDiv, `⚡ Timeout at minimum batch size. Retrying (${state.retryCount}/${state.maxRetries})...`, 'warning');
-                                    
+                                    const cooldownSeconds = Math.min(60, 15 + (state.retryCount * 10));
+                                    logMessage(selectiveSyncLogDiv, `⚡ At minimum batch size. Retrying in ${cooldownSeconds}s (${state.retryCount}/${state.maxRetries})...`, 'warning');
+
                                     // amazonq-ignore-next-line
                                     setTimeout(function() {
                                         processProductBatch(state);
-                                    }, 10000); // 10 second cooldown at min batch
+                                    }, cooldownSeconds * 1000);
                                 } else {
                                     logMessage(selectiveSyncLogDiv, `Fatal error: Too many timeouts even at minimum batch size.`, 'error');
                                     finishProductSync(state);

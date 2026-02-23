@@ -535,7 +535,8 @@ class Ecwid_WC_Sync {
     public function options_page_router() {
         // Enqueue CSS and JS from assets folders
         wp_enqueue_style('ecwid-wc-sync-admin-css', plugin_dir_url(__FILE__) . 'assets/css/admin-styles.css', [], ECWID2WOO_VERSION);
-        wp_enqueue_script('ecwid-wc-sync-admin', plugin_dir_url(__FILE__) . 'assets/js/admin-sync.js', ['jquery', 'wp-i18n'], ECWID2WOO_VERSION, true);
+        $js_version = ECWID2WOO_VERSION . '.' . filemtime(plugin_dir_path(__FILE__) . 'assets/js/admin-sync.js');
+        wp_enqueue_script('ecwid-wc-sync-admin', plugin_dir_url(__FILE__) . 'assets/js/admin-sync.js', ['jquery', 'wp-i18n'], $js_version, true);
         
         // Detect server capabilities for automatic batch size adjustment
         $server_capabilities = ecwid2woo_detect_server_capabilities();
