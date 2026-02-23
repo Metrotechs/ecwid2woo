@@ -88,33 +88,52 @@ function ecwid2woo_detect_server_capabilities() {
     $memory_limit = ini_get('memory_limit');
     $memory_bytes = wp_convert_hr_to_bytes($memory_limit);
     $memory_mb = $memory_bytes / (1024 * 1024);
-    
+
+    // Detect ACTUAL system RAM (not just PHP's memory_limit).
+    // PHP memory_limit can be 512M on a 1GB VPS — the server can't actually use that
+    // much without the OOM killer crashing PHP-FPM.
+    $system_ram_mb = 0;
+    // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- Graceful fallback if /proc/meminfo is unreadable
+    if (@is_readable('/proc/meminfo')) {
+        // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading /proc/meminfo, not a remote URL
+        $meminfo = @file_get_contents('/proc/meminfo');
+        if ($meminfo && preg_match('/MemTotal:\s+(\d+)\s+kB/', $meminfo, $matches)) {
+            $system_ram_mb = (int) ($matches[1] / 1024);
+        }
+    }
+
+    // Use the LOWER of PHP memory_limit and actual system RAM for tier detection.
+    // A 1GB server with 512M PHP limit is still a 1GB server.
+    $effective_memory_mb = $memory_mb;
+    if ($system_ram_mb > 0 && $system_ram_mb < $memory_mb) {
+        $effective_memory_mb = $system_ram_mb;
+    }
+
     // Get max execution time
     $max_execution_time = (int) ini_get('max_execution_time');
     if ($max_execution_time === 0) {
         $max_execution_time = 300; // No limit, assume generous
     }
-    
+
     // Detect hosting environment hints
     // Conservative thresholds — image thumbnail generation (GD/Imagick) is CPU-bound,
     // so even servers with plenty of RAM can choke on aggressive batch sizes.
-    // Shared hosting with 1-2GB RAM typically has limited CPU (2-4 vCPUs shared).
-    $is_medium_memory = $memory_mb >= 512 && $memory_mb < 2048;
-    $is_high_memory = $memory_mb >= 2048;
+    $is_medium_memory = $effective_memory_mb >= 2048 && $effective_memory_mb < 4096;
+    $is_high_memory = $effective_memory_mb >= 4096;
 
-    // Calculate server tier — default to low for safety on shared hosting
-    // The adaptive batch reducer will scale UP if the server handles it well,
-    // but starting too high causes 503/522 errors that knock the whole site offline.
+    // Calculate server tier — default to low for safety
+    // Servers under 2GB system RAM (or PHP limit) stay "low" since a single
+    // image-heavy product can consume 200-400MB during thumbnail generation.
     $server_tier = 'low'; // Default: conservative
 
     if ($is_high_memory) {
-        // 2GB+ RAM = likely a VPS or dedicated server
+        // 4GB+ RAM = dedicated or large VPS
         $server_tier = 'high';
     } elseif ($is_medium_memory) {
-        // 512MB-2GB RAM = typical shared hosting with decent allocation
+        // 2-4GB RAM = decent VPS
         $server_tier = 'medium';
     }
-    // < 512MB stays 'low'
+    // < 2GB stays 'low' (covers 1GB Lightsail, shared hosting, etc.)
 
     // Downgrade tier if timeout is short (< 60s is restrictive for image-heavy imports)
     if ($max_execution_time > 0 && $max_execution_time < 60 && $server_tier === 'high') {
@@ -134,20 +153,20 @@ function ecwid2woo_detect_server_capabilities() {
 
     $batch_configs = [
         'low' => [
-            'products' => max(3, intval($product_max * 0.25)),  // 5 products
+            'products' => max(2, intval($product_max * 0.15)),  // 3 products — safe for 1GB servers
             'categories' => max(10, intval($category_max * 0.2)), // 10 categories
             'customers' => 10,
             'orders' => 10,
-            'batch_delay' => 8000, // 8 seconds — give shared hosting CPU time to recover
-            'description' => 'Low-resource server (< 512MB RAM)'
+            'batch_delay' => 10000, // 10 seconds — give tiny servers time to recover
+            'description' => 'Low-resource server (< 2GB system RAM)'
         ],
         'medium' => [
-            'products' => max(5, intval($product_max * 0.5)),   // 10 products
+            'products' => max(5, intval($product_max * 0.4)),   // 8 products
             'categories' => max(15, intval($category_max * 0.5)), // 25 categories
             'customers' => 15,
             'orders' => 15,
             'batch_delay' => 5000, // 5 seconds
-            'description' => 'Medium-resource server (512MB-2GB RAM)'
+            'description' => 'Medium-resource server (2-4GB system RAM)'
         ],
         'high' => [
             'products' => $product_max,                          // 20 products
@@ -155,7 +174,7 @@ function ecwid2woo_detect_server_capabilities() {
             'customers' => 25,
             'orders' => 25,
             'batch_delay' => 3000, // 3 seconds
-            'description' => 'High-resource server (2GB+ RAM / VPS)'
+            'description' => 'High-resource server (4GB+ RAM / VPS)'
         ]
     ];
     
@@ -194,6 +213,8 @@ function ecwid2woo_detect_server_capabilities() {
     return [
         'server_tier' => $server_tier,
         'memory_limit_mb' => round($memory_mb),
+        'system_ram_mb' => $system_ram_mb,
+        'effective_memory_mb' => round($effective_memory_mb),
         'max_execution_time' => $max_execution_time,
         'products_batch' => $config['products'],
         'categories_batch' => $config['categories'],
