@@ -435,10 +435,26 @@ class Ecwid2Woo_Full_Sync {
         }
 
         if (!empty($items_from_api)) {
+            // Time-based circuit breaker: stop processing before Cloudflare's 100s timeout.
+            // This ensures we return a valid response even if a batch has image-heavy products.
+            // The client will continue from the last processed item via has_more/next_offset.
+            $batch_start_time = microtime(true);
+            $max_batch_seconds = 80; // Hard ceiling: bail at 80s to leave 20s buffer for response
+            $items_actually_processed = 0;
+            $time_limit_hit = false;
+
             // Suspend object cache additions during batch import to reduce memory/CPU waste
             // (cached queries are rarely reused during import)
             wp_suspend_cache_addition(true);
             foreach ($items_from_api as $item_data) {
+                // Check time circuit breaker BEFORE processing next item
+                $elapsed = microtime(true) - $batch_start_time;
+                if ($elapsed >= $max_batch_seconds) {
+                    $time_limit_hit = true;
+                    $batch_detailed_logs[] = "⏱ Time limit reached ({$max_batch_seconds}s) after processing $items_actually_processed of " . count($items_from_api) . " items. Returning early to avoid Cloudflare 524 timeout. Remaining items will be processed in next batch.";
+                    break;
+                }
+
                 if (!is_array($item_data) || !isset($item_data['id'])) {
                     $batch_detailed_logs[] = "--- [CRITICAL ERROR] Encountered invalid item in API response for $sync_type. Skipping. Item data: " . print_r($item_data, true) . " ---"; // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_print_r -- Debug logging for invalid API response data
                     $failed_count++;
@@ -519,6 +535,7 @@ class Ecwid2Woo_Full_Sync {
                     }
                 }
                 $batch_detailed_logs[] = " ";
+                $items_actually_processed++;
             }
             wp_suspend_cache_addition(false);
         } elseif ($offset === 0 && $limit_per_api_call > 0) {
@@ -529,17 +546,24 @@ class Ecwid2Woo_Full_Sync {
              }
         }
 
-        $new_offset = $offset + $count_in_current_api_response;
-        $has_more = false;
-        if ($count_in_current_api_response > 0) {
-            if (isset($body['total']) && isset($body['offset']) && isset($body['count'])) {
-                 $has_more = ($body['total'] > ($body['offset'] + $body['count']));
-            } elseif ($count_in_current_api_response === $limit_per_api_call) {
-                $has_more = true;
-            }
-        }
-        if (isset($body['total']) && $new_offset >= $body['total']) {
+        // If time limit was hit, only advance offset by items actually processed
+        // so unprocessed items are re-fetched in the next batch request.
+        if ($time_limit_hit) {
+            $new_offset = $offset + $items_actually_processed;
+            $has_more = true; // Force continuation since we didn't finish the batch
+        } else {
+            $new_offset = $offset + $count_in_current_api_response;
             $has_more = false;
+            if ($count_in_current_api_response > 0) {
+                if (isset($body['total']) && isset($body['offset']) && isset($body['count'])) {
+                     $has_more = ($body['total'] > ($body['offset'] + $body['count']));
+                } elseif ($count_in_current_api_response === $limit_per_api_call) {
+                    $has_more = true;
+                }
+            }
+            if (isset($body['total']) && $new_offset >= $body['total']) {
+                $has_more = false;
+            }
         }
 
         // Clean output buffer before sending JSON response
