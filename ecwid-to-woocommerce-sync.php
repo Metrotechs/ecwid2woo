@@ -537,7 +537,7 @@ class Ecwid_WC_Sync {
             [$this, 'field_number'],
             $this->settings_slug,
             'ecwidSync_batch_settings_section',
-            ['id' => 'manual_products_batch', 'min' => 1, 'max' => 500, 'description' => __('Number of products to process per batch. Default auto-detected based on server resources.', 'metrotechs-e2w-sync')]
+            ['id' => 'manual_products_batch', 'min' => 1, 'max' => 100, 'description' => __('Number of products to process per batch (max 100, Ecwid API limit). Default auto-detected based on server resources.', 'metrotechs-e2w-sync')]
         );
 
         add_settings_field(
@@ -546,7 +546,7 @@ class Ecwid_WC_Sync {
             [$this, 'field_number'],
             $this->settings_slug,
             'ecwidSync_batch_settings_section',
-            ['id' => 'manual_categories_batch', 'min' => 1, 'max' => 500, 'description' => __('Number of categories to process per batch. Default auto-detected based on server resources.', 'metrotechs-e2w-sync')]
+            ['id' => 'manual_categories_batch', 'min' => 1, 'max' => 100, 'description' => __('Number of categories to process per batch (max 100, Ecwid API limit). Default auto-detected based on server resources.', 'metrotechs-e2w-sync')]
         );
 
         add_settings_field(
@@ -555,7 +555,7 @@ class Ecwid_WC_Sync {
             [$this, 'field_number'],
             $this->settings_slug,
             'ecwidSync_batch_settings_section',
-            ['id' => 'manual_variations_batch', 'min' => 1, 'max' => 500, 'description' => __('Number of product variations to process per batch. Default auto-detected based on server resources.', 'metrotechs-e2w-sync')]
+            ['id' => 'manual_variations_batch', 'min' => 1, 'max' => 100, 'description' => __('Number of product variations to process per batch (max 100). Default auto-detected based on server resources.', 'metrotechs-e2w-sync')]
         );
     }
 
@@ -630,12 +630,13 @@ class Ecwid_WC_Sync {
         // Sanitize manual batch override toggle
         $sanitized['manual_batch_override'] = !empty($input['manual_batch_override']) ? 1 : 0;
 
-        // Sanitize manual batch sizes - must be positive integers within safe bounds
+        // Sanitize manual batch sizes - must be positive integers, all capped at 100
         foreach (['manual_products_batch', 'manual_categories_batch', 'manual_variations_batch'] as $field) {
+            $max = 100;
             if (isset($input[$field]) && $input[$field] !== '') {
                 $val = intval($input[$field]);
-                if ($val < 1 || $val > 500) {
-                    add_settings_error('ecwid_wc_sync_options', $field, __('Batch sizes must be between 1 and 500.', 'metrotechs-e2w-sync'));
+                if ($val < 1 || $val > $max) {
+                    add_settings_error('ecwid_wc_sync_options', $field, sprintf(__('Batch size must be between 1 and %d.', 'metrotechs-e2w-sync'), $max));
                     $sanitized[$field] = '';
                 } else {
                     $sanitized[$field] = $val;

@@ -371,8 +371,19 @@ class Ecwid2Woo_Product_Sync {
         $default_batch_size = defined('ECWID2WOO_PRODUCT_BATCH_SIZE') ? ECWID2WOO_PRODUCT_BATCH_SIZE : 100;
         
         // Use client-provided batch size if valid (for adaptive timeout recovery)
-        if ($client_batch_size > 0 && $client_batch_size <= $default_batch_size) {
-            $limit = $client_batch_size;
+        // When manual batch override is enabled in settings, allow exceeding the default cap
+        $options = get_option('ecwid_wc_sync_options');
+        $manual_override = !empty($options['manual_batch_override']);
+
+        if ($client_batch_size > 0) {
+            if ($manual_override) {
+                // Hard cap at 100 (Ecwid API limit)
+                $limit = min($client_batch_size, 100);
+            } elseif ($client_batch_size <= $default_batch_size) {
+                $limit = $client_batch_size;
+            } else {
+                $limit = $default_batch_size;
+            }
         } else {
             $limit = $default_batch_size;
         }

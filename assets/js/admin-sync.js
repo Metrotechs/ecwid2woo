@@ -113,7 +113,9 @@
         // --- Manual Batch Override ---
         // When the admin has manually set batch sizes in Settings > Advanced Batch Settings,
         // these override the auto-detected server values. The user proceeds at their own risk.
-        const manualBatchOverride = ecwid_sync_params.manual_batch_override === true;
+        // wp_localize_script converts PHP booleans to strings ("1" / ""),
+        // so we check for the string "1" as well as boolean true.
+        const manualBatchOverride = ecwid_sync_params.manual_batch_override === '1' || ecwid_sync_params.manual_batch_override === true;
         const manualBatchSizes = ecwid_sync_params.manual_batch_sizes || {};
 
         /**
@@ -143,7 +145,10 @@
                     '</div>' +
                 '</div>'
             );
-            $('.wrap').first().prepend(banner);
+            // Target the WP admin body content area — works across all plugin pages
+            // (sync pages don't use .wrap; settings page does, but #wpbody-content covers both)
+            var $target = $('#wpbody-content').length ? $('#wpbody-content') : $('.wrap');
+            $target.prepend(banner);
         }
 
         // Show the banner immediately on page load if override is active
@@ -157,14 +162,16 @@
         const adaptiveBatchConfig = {
             // Batch sizes: use manual override values when enabled, otherwise server-detected
             categories: {
-                current: (manualBatchOverride && manualBatchSizes.categories) ? manualBatchSizes.categories : serverCapabilities.categories_batch,
+                // Ecwid API returns max 100 categories per request — cap to prevent skipping
+                current: Math.min(100, (manualBatchOverride && manualBatchSizes.categories) ? manualBatchSizes.categories : serverCapabilities.categories_batch),
                 min: 5,
-                default: (manualBatchOverride && manualBatchSizes.categories) ? manualBatchSizes.categories : serverCapabilities.categories_batch
+                default: Math.min(100, (manualBatchOverride && manualBatchSizes.categories) ? manualBatchSizes.categories : serverCapabilities.categories_batch)
             },
             products: {
-                current: (manualBatchOverride && manualBatchSizes.products) ? manualBatchSizes.products : serverCapabilities.products_batch,
+                // Ecwid API returns max 100 products per request — cap to prevent skipping
+                current: Math.min(100, (manualBatchOverride && manualBatchSizes.products) ? manualBatchSizes.products : serverCapabilities.products_batch),
                 min: 1,
-                default: (manualBatchOverride && manualBatchSizes.products) ? manualBatchSizes.products : serverCapabilities.products_batch
+                default: Math.min(100, (manualBatchOverride && manualBatchSizes.products) ? manualBatchSizes.products : serverCapabilities.products_batch)
             },
             customers: {
                 current: serverCapabilities.customers_batch,
@@ -3325,7 +3332,7 @@
                     totalUpdated: 0,
                     totalSkipped: 0,
                     totalFailed: 0,
-                    batchSize: serverCapabilities.categories_batch || 100,
+                    batchSize: getAdaptiveBatchSize('categories'),
                     retryCount: 0,
                     maxRetries: 3
                 };
@@ -3550,7 +3557,7 @@
                     totalSkipped: 0,
                     totalFailed: 0,
                     batchNumber: 1,
-                    batchSize: serverCapabilities.products_batch || 100,
+                    batchSize: getAdaptiveBatchSize('products'),
                     minBatchSize: 1,
                     defaultBatchSize: serverCapabilities.products_batch || 100,
                     retryCount: 0,

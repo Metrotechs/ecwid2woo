@@ -5,7 +5,7 @@ Tags: ecwid, woocommerce, migration, sync, ecommerce
 Requires at least: 5.0
 Tested up to: 6.9
 Requires PHP: 7.2
-Stable tag: 1.5.1
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
@@ -73,16 +73,20 @@ Features revolutionary Smart Skip Technology for large-scale migrations with int
 - WordPress coding standards compliant
 - Extensible architecture for customization
 
-== What's New in Version 1.5.1 ==
+== What's New in Version 1.6.0 ==
 
-**SECURITY HARDENING UPDATE**
+**SHARED HOSTING PERFORMANCE & MANUAL BATCH CONTROL**
 
-- **Input Sanitization** – Improvements across all sync pages
-- **Output Escaping** – Hardened to prevent XSS vulnerabilities
-- **Nonce Verification** – Strengthened on all AJAX endpoints
-- **Capability Checks** – Enforced consistently throughout the plugin
-- **Secure Uninstall** – Uninstall routine secured against unauthorized execution
-- **JS Bug Fix** – Resolved ReferenceError for initializeSettingsPage on settings page
+- **Manual Batch Size Override** – New Advanced Batch Settings in Settings page lets you manually set Products, Categories, and Variations batch sizes
+- **Risk Warning System** – Persistent warning banner displayed on all sync pages when manual override is active
+- **Safety Capped** – Manual batch sizes are hard-capped at 500 to prevent catastrophic overloads
+- **CPU Yield After Image Sideload** – 250ms breathing room after thumbnail generation prevents server overload
+- **Targeted Cache Clearing** – Replaced full cache flushes with surgical per-product cache invalidation
+- **PHP Worker Protection** – Capped set_time_limit to 300s to prevent indefinitely locked workers
+- **Cache Suspension During Imports** – Suspended object cache additions during batch loops to reduce memory/CPU waste
+- **HTTP 503 Recovery** – 503 Service Unavailable now triggers full server-down recovery with cooldown and batch reduction
+- **Conservative Server Tiers** – Raised tier thresholds (Low <512MB, Medium 512MB-2GB, High 2GB+/VPS)
+- **Reduced Default Batch Sizes** – Products default to 5-20/batch, categories to 10-50/batch, with longer delays between batches
 
 == Installation ==
 
@@ -164,6 +168,10 @@ The plugin uses advanced batch processing:
 - Progress tracking provides real-time updates
 - Configurable batch sizes for different server capabilities
 
+= Can I manually set batch sizes? =
+
+Yes, as of v1.6.0 you can override automatic batch sizing via **E2W Sync → Settings → Advanced Batch Settings**. Enable the manual override checkbox and set your desired Products, Categories, and Variations batch sizes (1–500). A warning banner will appear on all sync pages reminding you that manual overrides can cause server crashes or timeouts. You proceed at your own risk.
+
 = What if my server has limitations? =
 
 The plugin is designed to work within common hosting constraints:
@@ -213,6 +221,20 @@ This error means your API token doesn't have the required permissions.
 7. **Navigation Interface** - Modern, intuitive admin navigation
 
 == Changelog ==
+
+= 1.6.0 =
+**Shared Hosting Performance & Manual Batch Control**
+
+* **Manual Batch Size Override** - New "Advanced Batch Settings" section in Settings page allows manual control of Products, Categories, and Variations batch sizes
+* **Risk Warning Banner** - Persistent warning displayed on all sync pages when manual override is active, with link back to settings
+* **Safety Cap** - Manual batch sizes hard-capped at 500 items per batch; adaptive timeout recovery still active as safety net
+* CPU yield (250ms) after image sideload to prevent server overload on shared hosting
+* Targeted per-product cache clearing replaces full cache flushes
+* PHP worker protection: set_time_limit capped at 300s
+* Object cache suspended during batch imports to reduce memory/CPU waste
+* HTTP 503 now triggers full server-down recovery with cooldown and batch reduction
+* Conservative server tier thresholds: Low <512MB, Medium 512MB-2GB, High 2GB+/VPS
+* Reduced default batch sizes for better shared hosting compatibility
 
 = 1.5.1 =
 **Security Hardening**
@@ -481,6 +503,9 @@ This error means your API token doesn't have the required permissions.
 * Responsive design for all screen sizes
 
 == Upgrade Notice ==
+
+= 1.6.0 =
+Shared hosting performance update with new manual batch size override feature. Adds Advanced Batch Settings for manual control over batch sizes (use at your own risk), plus CPU yield after image imports, targeted cache clearing, and conservative server tier defaults. Recommended for all users, especially those on shared hosting.
 
 = 1.5.1 =
 Security hardening update. Improves input sanitization, output escaping, nonce verification, capability checks, and uninstall security. Recommended for all users.

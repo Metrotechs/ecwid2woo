@@ -61,10 +61,11 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Debug Visibility** – Comprehensive logging of skip decisions and timestamp analysis
 - **Enterprise Scale** – Tested with 4500+ product migrations
 
-### ⚡ Self-Optimizing Batch Processing (v1.5.0)
+### ⚡ Self-Optimizing Batch Processing (v1.5.0) + Manual Override (v1.6.0)
 
-**Enterprise-grade bidirectional adaptive sizing** – Unlike typical plugins with fixed batch sizes, E2W Sync automatically adjusts to your server's real-time capabilities. No configuration needed.
+**Enterprise-grade bidirectional adaptive sizing** – Unlike typical plugins with fixed batch sizes, E2W Sync automatically adjusts to your server's real-time capabilities. No configuration needed – but power users can override if they choose.
 
+- **Manual Batch Size Override (v1.6.0)** – Advanced Batch Settings in Settings page lets you set Products, Categories, and Variations batch sizes manually (1–500). Proceeds at your own risk with a persistent warning banner on all sync pages.
 - **Real-Time Logging** – All sync pages show detailed logs as each batch processes (not just at the end)
 - **Bidirectional Batch Sizing** – Batch size decreases on timeouts AND recovers after stable performance
 - **Self-Healing Recovery** – After 5 successful batches, size increases by 50% (e.g., 50→75→100)
@@ -211,6 +212,7 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 
 - Configure your Ecwid API credentials
 - Test connection with visual feedback
+- **Advanced Batch Settings (v1.6.0)** – Manually override auto-detected batch sizes for Products, Categories, and Variations. Enable the override checkbox, set your sizes (1–500), and save. A warning banner will appear on all sync pages. Use at your own risk.
 - Access quick navigation to all sync options
 - Monitor connection status with real-time indicators
 
@@ -479,7 +481,10 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Import/Export Settings** – Backup and restore plugin configurations
 
 ### Version History
-- **v1.6.0** (2026-02-22) – **SHARED HOSTING PERFORMANCE**
+- **v1.6.0** (2026-02-23) – **SHARED HOSTING PERFORMANCE & MANUAL BATCH CONTROL**
+  - 🎛️ **Manual Batch Size Override** – New "Advanced Batch Settings" in Settings page for manual control of Products, Categories, and Variations batch sizes (1–500)
+  - ⚠️ **Risk Warning Banner** – Persistent warning displayed on all sync pages when manual override is active, with direct link to settings
+  - 🔒 **Safety Cap** – Manual batch sizes hard-capped at 500; adaptive timeout recovery remains active as safety net
   - 🛡️ **CPU Yield After Image Sideload** – 250ms breathing room after thumbnail generation prevents server overload
   - 🎯 **Targeted Cache Clearing** – Replaced full cache flushes with surgical per-product cache invalidation
   - ⏱️ **PHP Worker Protection** – Capped set_time_limit to 300s to prevent indefinitely locked workers

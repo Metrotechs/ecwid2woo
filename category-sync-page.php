@@ -1486,9 +1486,20 @@ class Ecwid2Woo_Category_Sync {
         $client_batch_size = isset($_POST['batch_size']) ? intval($_POST['batch_size']) : 0;
         
         // Determine batch size (use constant or client-provided for adaptive sizing)
+        // When manual batch override is enabled in settings, allow exceeding the default cap
         $default_batch_size = defined('ECWID2WOO_CATEGORY_BATCH_SIZE') ? ECWID2WOO_CATEGORY_BATCH_SIZE : 100;
-        if ($client_batch_size > 0 && $client_batch_size <= $default_batch_size) {
-            $batch_size = $client_batch_size;
+        $options = get_option('ecwid_wc_sync_options');
+        $manual_override = !empty($options['manual_batch_override']);
+
+        if ($client_batch_size > 0) {
+            if ($manual_override) {
+                // Categories capped at 100 (Ecwid API limit)
+                $batch_size = min($client_batch_size, 100);
+            } elseif ($client_batch_size <= $default_batch_size) {
+                $batch_size = $client_batch_size;
+            } else {
+                $batch_size = $default_batch_size;
+            }
         } else {
             $batch_size = $default_batch_size;
         }
