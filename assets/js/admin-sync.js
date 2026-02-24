@@ -110,32 +110,71 @@
             console.log('Server capabilities detected:', serverCapabilities);
         }
 
+        // --- Manual Batch Override ---
+        // When the admin has manually set batch sizes in Settings > Advanced Batch Settings,
+        // these override the auto-detected server values. The user proceeds at their own risk.
+        const manualBatchOverride = ecwid_sync_params.manual_batch_override === true;
+        const manualBatchSizes = ecwid_sync_params.manual_batch_sizes || {};
+
+        /**
+         * Show a persistent warning banner on the current page when manual batch override is active.
+         * Inserts once at the top of .wrap (the WP admin page wrapper).
+         */
+        function maybeShowManualBatchWarningBanner() {
+            if (!manualBatchOverride) return;
+            if ($('#ecwid-manual-batch-banner').length) return; // Already shown
+
+            const products   = manualBatchSizes.products   || '(auto)';
+            const categories = manualBatchSizes.categories || '(auto)';
+            const variations = manualBatchSizes.variations || '(auto)';
+
+            const banner = $(
+                '<div id="ecwid-manual-batch-banner" class="ecwid-manual-batch-banner">' +
+                    '<span class="ecwid-manual-batch-banner-icon">&#9888;</span>' +
+                    '<div class="ecwid-manual-batch-banner-body">' +
+                        '<strong>Manual Batch Sizes Active</strong> &mdash; ' +
+                        'You have overridden automatic batch size detection. ' +
+                        'Products: <strong>' + sanitizeHTML(String(products)) + '</strong>, ' +
+                        'Categories: <strong>' + sanitizeHTML(String(categories)) + '</strong>, ' +
+                        'Variations: <strong>' + sanitizeHTML(String(variations)) + '</strong>. ' +
+                        'Large batch sizes can cause server crashes or timeouts. ' +
+                        '<strong>You proceed at your own risk.</strong> ' +
+                        '<a href="' + sanitizeHTML(ecwid_sync_params.settings_url || 'admin.php?page=ecwid-sync-settings') + '">Change settings</a>' +
+                    '</div>' +
+                '</div>'
+            );
+            $('.wrap').first().prepend(banner);
+        }
+
+        // Show the banner immediately on page load if override is active
+        maybeShowManualBatchWarningBanner();
+
         // --- Adaptive Batch Sizing ---
         // Automatically adjusts batch size based on server performance:
         // - Reduces batch size when 524 (Cloudflare timeout) or similar errors occur
         // - Increases batch size after consecutive successful batches (recovery mode)
-        // Initial values come from server capability detection
+        // Initial values come from server capability detection (or manual override if set)
         const adaptiveBatchConfig = {
-            // Batch sizes auto-configured from server detection
-            categories: { 
-                current: serverCapabilities.categories_batch, 
-                min: 5, 
-                default: serverCapabilities.categories_batch 
+            // Batch sizes: use manual override values when enabled, otherwise server-detected
+            categories: {
+                current: (manualBatchOverride && manualBatchSizes.categories) ? manualBatchSizes.categories : serverCapabilities.categories_batch,
+                min: 5,
+                default: (manualBatchOverride && manualBatchSizes.categories) ? manualBatchSizes.categories : serverCapabilities.categories_batch
             },
-            products: { 
-                current: serverCapabilities.products_batch, 
-                min: 1, 
-                default: serverCapabilities.products_batch 
+            products: {
+                current: (manualBatchOverride && manualBatchSizes.products) ? manualBatchSizes.products : serverCapabilities.products_batch,
+                min: 1,
+                default: (manualBatchOverride && manualBatchSizes.products) ? manualBatchSizes.products : serverCapabilities.products_batch
             },
-            customers: { 
-                current: serverCapabilities.customers_batch, 
-                min: 5, 
-                default: serverCapabilities.customers_batch 
+            customers: {
+                current: serverCapabilities.customers_batch,
+                min: 5,
+                default: serverCapabilities.customers_batch
             },
-            orders: { 
-                current: serverCapabilities.orders_batch, 
-                min: 5, 
-                default: serverCapabilities.orders_batch 
+            orders: {
+                current: serverCapabilities.orders_batch,
+                min: 5,
+                default: serverCapabilities.orders_batch
             },
             // Track consecutive timeouts per sync type
             timeoutCounts: { categories: 0, products: 0, customers: 0, orders: 0 },

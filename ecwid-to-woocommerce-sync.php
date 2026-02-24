@@ -514,6 +514,49 @@ class Ecwid_WC_Sync {
             'ecwidSync_api_credentials_section',
             ['id' => 'token', 'type' => 'password', 'label_for' => 'token', 'description' => __('Your Ecwid API Token (Public or Secret) with read permissions for catalog, products, and categories.', 'metrotechs-e2w-sync')]
         );
+
+        add_settings_section(
+            'ecwidSync_batch_settings_section',
+            __('Advanced Batch Settings', 'metrotechs-e2w-sync'),
+            [$this, 'render_batch_settings_section_header'],
+            $this->settings_slug
+        );
+
+        add_settings_field(
+            'manual_batch_override',
+            __('Enable Manual Override', 'metrotechs-e2w-sync'),
+            [$this, 'field_checkbox'],
+            $this->settings_slug,
+            'ecwidSync_batch_settings_section',
+            ['id' => 'manual_batch_override', 'label' => __('Override automatic batch size detection (proceed at your own risk)', 'metrotechs-e2w-sync')]
+        );
+
+        add_settings_field(
+            'manual_products_batch',
+            __('Products Batch Size', 'metrotechs-e2w-sync'),
+            [$this, 'field_number'],
+            $this->settings_slug,
+            'ecwidSync_batch_settings_section',
+            ['id' => 'manual_products_batch', 'min' => 1, 'max' => 500, 'description' => __('Number of products to process per batch. Default auto-detected based on server resources.', 'metrotechs-e2w-sync')]
+        );
+
+        add_settings_field(
+            'manual_categories_batch',
+            __('Categories Batch Size', 'metrotechs-e2w-sync'),
+            [$this, 'field_number'],
+            $this->settings_slug,
+            'ecwidSync_batch_settings_section',
+            ['id' => 'manual_categories_batch', 'min' => 1, 'max' => 500, 'description' => __('Number of categories to process per batch. Default auto-detected based on server resources.', 'metrotechs-e2w-sync')]
+        );
+
+        add_settings_field(
+            'manual_variations_batch',
+            __('Variations Batch Size', 'metrotechs-e2w-sync'),
+            [$this, 'field_number'],
+            $this->settings_slug,
+            'ecwidSync_batch_settings_section',
+            ['id' => 'manual_variations_batch', 'min' => 1, 'max' => 500, 'description' => __('Number of product variations to process per batch. Default auto-detected based on server resources.', 'metrotechs-e2w-sync')]
+        );
     }
 
     public function field_text($args) {
@@ -525,6 +568,40 @@ class Ecwid_WC_Sync {
         if (!empty($description)) {
             echo '<p class="description">' . esc_html($description) . '</p>';
         }
+    }
+
+    public function field_checkbox($args) {
+        $id = $args['id'];
+        $label = $args['label'] ?? '';
+        $checked = !empty($this->options[$id]) ? 'checked' : '';
+        echo '<label>';
+        echo '<input type="checkbox" id="' . esc_attr($id) . '" name="ecwid_wc_sync_options[' . esc_attr($id) . ']" value="1" ' . esc_attr($checked) . ' />';
+        if (!empty($label)) {
+            echo ' ' . esc_html($label);
+        }
+        echo '</label>';
+    }
+
+    public function field_number($args) {
+        $id = $args['id'];
+        $min = $args['min'] ?? 1;
+        $max = $args['max'] ?? 500;
+        $description = $args['description'] ?? '';
+        $value = isset($this->options[$id]) ? intval($this->options[$id]) : '';
+        $is_override_enabled = !empty($this->options['manual_batch_override']);
+        $disabled = $is_override_enabled ? '' : 'disabled';
+        echo '<input type="number" id="' . esc_attr($id) . '" name="ecwid_wc_sync_options[' . esc_attr($id) . ']" value="' . esc_attr($value) . '" min="' . esc_attr($min) . '" max="' . esc_attr($max) . '" class="small-text ecwid-batch-number-field" ' . $disabled . ' />';
+        if (!empty($description)) {
+            echo '<p class="description">' . esc_html($description) . '</p>';
+        }
+    }
+
+    public function render_batch_settings_section_header() {
+        echo '<div class="ecwid-batch-settings-warning">';
+        echo '<span class="dashicons dashicons-warning"></span> ';
+        echo '<strong>' . esc_html__('WARNING:', 'metrotechs-e2w-sync') . '</strong> ';
+        echo esc_html__('Manually setting batch sizes can cause your server to crash or time out during sync. Large batch sizes consume significantly more server memory and CPU. Use this only if you know what you are doing. You proceed entirely at your own risk.', 'metrotechs-e2w-sync');
+        echo '</div>';
     }
 
     public function sanitize_options($input) {
@@ -549,7 +626,25 @@ class Ecwid_WC_Sync {
                 $sanitized['token'] = '';
             }
         }
-        
+
+        // Sanitize manual batch override toggle
+        $sanitized['manual_batch_override'] = !empty($input['manual_batch_override']) ? 1 : 0;
+
+        // Sanitize manual batch sizes - must be positive integers within safe bounds
+        foreach (['manual_products_batch', 'manual_categories_batch', 'manual_variations_batch'] as $field) {
+            if (isset($input[$field]) && $input[$field] !== '') {
+                $val = intval($input[$field]);
+                if ($val < 1 || $val > 500) {
+                    add_settings_error('ecwid_wc_sync_options', $field, __('Batch sizes must be between 1 and 500.', 'metrotechs-e2w-sync'));
+                    $sanitized[$field] = '';
+                } else {
+                    $sanitized[$field] = $val;
+                }
+            } else {
+                $sanitized[$field] = '';
+            }
+        }
+
         return $sanitized;
     }
 
@@ -568,6 +663,13 @@ class Ecwid_WC_Sync {
             'sync_steps' => $this->sync_steps,
             'variation_batch_size' => defined('ECWID2WOO_VARIATION_BATCH_SIZE') ? ECWID2WOO_VARIATION_BATCH_SIZE : 50,
             'server_capabilities' => $server_capabilities,
+            'manual_batch_override' => !empty($this->options['manual_batch_override']) ? true : false,
+            'manual_batch_sizes' => [
+                'products'   => !empty($this->options['manual_products_batch'])   ? intval($this->options['manual_products_batch'])   : 0,
+                'categories' => !empty($this->options['manual_categories_batch']) ? intval($this->options['manual_categories_batch']) : 0,
+                'variations' => !empty($this->options['manual_variations_batch']) ? intval($this->options['manual_variations_batch']) : 0,
+            ],
+            'settings_url' => admin_url('admin.php?page=' . $this->settings_slug),
             'i18n' => [
                 'sync_starting' => __('Sync starting...', 'metrotechs-e2w-sync'),
                 'sync_complete' => __('Sync Complete!', 'metrotechs-e2w-sync'),
@@ -798,6 +900,17 @@ class Ecwid_WC_Sync {
 
         <script type="text/javascript">
         jQuery(document).ready(function($) {
+            // --- Manual Batch Override toggle ---
+            // Enable/disable the batch size number inputs based on the checkbox state
+            function toggleBatchFields() {
+                var enabled = $('#manual_batch_override').is(':checked');
+                $('.ecwid-batch-number-field').prop('disabled', !enabled);
+            }
+            // Set initial state
+            toggleBatchFields();
+            // Update on change
+            $('#manual_batch_override').on('change', toggleBatchFields);
+
             // Auto-test connection on page load if credentials exist
             var storeId = $('input[name="ecwid_wc_sync_options[store_id]"]').val();
             var token = $('input[name="ecwid_wc_sync_options[token]"]').val();
