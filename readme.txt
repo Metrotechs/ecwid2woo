@@ -3,13 +3,13 @@ Contributors: Metrotechs, Richard Hunting
 Donate link: https://metrotechs.io/donate
 Tags: ecwid, woocommerce, migration, sync, ecommerce
 Requires at least: 5.0
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.6.0
+Stable tag: 1.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
-WC tested up to: 9.2
+WC tested up to: 10.9
 
 Professional Ecwid to WooCommerce migration with Smart Skip Technology. Sync products and categories efficiently.
 
@@ -33,7 +33,7 @@ Features revolutionary Smart Skip Technology for large-scale migrations with int
 **🧠 Smart Skip Technology (NEW)**
 - **Products & Categories:** Smart Skip now works on both product and category syncs
 - **Intelligent Resume:** Automatically skips imported items and continues migration from interruption point
-- **Timestamp Comparison:** Compares Ecwid update dates with local import timestamps
+- **Reliable Change Detection:** Uses deterministic product payload fingerprints and category update timestamps
 - **Migration Recovery:** 70-90% time savings when restarting large migrations
 - **Legacy Handling:** Automatically manages items imported before Smart Skip implementation
 - **Memory Optimization:** Adaptive batch sizing based on available server memory
@@ -73,13 +73,27 @@ Features revolutionary Smart Skip Technology for large-scale migrations with int
 - WordPress coding standards compliant
 - Extensible architecture for customization
 
+== What's New in Version 1.6.1 ==
+
+**PRODUCTION HARDENING**
+
+- **Reliable Product Change Detection** – Deterministic payload fingerprints replace the unsafe 24-hour skip heuristic
+- **Atomic Sync Lock** – Prevents concurrent catalog mutations across browser tabs and administrators, with stale-lock recovery
+- **Bounded Requests** – Request-wide deadlines include API retry time and preserve exact continuation offsets
+- **Fewer API Calls** – Store currency sync now runs once per full sync instead of before every batch
+- **Low-Resource Safety** – 1 GB servers use 10-variation batches; manual variation overrides are honored
+- **Security Hardening** – Admin output escaping, capability checks, API credential handling, and image validation improved
+- **Redesigned Admin UI** – Settings, Full Sync, Category Sync, and Product Sync now use responsive dashboard layouts with clearer progress and activity context
+- **UI Reliability** – Removed duplicate category-import handling and added file-based cache busting for admin assets
+- **Clean Release Package** – Production ZIP uses an explicit allowlist and includes a SHA-256 checksum
+
 == What's New in Version 1.6.0 ==
 
 **SHARED HOSTING PERFORMANCE & MANUAL BATCH CONTROL**
 
 - **Manual Batch Size Override** – New Advanced Batch Settings in Settings page lets you manually set Products, Categories, and Variations batch sizes
 - **Risk Warning System** – Persistent warning banner displayed on all sync pages when manual override is active
-- **Safety Capped** – Manual batch sizes are hard-capped at 500 to prevent catastrophic overloads
+- **Safety Capped** – Manual batch sizes are hard-capped at 100 to match the Ecwid API limit
 - **CPU Yield After Image Sideload** – 250ms breathing room after thumbnail generation prevents server overload
 - **Targeted Cache Clearing** – Replaced full cache flushes with surgical per-product cache invalidation
 - **PHP Worker Protection** – Capped set_time_limit to 300s to prevent indefinitely locked workers
@@ -170,7 +184,7 @@ The plugin uses advanced batch processing:
 
 = Can I manually set batch sizes? =
 
-Yes, as of v1.6.0 you can override automatic batch sizing via **E2W Sync → Settings → Advanced Batch Settings**. Enable the manual override checkbox and set your desired Products, Categories, and Variations batch sizes (1–500). A warning banner will appear on all sync pages reminding you that manual overrides can cause server crashes or timeouts. You proceed at your own risk.
+Yes, as of v1.6.0 you can override automatic batch sizing via **E2W Sync → Settings → Advanced Batch Settings**. Enable the manual override checkbox and set your desired Products, Categories, and Variations batch sizes (1–100). A warning banner will appear on all sync pages reminding you that manual overrides can cause server crashes or timeouts. You proceed at your own risk.
 
 = What if my server has limitations? =
 
@@ -222,12 +236,25 @@ This error means your API token doesn't have the required permissions.
 
 == Changelog ==
 
+= 1.6.1 =
+**Production Hardening**
+
+* Deterministic product payload fingerprints replace time-based guesswork
+* Atomic owner-checked sync lock with stale-lock recovery
+* Request-wide runtime deadlines and exact continuation offsets
+* Currency sync reduced from every batch to once per full sync
+* Low-resource variation batches reduced to 10; manual variation override fixed
+* Admin XSS, capability, credential, and remote-image hardening
+* Responsive dashboard redesign for all four plugin admin pages
+* Duplicate category-import handler removed and admin asset cache busting added
+* Explicit production package allowlist and SHA-256 checksum
+
 = 1.6.0 =
 **Shared Hosting Performance & Manual Batch Control**
 
 * **Manual Batch Size Override** - New "Advanced Batch Settings" section in Settings page allows manual control of Products, Categories, and Variations batch sizes
 * **Risk Warning Banner** - Persistent warning displayed on all sync pages when manual override is active, with link back to settings
-* **Safety Cap** - Manual batch sizes hard-capped at 500 items per batch; adaptive timeout recovery still active as safety net
+* **Safety Cap** - Manual batch sizes hard-capped at 100 items per batch; adaptive timeout recovery still active as safety net
 * CPU yield (250ms) after image sideload to prevent server overload on shared hosting
 * Targeted per-product cache clearing replaces full cache flushes
 * PHP worker protection: set_time_limit capped at 300s
@@ -503,6 +530,9 @@ This error means your API token doesn't have the required permissions.
 * Responsive design for all screen sizes
 
 == Upgrade Notice ==
+
+= 1.6.1 =
+Recommended production-hardening update. Fixes unreliable product skips, prevents concurrent sync writes, bounds batch runtime, reduces redundant API calls, and strengthens admin and image security.
 
 = 1.6.0 =
 Shared hosting performance update with new manual batch size override feature. Adds Advanced Batch Settings for manual control over batch sizes (use at your own risk), plus CPU yield after image imports, targeted cache clearing, and conservative server tier defaults. Recommended for all users, especially those on shared hosting.

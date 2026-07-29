@@ -1,5 +1,17 @@
 ** Metrotechs E2W Sync Changelog **
 
+2026-07-28 - version 1.6.1
+* SECURITY - Added atomic owner-checked catalog sync lock with stale-lock recovery
+* SECURITY - Hardened admin output escaping, capability checks, API credential handling, and remote image downloads
+* RELIABILITY - Replaced product 24-hour skip guesses with deterministic source payload fingerprints
+* RELIABILITY - Source fingerprints are saved only after images and variations complete successfully
+* PERFORMANCE - Added request-wide deadlines that include API retries and preserve exact continuation offsets
+* PERFORMANCE - Reduced full-sync currency updates from every batch to the first category batch only
+* PERFORMANCE - Low-resource servers now use 10-variation batches; manual variation override is honored
+* UI - Redesigned the Settings, Full Sync, Category Sync, and Product Sync admin pages with responsive dashboards, progress context, filtering, and activity controls
+* FIXED - Removed the duplicate category-import click handler and added file-based admin asset cache busting
+* RELEASE - Added explicit production package allowlist and SHA-256 checksum generation
+
 2026-02-21 - version 1.5.1
 * SECURITY - Input sanitization improvements across all sync pages
 * SECURITY - Output escaping hardened to prevent XSS vulnerabilities

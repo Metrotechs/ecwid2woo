@@ -117,6 +117,8 @@ ehthumbs.db
 
 # Plugin development specific
 /tests/
+!/tests/
+!/tests/*.test.js
 /phpunit.xml
 /phpcs.xml
 /.github/

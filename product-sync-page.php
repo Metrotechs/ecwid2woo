@@ -37,51 +37,105 @@ class Ecwid2Woo_Product_Sync {
      * Render the Product Sync page
      */
     public function render_product_sync_page() {
+        $settings_url = admin_url('admin.php?page=' . $this->parent_plugin->settings_slug);
+        $full_sync_url = admin_url('admin.php?page=' . $this->parent_plugin->full_sync_slug);
+        $category_sync_url = admin_url('admin.php?page=' . $this->parent_plugin->category_sync_slug);
         ?>
-        <div class="ecwid-page-header">
-            <h1><?php esc_html_e('Partial Product Sync', 'metrotechs-e2w-sync'); ?></h1>
-            <p><?php esc_html_e('Load products from your Ecwid store and select which ones to import or update in WooCommerce.', 'metrotechs-e2w-sync'); ?></p>
-        </div>
+        <div class="ecwid-full-sync-dashboard ecwid-admin-dashboard e2w-selective-dashboard e2w-product-dashboard">
+            <header class="e2w-command-bar">
+                <div class="e2w-command-title">
+                    <span class="e2w-brand-mark is-product" aria-hidden="true"><span class="dashicons dashicons-products"></span></span>
+                    <div>
+                        <span class="e2w-eyebrow"><?php esc_html_e('Ecwid to WooCommerce', 'metrotechs-e2w-sync'); ?></span>
+                        <div class="e2w-title-row">
+                            <h1><?php esc_html_e('Product Sync', 'metrotechs-e2w-sync'); ?></h1>
+                            <span id="e2w-page-state" class="e2w-state-pill is-loading" role="status" aria-live="polite">
+                                <span class="e2w-state-dot" aria-hidden="true"></span>
+                                <span id="e2w-page-state-label"><?php esc_html_e('Loading', 'metrotechs-e2w-sync'); ?></span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="e2w-command-actions">
+                    <button id="import-selected-products-button" class="button import-selected-button e2w-button e2w-button-primary" type="button"><?php esc_html_e('Import Selected', 'metrotechs-e2w-sync'); ?></button>
+                    <button id="sync-all-products-button" class="button e2w-button e2w-button-primary" type="button"><?php esc_html_e('Import All', 'metrotechs-e2w-sync'); ?></button>
+                    <button id="stop-sync-products-button" class="button e2w-button e2w-button-stop" type="button"><?php esc_html_e('Stop', 'metrotechs-e2w-sync'); ?></button>
+                    <button id="load-ecwid-products-button" class="button e2w-button e2w-button-secondary" type="button"><?php esc_html_e('Reload Products', 'metrotechs-e2w-sync'); ?></button>
+                    <a href="<?php echo esc_url($settings_url); ?>" class="button e2w-button e2w-button-secondary"><span class="dashicons dashicons-admin-generic" aria-hidden="true"></span><?php esc_html_e('Settings', 'metrotechs-e2w-sync'); ?></a>
+                </div>
+            </header>
 
-        <!-- Navigation Bar -->
-        <div class="ecwid-page-nav">
-            <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->settings_slug)); ?>" class="nav-link">
-                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'metrotechs-e2w-sync'); ?>
-            </a>
-            <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->full_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'metrotechs-e2w-sync'); ?>
-            </a>
-            <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->parent_plugin->category_sync_slug)); ?>" class="nav-link">
-                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'metrotechs-e2w-sync'); ?>
-            </a>
-            <span class="nav-link current">
-                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'metrotechs-e2w-sync'); ?>
-            </span>
-        </div>
+            <nav class="e2w-subnav" aria-label="<?php esc_attr_e('Sync sections', 'metrotechs-e2w-sync'); ?>">
+                <a href="<?php echo esc_url($settings_url); ?>"><span class="dashicons dashicons-admin-generic" aria-hidden="true"></span><?php esc_html_e('Settings', 'metrotechs-e2w-sync'); ?></a>
+                <a href="<?php echo esc_url($full_sync_url); ?>"><span class="dashicons dashicons-update" aria-hidden="true"></span><?php esc_html_e('Full Sync', 'metrotechs-e2w-sync'); ?></a>
+                <a href="<?php echo esc_url($category_sync_url); ?>"><span class="dashicons dashicons-category" aria-hidden="true"></span><?php esc_html_e('Category Sync', 'metrotechs-e2w-sync'); ?></a>
+                <span class="is-current" aria-current="page"><span class="dashicons dashicons-products" aria-hidden="true"></span><?php esc_html_e('Product Sync', 'metrotechs-e2w-sync'); ?></span>
+            </nav>
 
-        <div class="ecwid-sync-container">
-            <div id="selective-sync-initial-info" class="selective-sync-initial-info">
-                <!-- This will be populated by JavaScript -->
-            </div>
+            <div class="e2w-dashboard-body">
+                <main class="e2w-dashboard-main">
+                    <div id="selective-sync-initial-info" class="e2w-system-notice is-loading" aria-live="polite">
+                        <span class="loading-spinner" aria-hidden="true"></span><span><?php esc_html_e('Loading products from Ecwid…', 'metrotechs-e2w-sync'); ?></span>
+                    </div>
 
-            <button id="load-ecwid-products-button" class="button button-primary"><?php esc_html_e('Reload Products', 'metrotechs-e2w-sync'); ?></button>
-            <div id="selective-product-list-container" class="selective-product-list-container">
-                <?php esc_html_e('Product list will appear here...', 'metrotechs-e2w-sync'); ?>
-            </div>
-            <button id="import-selected-products-button" class="button button-primary import-selected-button"><?php esc_html_e('Import Selected Products', 'metrotechs-e2w-sync'); ?></button>
-            
-            <!-- Bulk Actions -->
-            <div class="product-bulk-actions" style="margin: 25px 0 15px 0; padding-top: 15px; border-top: 1px solid #ddd;">
-                <h3><?php esc_html_e('Bulk Actions', 'metrotechs-e2w-sync'); ?></h3>
-                <button id="sync-all-products-button" class="button button-primary"><?php esc_html_e('Import All Products', 'metrotechs-e2w-sync'); ?></button>
-                <button id="stop-sync-products-button" class="button button-secondary" style="margin-left: 10px; display: none;"><?php esc_html_e('Stop Sync', 'metrotechs-e2w-sync'); ?></button>
-            </div>
+                    <section class="e2w-panel e2w-selection-panel" aria-labelledby="e2w-product-selection-title">
+                        <header class="e2w-panel-header">
+                            <h2 id="e2w-product-selection-title"><span class="dashicons dashicons-products" aria-hidden="true"></span><?php esc_html_e('Choose products', 'metrotechs-e2w-sync'); ?></h2>
+                            <span class="e2w-panel-metric"><strong id="e2w-loaded-item-count">—</strong> <?php esc_html_e('loaded', 'metrotechs-e2w-sync'); ?></span>
+                        </header>
+                        <div id="product-pagination-container" class="e2w-list-pagination"></div>
+                        <div id="selective-product-list-container" class="selective-product-list-container e2w-selection-list">
+                            <div class="e2w-list-empty"><span class="dashicons dashicons-products" aria-hidden="true"></span><span><?php esc_html_e('Product list will appear here.', 'metrotechs-e2w-sync'); ?></span></div>
+                        </div>
+                        <div class="e2w-selection-footer">
+                            <span><strong id="e2w-selected-item-count">0</strong> <?php esc_html_e('products selected', 'metrotechs-e2w-sync'); ?></span>
+                            <span><?php esc_html_e('Selections are preserved across list pages.', 'metrotechs-e2w-sync'); ?></span>
+                        </div>
+                    </section>
 
-            <div id="selective-sync-status" class="sync-status margin-top-15"></div>
-            <div id="selective-sync-progress-container" class="sync-progress-container">
-                <div id="selective-sync-bar" class="sync-progress-bar">0%</div>
+                    <section class="e2w-panel e2w-selective-activity" aria-labelledby="e2w-product-activity-title">
+                        <header class="e2w-panel-header">
+                            <h2 id="e2w-product-activity-title"><span class="dashicons dashicons-list-view" aria-hidden="true"></span><?php esc_html_e('Sync activity', 'metrotechs-e2w-sync'); ?></h2>
+                            <strong id="selective-sync-status" class="sync-status"><?php esc_html_e('Ready to select products', 'metrotechs-e2w-sync'); ?></strong>
+                        </header>
+                        <div class="e2w-selective-progress">
+                            <div id="selective-sync-progress-container" class="sync-progress-container" role="progressbar" aria-label="<?php esc_attr_e('Product sync progress', 'metrotechs-e2w-sync'); ?>" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                <div id="selective-sync-bar" class="sync-progress-bar">0%</div>
+                            </div>
+                        </div>
+                        <div id="selective-sync-log" class="sync-log e2w-activity-log" role="log" aria-live="polite">
+                            <div id="e2w-log-empty" class="e2w-log-empty"><span class="dashicons dashicons-list-view" aria-hidden="true"></span><strong><?php esc_html_e('No product sync activity yet', 'metrotechs-e2w-sync'); ?></strong><span><?php esc_html_e('Choose products or import the complete enabled catalog.', 'metrotechs-e2w-sync'); ?></span></div>
+                        </div>
+                    </section>
+                </main>
+
+                <aside class="e2w-context-rail" aria-label="<?php esc_attr_e('Product sync context', 'metrotechs-e2w-sync'); ?>">
+                    <h2><?php esc_html_e('Context', 'metrotechs-e2w-sync'); ?></h2>
+                    <details class="e2w-context-card" open>
+                        <summary><span><span class="dashicons dashicons-filter" aria-hidden="true"></span><?php esc_html_e('Sync mode', 'metrotechs-e2w-sync'); ?></span></summary>
+                        <div class="e2w-context-card-body e2w-mode-options">
+                            <div><strong><?php esc_html_e('Selected products', 'metrotechs-e2w-sync'); ?></strong><span><?php esc_html_e('Import only checked rows', 'metrotechs-e2w-sync'); ?></span></div>
+                            <div><strong><?php esc_html_e('Complete catalog', 'metrotechs-e2w-sync'); ?></strong><span><?php esc_html_e('Import every enabled product', 'metrotechs-e2w-sync'); ?></span></div>
+                        </div>
+                    </details>
+                    <details class="e2w-context-card" open>
+                        <summary><span><span class="dashicons dashicons-controls-repeat" aria-hidden="true"></span><?php esc_html_e('Product types', 'metrotechs-e2w-sync'); ?></span></summary>
+                        <div class="e2w-context-card-body e2w-help-copy"><p><?php esc_html_e('Simple and variable products are supported. Product variations are processed after their parent product.', 'metrotechs-e2w-sync'); ?></p></div>
+                    </details>
+                    <details class="e2w-context-card" open>
+                        <summary><span><span class="dashicons dashicons-performance" aria-hidden="true"></span><?php esc_html_e('Processing', 'metrotechs-e2w-sync'); ?></span></summary>
+                        <div class="e2w-context-card-body e2w-option-list">
+                            <div><span><?php esc_html_e('Adaptive batches', 'metrotechs-e2w-sync'); ?></span><strong class="e2w-option-on"><?php esc_html_e('On', 'metrotechs-e2w-sync'); ?></strong></div>
+                            <div><span><?php esc_html_e('Image throttling', 'metrotechs-e2w-sync'); ?></span><strong class="e2w-option-on"><?php esc_html_e('On', 'metrotechs-e2w-sync'); ?></strong></div>
+                            <div><span><?php esc_html_e('Retry protection', 'metrotechs-e2w-sync'); ?></span><strong class="e2w-option-on"><?php esc_html_e('On', 'metrotechs-e2w-sync'); ?></strong></div>
+                        </div>
+                    </details>
+                    <details class="e2w-context-card" open>
+                        <summary><span><span class="dashicons dashicons-sos" aria-hidden="true"></span><?php esc_html_e('Help', 'metrotechs-e2w-sync'); ?></span></summary>
+                        <div class="e2w-context-card-body e2w-help-copy"><p><?php esc_html_e('Reload to refresh the catalog. Disabled products can be reviewed but are not imported by the complete-catalog action.', 'metrotechs-e2w-sync'); ?></p><p><a href="<?php echo esc_url($settings_url); ?>"><?php esc_html_e('Review connection settings', 'metrotechs-e2w-sync'); ?></a></p></div>
+                    </details>
+                </aside>
             </div>
-            <div id="selective-sync-log" class="sync-log"></div>
         </div>
         <?php
     }
@@ -112,7 +166,7 @@ class Ecwid2Woo_Product_Sync {
         
         if (!current_user_can('manage_options')) {
             ob_end_clean();
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
         
@@ -135,11 +189,11 @@ class Ecwid2Woo_Product_Sync {
         }
 
         // Get pagination parameters from request (for progressive loading)
-        $page_offset = isset($_POST['page_offset']) ? intval($_POST['page_offset']) : 0;
+        $page_offset = isset($_POST['page_offset']) ? max(0, intval($_POST['page_offset'])) : 0;
         $page_limit = isset($_POST['page_limit']) ? intval($_POST['page_limit']) : 100; // Load 100 products per batch
         
         // Cap the limit to prevent memory issues
-        $page_limit = min($page_limit, 100);
+        $page_limit = max(1, min($page_limit, 100));
         
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log("Ecwid Product Sync: Fetching products - offset: $page_offset, limit: $page_limit"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -187,7 +241,7 @@ class Ecwid2Woo_Product_Sync {
         
         foreach ($items_from_api as $item) {
             $product = [
-                'id' => $item['id'] ?? null,
+                'id' => isset($item['id']) ? absint($item['id']) : 0,
                 'name' => $item['name'] ?? 'N/A',
                 'sku' => $item['sku'] ?? 'N/A',
                 'enabled' => $item['enabled'] ?? false,
@@ -241,7 +295,7 @@ class Ecwid2Woo_Product_Sync {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
             ob_end_clean();
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
         set_time_limit(300); // Cap at 5 minutes to avoid locking a PHP worker indefinitely on shared hosting
@@ -346,9 +400,12 @@ class Ecwid2Woo_Product_Sync {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
             ob_end_clean();
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
+        $request_started_at = microtime(true);
+        $request_deadline = $this->parent_plugin->start_sync_request_deadline(55);
+        $max_batch_seconds = max(1, (int) floor($request_deadline - $request_started_at));
         set_time_limit(300); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Legitimate use for bulk operations
         wp_raise_memory_limit('admin');
 
@@ -360,7 +417,7 @@ class Ecwid2Woo_Product_Sync {
         }
 
         // Sync currency before importing products (only on first batch)
-        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        $offset = isset($_POST['offset']) ? max(0, intval($_POST['offset'])) : 0;
         if ($offset === 0) {
             $currency_sync_logs = [];
             $this->parent_plugin->sync_currency_settings($currency_sync_logs);
@@ -391,7 +448,7 @@ class Ecwid2Woo_Product_Sync {
         // Adaptive batch sizing based on available memory
         $available_memory = wp_convert_hr_to_bytes(ini_get('memory_limit'));
         $used_memory = function_exists('memory_get_usage') ? memory_get_usage(true) : 0;
-        $free_memory = $available_memory - $used_memory;
+        $free_memory = $available_memory === -1 ? PHP_INT_MAX : ($available_memory - $used_memory);
         
         // If we have less than 128MB free, reduce batch size
         if ($free_memory < (128 * 1024 * 1024)) {
@@ -408,7 +465,7 @@ class Ecwid2Woo_Product_Sync {
         $api_url = add_query_arg($query_params, $api_essentials['base_url'] . '/products');
 
         $response = wp_remote_get($api_url, [
-            'timeout' => 90, // 90 seconds - stay under Cloudflare's 100s limit
+            'timeout' => max(5, min(20, (int) floor($request_deadline - microtime(true) - 3))),
             'headers' => ['Authorization' => 'Bearer ' . $api_essentials['token'], 'Accept' => 'application/json'],
         ]);
 
@@ -446,10 +503,19 @@ class Ecwid2Woo_Product_Sync {
         $failed_count = 0;
         $detailed_logs = [];
 
+        $items_actually_processed = 0;
+        $time_limit_hit = false;
         foreach ($items_from_api as $item_data) {
+            if ($this->parent_plugin->is_sync_request_deadline_near(5)) {
+                $time_limit_hit = true;
+                $detailed_logs[] = "Time limit reached ({$max_batch_seconds}s) after processing $items_actually_processed of " . count($items_from_api) . " products. Returning early so the browser can continue safely.";
+                break;
+            }
+
             if (!is_array($item_data) || !isset($item_data['id'])) {
                 $detailed_logs[] = "[CRITICAL ERROR] Encountered invalid item in API response. Skipping.";
                 $failed_count++;
+                $items_actually_processed++;
                 continue;
             }
 
@@ -483,10 +549,11 @@ class Ecwid2Woo_Product_Sync {
                 $current_item_log_name = ($item_data['name'] ?? ('Ecwid ID ' . ($item_data['id'] ?? 'Unknown')));
                 $detailed_logs[] = "--- [CRITICAL ERROR] Failed to process item: " . esc_html($current_item_log_name) . " ---";
             }
+            $items_actually_processed++;
         }
 
-        $new_offset = $offset + count($items_from_api);
-        $has_more = $new_offset < $total_items;
+        $new_offset = $time_limit_hit ? $offset + $items_actually_processed : $offset + count($items_from_api);
+        $has_more = $time_limit_hit || $new_offset < $total_items;
 
         // Clean output buffer before sending JSON response
         if (ob_get_level()) {
@@ -496,7 +563,7 @@ class Ecwid2Woo_Product_Sync {
         wp_send_json_success([
             // translators: %1$d is items processed, %2$d is imported count, %3$d is updated count, %4$d is skipped count, %5$d is failed count, %6$d is total items
             // amazonq-ignore-next-line
-            'message' => sprintf(__('Processed %1$d products (Imported: %2$d, Updated: %3$d, Skipped: %4$d, Failed: %5$d). Total products: %6$d.', 'metrotechs-e2w-sync'), count($items_from_api), $imported_count, $updated_count, $skipped_count, $failed_count, $total_items),
+            'message' => sprintf(__('Processed %1$d products (Imported: %2$d, Updated: %3$d, Skipped: %4$d, Failed: %5$d). Total products: %6$d.', 'metrotechs-e2w-sync'), $items_actually_processed, $imported_count, $updated_count, $skipped_count, $failed_count, $total_items),
             'next_offset' => $new_offset,
             'total_items' => $total_items,
             'has_more' => $has_more,
@@ -507,6 +574,52 @@ class Ecwid2Woo_Product_Sync {
             'batch_logs' => $detailed_logs,
             'batch_size_used' => $limit // Report actual batch size used for adaptive sizing feedback
         ]);
+    }
+
+    /**
+     * Recursively normalize an Ecwid payload before hashing it.
+     *
+     * Object-like array keys are sorted while list order is preserved. This
+     * makes the hash stable when the API changes JSON object key order without
+     * hiding meaningful changes to ordered options, combinations, or images.
+     *
+     * @param mixed $value Value to normalize.
+     * @return mixed
+     */
+    private function normalize_source_value_for_hash($value) {
+        if (!is_array($value)) {
+            return $value;
+        }
+
+        if (empty($value)) {
+            return [];
+        }
+
+        $is_list = array_keys($value) === range(0, count($value) - 1);
+        if (!$is_list) {
+            ksort($value, SORT_STRING);
+        }
+
+        foreach ($value as $key => $nested_value) {
+            $value[$key] = $this->normalize_source_value_for_hash($nested_value);
+        }
+
+        return $value;
+    }
+
+    /**
+     * Build a deterministic fingerprint from the exact Ecwid product payload.
+     *
+     * Ecwid's products endpoint does not expose a supported update timestamp,
+     * so comparing the API payload is the reliable way to avoid both stale
+     * 24-hour skips and unnecessary re-imports.
+     *
+     * @param array $item Product data returned by Ecwid.
+     * @return string Empty only if the payload cannot be encoded.
+     */
+    private function build_source_hash($item) {
+        $encoded = wp_json_encode($this->normalize_source_value_for_hash($item));
+        return is_string($encoded) ? hash('sha256', $encoded) : '';
     }
 
     /**
@@ -521,6 +634,7 @@ class Ecwid2Woo_Product_Sync {
         $product_name_for_log = isset($item['name']) ? sanitize_text_field($item['name']) : '[No Name]';
         $ecwid_id_for_log = $item['id'] ?? 'N/A';
         $sku_for_log = $item['sku'] ?? 'N/A';
+        $source_hash = $this->build_source_hash($item);
 
         // Skip disabled products - they often have incomplete data
         if (isset($item['enabled']) && $item['enabled'] === false) {
@@ -594,84 +708,19 @@ class Ecwid2Woo_Product_Sync {
             if ($product) {
                 $product_logs[] = "Existing WC Product ID found: $product_id. Current type: " . $product->get_type();
                 
-                // --- SMART SKIP LOGIC: Check if product needs updating ---
-                $should_skip = false;
-                $ecwid_updated_timestamp = null;
-                $local_import_timestamp = get_post_meta($product_id, '_ecwid_last_import_time', true);
-                
-                // Check if Ecwid product has an updated/modified timestamp
-                if (isset($item['updated'])) {
-                    $ecwid_updated_timestamp = strtotime($item['updated']);
-                } elseif (isset($item['lastUpdated'])) {
-                    $ecwid_updated_timestamp = strtotime($item['lastUpdated']);
-                } elseif (isset($item['dateUpdated'])) {
-                    $ecwid_updated_timestamp = strtotime($item['dateUpdated']);
-                } elseif (isset($item['modifiedDate'])) {
-                    $ecwid_updated_timestamp = strtotime($item['modifiedDate']);
-                } elseif (isset($item['createTimestamp'])) {
-                    $ecwid_updated_timestamp = $item['createTimestamp']; // Already a timestamp
-                } elseif (isset($item['created'])) {
-                    $ecwid_updated_timestamp = strtotime($item['created']);
-                }
-                
-                // Debug: Log what timestamp fields are available
-                if (defined('WP_DEBUG') && WP_DEBUG) {
-                    $available_dates = [];
-                    foreach (['updated', 'lastUpdated', 'dateUpdated', 'modifiedDate', 'createTimestamp', 'created'] as $field) {
-                        if (isset($item[$field])) {
-                            $available_dates[] = "$field: " . $item[$field];
-                        }
-                    }
-                    if (!empty($available_dates)) {
-                        $product_logs[] = "DEBUG: Available Ecwid timestamps: " . implode(', ', $available_dates);
-                    } else {
-                        $product_logs[] = "DEBUG: No Ecwid timestamp fields found in API response";
-                    }
-                }
-                
-                // If we have both timestamps, compare them
-                if ($ecwid_updated_timestamp && $local_import_timestamp) {
-                    if ($ecwid_updated_timestamp <= $local_import_timestamp) {
-                        $should_skip = true;
-                        $product_logs[] = "SKIPPING: Product has not been modified since last import. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", Last imported: " . gmdate('Y-m-d H:i:s', $local_import_timestamp);
-                    } else {
-                        $product_logs[] = "UPDATE NEEDED: Product has been modified since last import. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", Last imported: " . gmdate('Y-m-d H:i:s', $local_import_timestamp);
-                    }
-                } elseif ($local_import_timestamp) {
-                    // Product was imported before but no Ecwid timestamp - be more conservative about re-processing
-                    // Check if it was imported recently (within last 24 hours) - if so, likely safe to skip
-                    $hours_since_import = (time() - $local_import_timestamp) / 3600;
-                    if ($hours_since_import < 24) {
-                        $should_skip = true;
-                        $product_logs[] = "SKIPPING: Product was imported recently (" . round($hours_since_import, 1) . " hours ago) with no Ecwid timestamp. Likely unchanged.";
-                    } else {
-                        $product_logs[] = "Product was previously imported but no Ecwid update timestamp available. Will update to be safe.";
-                    }
-                } elseif ($product_id_by_ecwid_id) {
-                    // Product exists with Ecwid ID but no timestamp - this was imported before timestamp tracking
-                    // Skip it to avoid unnecessary re-processing unless we can confirm it needs updating
-                    if ($ecwid_updated_timestamp) {
-                        // We have Ecwid timestamp but no local timestamp - check product modification date as fallback
-                        $date_modified = $product->get_date_modified();
-                        $product_modified_time = $date_modified ? strtotime($date_modified->date('Y-m-d H:i:s')) : 0;
-                        if ($ecwid_updated_timestamp <= $product_modified_time) {
-                            $should_skip = true;
-                            $product_logs[] = "SKIPPING: Previously imported product with no changes. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", WC modified: " . gmdate('Y-m-d H:i:s', $product_modified_time);
-                            // Set timestamp for future reference
-                            update_post_meta($product_id, '_ecwid_last_import_time', time());
-                        } else {
-                            $product_logs[] = "UPDATE NEEDED: Previously imported product needs updating. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", WC modified: " . gmdate('Y-m-d H:i:s', $product_modified_time);
-                        }
-                    } else {
-                        // No timestamps available - skip to avoid unnecessary re-processing
-                        $should_skip = true;
-                        $product_logs[] = "SKIPPING: Previously imported product with no timestamp data available. Avoiding re-processing.";
-                        // Set timestamp for future reference
-                        update_post_meta($product_id, '_ecwid_last_import_time', time());
-                    }
+                // --- RELIABLE CHANGE DETECTION ---
+                // Ecwid rejects updateTimestamp and the other common product
+                // timestamp fields. Compare the complete, normalized source
+                // payload instead of guessing that a recent import is unchanged.
+                $stored_source_hash = (string) get_post_meta($product_id, '_ecwid_source_hash', true);
+                $should_skip = $source_hash !== '' && $stored_source_hash !== '' && hash_equals($stored_source_hash, $source_hash);
+
+                if ($should_skip) {
+                    $product_logs[] = 'SKIPPING: Ecwid product payload is unchanged since the last successful import.';
+                } elseif ($stored_source_hash === '') {
+                    $product_logs[] = 'No source fingerprint found. Processing once to establish reliable change tracking.';
                 } else {
-                    // No local timestamp - this is likely a first import or incomplete import
-                    $product_logs[] = "No previous import timestamp found. Will process product.";
+                    $product_logs[] = 'UPDATE NEEDED: Ecwid product payload changed since the last successful import.';
                 }
                 
                 // Return early if skipping
@@ -900,7 +949,6 @@ class Ecwid2Woo_Product_Sync {
             // --- SAVE PRODUCT ---
             $product_id = $product->save();
             update_post_meta($product_id, '_ecwid_product_id', $ecwid_id_for_log);
-            update_post_meta($product_id, '_ecwid_last_import_time', time()); // Track import timestamp for smart skipping
             
             $product_logs[] = "Product saved with WC ID: $product_id";
 
@@ -919,6 +967,14 @@ class Ecwid2Woo_Product_Sync {
             if ($is_variable_from_ecwid && isset($item['combinations']) && !empty($item['combinations'])) {
                 $this->handle_product_variations($product, $item, $product_logs);
             }
+
+            // Record change-detection metadata only after the complete import
+            // succeeds, including images and variations. A failed partial import
+            // must be retried rather than incorrectly treated as current.
+            if ($source_hash !== '') {
+                update_post_meta($product_id, '_ecwid_source_hash', $source_hash);
+            }
+            update_post_meta($product_id, '_ecwid_last_import_time', time());
 
             return [
                 'status' => 'imported',

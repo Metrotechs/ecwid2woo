@@ -49,51 +49,104 @@ class Ecwid2Woo_Category_Sync {
      * Render the Category Sync page
      */
     public function render_category_sync_page() {
+        $settings_url = admin_url('admin.php?page=' . $this->parent_plugin->settings_slug);
+        $full_sync_url = admin_url('admin.php?page=' . $this->parent_plugin->full_sync_slug);
+        $product_sync_url = admin_url('admin.php?page=' . $this->parent_plugin->partial_sync_slug);
         ?>
-        <div class="ecwid-page-header">
-            <h1><?php esc_html_e('Partial Category Sync', 'metrotechs-e2w-sync'); ?></h1>
-            <p><?php esc_html_e('Load categories from your Ecwid store and select which ones to import or update in WooCommerce.', 'metrotechs-e2w-sync'); ?></p>
-        </div>
+        <div class="ecwid-full-sync-dashboard ecwid-admin-dashboard e2w-selective-dashboard e2w-category-dashboard">
+            <header class="e2w-command-bar">
+                <div class="e2w-command-title">
+                    <span class="e2w-brand-mark is-category" aria-hidden="true"><span class="dashicons dashicons-category"></span></span>
+                    <div>
+                        <span class="e2w-eyebrow"><?php esc_html_e('Ecwid to WooCommerce', 'metrotechs-e2w-sync'); ?></span>
+                        <div class="e2w-title-row">
+                            <h1><?php esc_html_e('Category Sync', 'metrotechs-e2w-sync'); ?></h1>
+                            <span id="e2w-page-state" class="e2w-state-pill is-loading" role="status" aria-live="polite">
+                                <span class="e2w-state-dot" aria-hidden="true"></span>
+                                <span id="e2w-page-state-label"><?php esc_html_e('Loading', 'metrotechs-e2w-sync'); ?></span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="e2w-command-actions">
+                    <button id="import-selected-categories-button" class="button import-selected-button e2w-button e2w-button-primary" type="button"><?php esc_html_e('Import Selected', 'metrotechs-e2w-sync'); ?></button>
+                    <button id="sync-all-categories-button" class="button e2w-button e2w-button-primary" type="button"><?php esc_html_e('Import All', 'metrotechs-e2w-sync'); ?></button>
+                    <button id="stop-sync-categories-button" class="button e2w-button e2w-button-stop" type="button"><?php esc_html_e('Stop', 'metrotechs-e2w-sync'); ?></button>
+                    <button id="load-ecwid-categories-button" class="button e2w-button e2w-button-secondary" type="button"><?php esc_html_e('Reload Categories', 'metrotechs-e2w-sync'); ?></button>
+                    <a href="<?php echo esc_url($settings_url); ?>" class="button e2w-button e2w-button-secondary"><span class="dashicons dashicons-admin-generic" aria-hidden="true"></span><?php esc_html_e('Settings', 'metrotechs-e2w-sync'); ?></a>
+                </div>
+            </header>
 
-        <!-- Navigation Bar -->
-        <div class="ecwid-page-nav">
-            <a href="<?php echo esc_url(admin_url('admin.php?page=ecwid-sync-settings')); ?>" class="nav-link">
-                <span class="nav-icon">⚙️</span> <?php esc_html_e('Settings', 'metrotechs-e2w-sync'); ?>
-            </a>
-            <a href="<?php echo esc_url(admin_url('admin.php?page=ecwid-sync-full')); ?>" class="nav-link">
-                <span class="nav-icon">🔄</span> <?php esc_html_e('Full Sync', 'metrotechs-e2w-sync'); ?>
-            </a>
-            <span class="nav-link current">
-                <span class="nav-icon">📁</span> <?php esc_html_e('Category Sync', 'metrotechs-e2w-sync'); ?>
-            </span>
-            <a href="<?php echo esc_url(admin_url('admin.php?page=ecwid-sync-partial')); ?>" class="nav-link">
-                <span class="nav-icon">🎯</span> <?php esc_html_e('Product Sync', 'metrotechs-e2w-sync'); ?>
-            </a>
-        </div>
+            <nav class="e2w-subnav" aria-label="<?php esc_attr_e('Sync sections', 'metrotechs-e2w-sync'); ?>">
+                <a href="<?php echo esc_url($settings_url); ?>"><span class="dashicons dashicons-admin-generic" aria-hidden="true"></span><?php esc_html_e('Settings', 'metrotechs-e2w-sync'); ?></a>
+                <a href="<?php echo esc_url($full_sync_url); ?>"><span class="dashicons dashicons-update" aria-hidden="true"></span><?php esc_html_e('Full Sync', 'metrotechs-e2w-sync'); ?></a>
+                <span class="is-current" aria-current="page"><span class="dashicons dashicons-category" aria-hidden="true"></span><?php esc_html_e('Category Sync', 'metrotechs-e2w-sync'); ?></span>
+                <a href="<?php echo esc_url($product_sync_url); ?>"><span class="dashicons dashicons-products" aria-hidden="true"></span><?php esc_html_e('Product Sync', 'metrotechs-e2w-sync'); ?></a>
+            </nav>
 
-        <div class="ecwid-sync-container">
-            <div id="selective-sync-initial-info" class="selective-sync-initial-info">
-                <!-- This will be populated by JavaScript -->
-            </div>
+            <div class="e2w-dashboard-body">
+                <main class="e2w-dashboard-main">
+                    <div id="selective-sync-initial-info" class="e2w-system-notice is-loading" aria-live="polite">
+                        <span class="loading-spinner" aria-hidden="true"></span><span><?php esc_html_e('Loading categories from Ecwid…', 'metrotechs-e2w-sync'); ?></span>
+                    </div>
 
-            <button id="load-ecwid-categories-button" class="button button-primary"><?php esc_html_e('Reload Categories', 'metrotechs-e2w-sync'); ?></button>
-            <div id="selective-category-list-container" class="selective-category-list-container">
-                <?php esc_html_e('Category list will appear here...', 'metrotechs-e2w-sync'); ?>
-            </div>
-            <button id="import-selected-categories-button" class="button button-primary import-selected-button"><?php esc_html_e('Import Selected Categories', 'metrotechs-e2w-sync'); ?></button>
-            
-            <!-- Bulk Actions -->
-            <div class="category-bulk-actions" style="margin: 25px 0 15px 0; padding-top: 15px; border-top: 1px solid #ddd;">
-                <h3><?php esc_html_e('Bulk Actions', 'metrotechs-e2w-sync'); ?></h3>
-                <button id="sync-all-categories-button" class="button button-primary"><?php esc_html_e('Import All Categories', 'metrotechs-e2w-sync'); ?></button>
-                <button id="stop-sync-categories-button" class="button button-secondary" style="margin-left: 10px; display: none;"><?php esc_html_e('Stop Sync', 'metrotechs-e2w-sync'); ?></button>
-            </div>
+                    <section class="e2w-panel e2w-selection-panel" aria-labelledby="e2w-category-selection-title">
+                        <header class="e2w-panel-header">
+                            <h2 id="e2w-category-selection-title"><span class="dashicons dashicons-category" aria-hidden="true"></span><?php esc_html_e('Choose categories', 'metrotechs-e2w-sync'); ?></h2>
+                            <span class="e2w-panel-metric"><strong id="e2w-loaded-item-count">—</strong> <?php esc_html_e('loaded', 'metrotechs-e2w-sync'); ?></span>
+                        </header>
+                        <div id="category-pagination-container" class="e2w-list-pagination"></div>
+                        <div id="selective-category-list-container" class="selective-category-list-container e2w-selection-list">
+                            <div class="e2w-list-empty"><span class="dashicons dashicons-category" aria-hidden="true"></span><span><?php esc_html_e('Category list will appear here.', 'metrotechs-e2w-sync'); ?></span></div>
+                        </div>
+                        <div class="e2w-selection-footer">
+                            <span><strong id="e2w-selected-item-count">0</strong> <?php esc_html_e('categories selected', 'metrotechs-e2w-sync'); ?></span>
+                            <span><?php esc_html_e('Selections are preserved across list pages.', 'metrotechs-e2w-sync'); ?></span>
+                        </div>
+                    </section>
 
-            <div id="selective-sync-status" class="sync-status margin-top-15"></div>
-            <div id="selective-sync-progress-container" class="sync-progress-container">
-                <div id="selective-sync-bar" class="sync-progress-bar">0%</div>
+                    <section class="e2w-panel e2w-selective-activity" aria-labelledby="e2w-category-activity-title">
+                        <header class="e2w-panel-header">
+                            <h2 id="e2w-category-activity-title"><span class="dashicons dashicons-list-view" aria-hidden="true"></span><?php esc_html_e('Sync activity', 'metrotechs-e2w-sync'); ?></h2>
+                            <strong id="selective-sync-status" class="sync-status"><?php esc_html_e('Ready to select categories', 'metrotechs-e2w-sync'); ?></strong>
+                        </header>
+                        <div class="e2w-selective-progress">
+                            <div id="selective-sync-progress-container" class="sync-progress-container" role="progressbar" aria-label="<?php esc_attr_e('Category sync progress', 'metrotechs-e2w-sync'); ?>" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                <div id="selective-sync-bar" class="sync-progress-bar">0%</div>
+                            </div>
+                        </div>
+                        <div id="selective-sync-log" class="sync-log e2w-activity-log" role="log" aria-live="polite">
+                            <div id="e2w-log-empty" class="e2w-log-empty"><span class="dashicons dashicons-list-view" aria-hidden="true"></span><strong><?php esc_html_e('No category sync activity yet', 'metrotechs-e2w-sync'); ?></strong><span><?php esc_html_e('Choose categories or import the complete catalog.', 'metrotechs-e2w-sync'); ?></span></div>
+                        </div>
+                    </section>
+                </main>
+
+                <aside class="e2w-context-rail" aria-label="<?php esc_attr_e('Category sync context', 'metrotechs-e2w-sync'); ?>">
+                    <h2><?php esc_html_e('Context', 'metrotechs-e2w-sync'); ?></h2>
+                    <details class="e2w-context-card" open>
+                        <summary><span><span class="dashicons dashicons-filter" aria-hidden="true"></span><?php esc_html_e('Sync mode', 'metrotechs-e2w-sync'); ?></span></summary>
+                        <div class="e2w-context-card-body e2w-mode-options">
+                            <div><strong><?php esc_html_e('Selected categories', 'metrotechs-e2w-sync'); ?></strong><span><?php esc_html_e('Import only checked rows', 'metrotechs-e2w-sync'); ?></span></div>
+                            <div><strong><?php esc_html_e('Complete catalog', 'metrotechs-e2w-sync'); ?></strong><span><?php esc_html_e('Import every Ecwid category', 'metrotechs-e2w-sync'); ?></span></div>
+                        </div>
+                    </details>
+                    <details class="e2w-context-card" open>
+                        <summary><span><span class="dashicons dashicons-networking" aria-hidden="true"></span><?php esc_html_e('Hierarchy', 'metrotechs-e2w-sync'); ?></span></summary>
+                        <div class="e2w-context-card-body e2w-help-copy"><p><?php esc_html_e('Parent categories are processed before children so WooCommerce relationships can be created safely.', 'metrotechs-e2w-sync'); ?></p></div>
+                    </details>
+                    <details class="e2w-context-card" open>
+                        <summary><span><span class="dashicons dashicons-performance" aria-hidden="true"></span><?php esc_html_e('Processing', 'metrotechs-e2w-sync'); ?></span></summary>
+                        <div class="e2w-context-card-body e2w-option-list">
+                            <div><span><?php esc_html_e('Adaptive batches', 'metrotechs-e2w-sync'); ?></span><strong class="e2w-option-on"><?php esc_html_e('On', 'metrotechs-e2w-sync'); ?></strong></div>
+                            <div><span><?php esc_html_e('Retry protection', 'metrotechs-e2w-sync'); ?></span><strong class="e2w-option-on"><?php esc_html_e('On', 'metrotechs-e2w-sync'); ?></strong></div>
+                        </div>
+                    </details>
+                    <details class="e2w-context-card" open>
+                        <summary><span><span class="dashicons dashicons-sos" aria-hidden="true"></span><?php esc_html_e('Help', 'metrotechs-e2w-sync'); ?></span></summary>
+                        <div class="e2w-context-card-body e2w-help-copy"><p><?php esc_html_e('Reload to refresh the Ecwid catalog. Existing WooCommerce categories are updated when their source data changes.', 'metrotechs-e2w-sync'); ?></p><p><a href="<?php echo esc_url($settings_url); ?>"><?php esc_html_e('Review connection settings', 'metrotechs-e2w-sync'); ?></a></p></div>
+                    </details>
+                </aside>
             </div>
-            <div id="selective-sync-log" class="sync-log"></div>
         </div>
         <?php
     }
@@ -360,6 +413,41 @@ class Ecwid2Woo_Category_Sync {
     }
 
     /**
+     * Normalize a category payload for deterministic change detection.
+     *
+     * @param mixed $value Value to normalize.
+     * @return mixed
+     */
+    private function normalize_source_value_for_hash($value) {
+        if (!is_array($value)) {
+            return $value;
+        }
+        if (empty($value)) {
+            return [];
+        }
+
+        $is_list = array_keys($value) === range(0, count($value) - 1);
+        if (!$is_list) {
+            ksort($value, SORT_STRING);
+        }
+        foreach ($value as $key => $nested_value) {
+            $value[$key] = $this->normalize_source_value_for_hash($nested_value);
+        }
+        return $value;
+    }
+
+    /**
+     * Build a stable fingerprint from the exact Ecwid category payload.
+     *
+     * @param array $item Category data returned by Ecwid.
+     * @return string
+     */
+    private function build_source_hash($item) {
+        $encoded = wp_json_encode($this->normalize_source_value_for_hash($item));
+        return is_string($encoded) ? hash('sha256', $encoded) : '';
+    }
+
+    /**
      * Import a category from Ecwid data
      * 
      * @param array $item Category data from Ecwid API
@@ -379,6 +467,7 @@ class Ecwid2Woo_Category_Sync {
         $category_logs = [];
         $ecwid_cat_id = $item['id'] ?? null;
         $ecwid_cat_name = isset($item['name']) ? sanitize_text_field($item['name']) : null;
+        $source_hash = $this->build_source_hash($item);
 
         // Use the enhanced name preparation
         if ($ecwid_cat_name) {
@@ -435,79 +524,16 @@ class Ecwid2Woo_Category_Sync {
             $existing_wc_term_id_by_ecwid_meta = $this->parent_plugin->get_term_id_by_ecwid_id($ecwid_cat_id, 'product_cat', true);
 
             if ($existing_wc_term_id_by_ecwid_meta) {
-                // --- SMART SKIP LOGIC: Check if category needs updating ---
-                $should_skip = false;
-                $ecwid_updated_timestamp = null;
-                $local_import_timestamp = get_term_meta($existing_wc_term_id_by_ecwid_meta, '_ecwid_last_import_time', true);
-                
-                // Check if Ecwid category has an updated/modified timestamp
-                if (isset($item['updated'])) {
-                    $ecwid_updated_timestamp = strtotime($item['updated']);
-                } elseif (isset($item['updateTimestamp'])) {
-                    $ecwid_updated_timestamp = $item['updateTimestamp']; // Already a Unix timestamp
-                } elseif (isset($item['createTimestamp'])) {
-                    $ecwid_updated_timestamp = $item['createTimestamp']; // Already a Unix timestamp
-                }
-                
-                // Debug: Log what timestamp fields are available
-                if (defined('WP_DEBUG') && WP_DEBUG) {
-                    $available_dates = [];
-                    foreach (['updated', 'updateTimestamp', 'createTimestamp'] as $field) {
-                        if (isset($item[$field])) {
-                            $available_dates[] = "$field: " . $item[$field];
-                        }
-                    }
-                    if (!empty($available_dates)) {
-                        $category_logs[] = "DEBUG: Available Ecwid timestamps: " . implode(', ', $available_dates);
-                    }
-                }
-                
-                // Get current term data to check for actual changes
+                $stored_source_hash = (string) get_term_meta($existing_wc_term_id_by_ecwid_meta, '_ecwid_source_hash', true);
+                $should_skip = $source_hash !== '' && $stored_source_hash !== '' && hash_equals($stored_source_hash, $source_hash);
                 $current_term_data = get_term($existing_wc_term_id_by_ecwid_meta, 'product_cat');
-                
-                // If we have both timestamps, compare them
-                if ($ecwid_updated_timestamp && $local_import_timestamp) {
-                    if ($ecwid_updated_timestamp <= $local_import_timestamp) {
-                        $should_skip = true;
-                        $category_logs[] = "SKIPPING: Category has not been modified since last import. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", Last imported: " . gmdate('Y-m-d H:i:s', $local_import_timestamp);
-                    } else {
-                        $category_logs[] = "UPDATE NEEDED: Category has been modified since last import. Ecwid updated: " . gmdate('Y-m-d H:i:s', $ecwid_updated_timestamp) . ", Last imported: " . gmdate('Y-m-d H:i:s', $local_import_timestamp);
-                    }
-                } elseif ($local_import_timestamp) {
-                    // Category was imported before but no Ecwid timestamp available
-                    // Check if it was imported recently (within last 24 hours) - if so, safe to skip
-                    $hours_since_import = (time() - $local_import_timestamp) / 3600;
-                    if ($hours_since_import < 24) {
-                        $should_skip = true;
-                        $category_logs[] = "SKIPPING: Category was imported recently (" . round($hours_since_import, 1) . " hours ago). No Ecwid timestamp available.";
-                    } else {
-                        $category_logs[] = "Category was previously imported but no Ecwid update timestamp available. Will update to be safe.";
-                    }
-                } elseif ($current_term_data) {
-                    // No local import timestamp but term exists - check if content has actually changed
-                    $current_name = $current_term_data->name;
-                    $current_desc = $current_term_data->description;
-                    $current_parent = $current_term_data->parent;
-                    
-                    $new_desc = isset($args['description']) ? $args['description'] : '';
-                    
-                    // Compare name, description, and parent
-                    $name_unchanged = ($current_name === $ecwid_cat_name);
-                    $desc_unchanged = ($current_desc === $new_desc);
-                    $parent_unchanged = ($current_parent == $parent_wc_term_id);
-                    
-                    if ($name_unchanged && $desc_unchanged && $parent_unchanged) {
-                        $should_skip = true;
-                        $category_logs[] = "SKIPPING: No changes detected (name, description, parent all match). Setting import timestamp for future reference.";
-                        // Set timestamp for future Smart Skip checks
-                        update_term_meta($existing_wc_term_id_by_ecwid_meta, '_ecwid_last_import_time', time());
-                    } else {
-                        $changes = [];
-                        if (!$name_unchanged) $changes[] = "name";
-                        if (!$desc_unchanged) $changes[] = "description";
-                        if (!$parent_unchanged) $changes[] = "parent";
-                        $category_logs[] = "UPDATE NEEDED: Changes detected in: " . implode(', ', $changes);
-                    }
+
+                if ($should_skip) {
+                    $category_logs[] = 'SKIPPING: Ecwid category payload is unchanged since the last successful import.';
+                } elseif ($stored_source_hash === '') {
+                    $category_logs[] = 'No source fingerprint found. Processing once to establish reliable category change tracking.';
+                } else {
+                    $category_logs[] = 'UPDATE NEEDED: Ecwid category payload changed since the last successful import.';
                 }
                 
                 // Return early if skipping
@@ -545,14 +571,16 @@ class Ecwid2Woo_Category_Sync {
                 clean_term_cache($existing_wc_term_id_by_ecwid_meta, 'product_cat');
                 $category_logs[] = "Updated successfully (WC Term ID: $existing_wc_term_id_by_ecwid_meta). Cache cleaned.";
                 
-                // Track import timestamp for Smart Skip
-                update_term_meta($existing_wc_term_id_by_ecwid_meta, '_ecwid_last_import_time', time());
-                
                 // Handle category image import for existing category
                 $this->handle_category_image_import($item, $existing_wc_term_id_by_ecwid_meta, $category_logs);
                 
                 // Auto-fix orphaned children if this category was a missing parent
                 $this->fix_orphaned_children($ecwid_cat_id, $existing_wc_term_id_by_ecwid_meta, $category_logs);
+
+                if ($source_hash !== '') {
+                    update_term_meta($existing_wc_term_id_by_ecwid_meta, '_ecwid_source_hash', $source_hash);
+                }
+                update_term_meta($existing_wc_term_id_by_ecwid_meta, '_ecwid_last_import_time', time());
                 
                 return ['status' => 'updated', 'logs' => $category_logs, 'item_name' => $item_name_for_return, 'ecwid_id' => $ecwid_id_for_return];
             }
@@ -584,6 +612,10 @@ class Ecwid2Woo_Category_Sync {
                         
                         // Handle category image import for found category
                         $this->handle_category_image_import($item, $wc_term_id_found_by_name, $category_logs);
+                        if ($source_hash !== '') {
+                            update_term_meta($wc_term_id_found_by_name, '_ecwid_source_hash', $source_hash);
+                        }
+                        update_term_meta($wc_term_id_found_by_name, '_ecwid_last_import_time', time());
                         
                     } else {
                         $category_logs[] = "[ERROR] FAILED to link WC term (ID: $wc_term_id_found_by_name) to Ecwid ID $ecwid_cat_id (update_term_meta failed).";
@@ -708,14 +740,16 @@ class Ecwid2Woo_Category_Sync {
                     clean_term_cache($new_term_id, 'product_cat');
                     $category_logs[] = "Imported successfully (New WC Term ID: $new_term_id). Meta update successful. Cache cleaned.";
                     
-                    // Track import timestamp for Smart Skip
-                    update_term_meta($new_term_id, '_ecwid_last_import_time', time());
-                    
                     // Handle category image import
                     $this->handle_category_image_import($item, $new_term_id, $category_logs);
                     
                     // Auto-fix orphaned children if this category was a missing parent
                     $this->fix_orphaned_children($ecwid_cat_id, $new_term_id, $category_logs);
+
+                    if ($source_hash !== '') {
+                        update_term_meta($new_term_id, '_ecwid_source_hash', $source_hash);
+                    }
+                    update_term_meta($new_term_id, '_ecwid_last_import_time', time());
                     
                 } else {
                      $category_logs[] = "[ERROR] Imported successfully (New WC Term ID: $new_term_id). BUT FAILED to set _ecwid_category_id meta (update_term_meta failed).";
@@ -877,7 +911,7 @@ class Ecwid2Woo_Category_Sync {
     public function fix_category_hierarchy() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
 
@@ -947,7 +981,7 @@ class Ecwid2Woo_Category_Sync {
         
         if (!current_user_can('manage_options')) {
             ob_end_clean();
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
         
@@ -970,11 +1004,11 @@ class Ecwid2Woo_Category_Sync {
         }
 
         // Get pagination parameters from request (for progressive loading)
-        $page_offset = isset($_POST['page_offset']) ? intval($_POST['page_offset']) : 0;
+        $page_offset = isset($_POST['page_offset']) ? max(0, intval($_POST['page_offset'])) : 0;
         $page_limit = isset($_POST['page_limit']) ? intval($_POST['page_limit']) : 100; // Load 100 categories per batch
         
         // Cap the limit to prevent memory issues
-        $page_limit = min($page_limit, 100);
+        $page_limit = max(1, min($page_limit, 100));
         
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log("Ecwid Category Sync: Fetching categories - offset: $page_offset, limit: $page_limit"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -1019,9 +1053,9 @@ class Ecwid2Woo_Category_Sync {
         $categories = [];
         foreach ($items_from_api as $item) {
             $categories[] = [
-                'id' => $item['id'] ?? null,
+                'id' => isset($item['id']) ? absint($item['id']) : 0,
                 'name' => $item['name'] ?? 'N/A',
-                'parentId' => $item['parentId'] ?? null
+                'parentId' => isset($item['parentId']) ? absint($item['parentId']) : 0
             ];
         }
 
@@ -1059,7 +1093,7 @@ class Ecwid2Woo_Category_Sync {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
             ob_end_clean();
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
         set_time_limit(300); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Legitimate use for selected category import operations
@@ -1225,6 +1259,10 @@ class Ecwid2Woo_Category_Sync {
         // Verify nonce for security
         if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'ecwid_wc_sync_nonce')) {
             wp_send_json_error(['message' => __('Security check failed. Please refresh the page and try again.', 'metrotechs-e2w-sync')]);
+        }
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
         }
 
         // Check for required API credentials
@@ -1413,7 +1451,7 @@ class Ecwid2Woo_Category_Sync {
     public function ajax_get_category_count() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
 
@@ -1465,7 +1503,7 @@ class Ecwid2Woo_Category_Sync {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
             ob_end_clean();
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
 

@@ -19,7 +19,7 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Intelligent Resume** – Automatically continues from where migration left off
 - **Products & Categories** – Smart Skip works on both product and category syncs
 - **Image Preservation** – Existing product images are never deleted during updates
-- **Timestamp Comparison** – Compares Ecwid update dates with local import records
+- **Reliable Change Detection** – Uses deterministic product payload fingerprints and category update timestamps
 - **70-90% Time Savings** – Skip already-imported items when restarting migrations
 - **Legacy Support** – Handles items imported before Smart Skip implementation
 
@@ -55,9 +55,9 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 
 - **Products & Categories** – Smart Skip works on both product and category syncs
 - **Migration Recovery** – Resume interrupted migrations without re-processing existing items
-- **Timestamp Intelligence** – Advanced comparison of Ecwid vs. local modification dates
-- **Adaptive Processing** – Conservative 24-hour skip rule for recently imported products
-- **Legacy Handling** – Automatic timestamp assignment for items imported before Smart Skip
+- **Payload Fingerprints** – Products skip only when the complete normalized Ecwid payload matches the last successful import
+- **Conservative Migration** – Existing products without a fingerprint are processed once to establish reliable tracking
+- **Failure Safety** – Fingerprints are recorded only after product images and variations finish successfully
 - **Debug Visibility** – Comprehensive logging of skip decisions and timestamp analysis
 - **Enterprise Scale** – Tested with 4500+ product migrations
 
@@ -65,7 +65,7 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 
 **Enterprise-grade bidirectional adaptive sizing** – Unlike typical plugins with fixed batch sizes, E2W Sync automatically adjusts to your server's real-time capabilities. No configuration needed – but power users can override if they choose.
 
-- **Manual Batch Size Override (v1.6.0)** – Advanced Batch Settings in Settings page lets you set Products, Categories, and Variations batch sizes manually (1–500). Proceeds at your own risk with a persistent warning banner on all sync pages.
+- **Manual Batch Size Override (v1.6.0)** – Advanced Batch Settings in Settings page lets you set Products, Categories, and Variations batch sizes manually (1–100). Proceeds at your own risk with a persistent warning banner on all sync pages.
 - **Real-Time Logging** – All sync pages show detailed logs as each batch processes (not just at the end)
 - **Bidirectional Batch Sizing** – Batch size decreases on timeouts AND recovers after stable performance
 - **Self-Healing Recovery** – After 5 successful batches, size increases by 50% (e.g., 50→75→100)
@@ -212,7 +212,7 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 
 - Configure your Ecwid API credentials
 - Test connection with visual feedback
-- **Advanced Batch Settings (v1.6.0)** – Manually override auto-detected batch sizes for Products, Categories, and Variations. Enable the override checkbox, set your sizes (1–500), and save. A warning banner will appear on all sync pages. Use at your own risk.
+- **Advanced Batch Settings (v1.6.0)** – Manually override auto-detected batch sizes for Products, Categories, and Variations. Enable the override checkbox, set your sizes (1–100), and save. A warning banner will appear on all sync pages. Use at your own risk.
 - Access quick navigation to all sync options
 - Monitor connection status with real-time indicators
 
@@ -481,10 +481,20 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Import/Export Settings** – Backup and restore plugin configurations
 
 ### Version History
+- **v1.6.1** (2026-07-28) – **PRODUCTION HARDENING**
+  - Product payload fingerprints replace the unsafe 24-hour skip heuristic
+  - Atomic job locks prevent concurrent catalog mutations across tabs and administrators
+  - Request-wide deadlines include Ecwid API retry time and preserve exact continuation offsets
+  - Store currency sync runs once per full sync instead of once per batch
+  - Low-resource servers use 10-variation batches; manual variation overrides are now honored
+  - Admin output escaping, capability checks, image download validation, and public-request loading are hardened
+  - Settings, Full Sync, Category Sync, and Product Sync now use the redesigned responsive dashboard interface
+  - Duplicate category-import handling was removed and admin assets now use file-based cache busting
+  - Production ZIPs are built from an explicit allowlist with a SHA-256 checksum
 - **v1.6.0** (2026-02-23) – **SHARED HOSTING PERFORMANCE & MANUAL BATCH CONTROL**
-  - 🎛️ **Manual Batch Size Override** – New "Advanced Batch Settings" in Settings page for manual control of Products, Categories, and Variations batch sizes (1–500)
+  - 🎛️ **Manual Batch Size Override** – New "Advanced Batch Settings" in Settings page for manual control of Products, Categories, and Variations batch sizes (1–100)
   - ⚠️ **Risk Warning Banner** – Persistent warning displayed on all sync pages when manual override is active, with direct link to settings
-  - 🔒 **Safety Cap** – Manual batch sizes hard-capped at 500; adaptive timeout recovery remains active as safety net
+  - 🔒 **Safety Cap** – Manual batch sizes hard-capped at 100; adaptive timeout recovery remains active as safety net
   - 🛡️ **CPU Yield After Image Sideload** – 250ms breathing room after thumbnail generation prevents server overload
   - 🎯 **Targeted Cache Clearing** – Replaced full cache flushes with surgical per-product cache invalidation
   - ⏱️ **PHP Worker Protection** – Capped set_time_limit to 300s to prevent indefinitely locked workers

@@ -1,12 +1,11 @@
 (function($) {
     // Debug Mode: Set to true to enable console debugging
     window.ecwidDebugMode = false; // Debugging completed, back to production mode
+    const adminUtils = window.ecwid2wooAdminUtils;
     
     // --- Global Utility Functions ---
     function sanitizeHTML(str) {
-        const temp = document.createElement('div');
-        temp.textContent = str;
-        return temp.innerHTML;
+        return adminUtils.escapeHtml(str);
     }
     
     $(document).ready(function() {
@@ -70,8 +69,6 @@
             products_available_info: 'Ecwid products available for selection: {count}',
             categories_step_complete: 'Categories step complete! Starting product sync...',
             products_step_complete: 'Products step complete!',
-            customers_step_complete: 'Customers step complete!',
-            orders_step_complete: 'Orders step complete!',
             next_step_message: 'Next: Syncing {nextType}...',
             stop_full_sync_button_text: 'STOP SYNC',
             sync_stopped_by_user_log: 'SYNC HAS BEEN STOPPED BY THE USER.',
@@ -88,7 +85,13 @@
             if (!i18n[key]) {
                 i18n[key] = i18n_defaults[key];
             }
-        }        const fullSyncSteps = (ecwid_sync_params.sync_steps && ecwid_sync_params.sync_steps.length > 0) ? ecwid_sync_params.sync_steps : ['categories', 'products', 'customers', 'orders'];
+        }
+        const supportedFullSyncSteps = ['categories', 'products'];
+        const localizedFullSyncSteps = Array.isArray(ecwid_sync_params.sync_steps) ? ecwid_sync_params.sync_steps : [];
+        const fullSyncSteps = localizedFullSyncSteps.filter(step => supportedFullSyncSteps.includes(step));
+        if (fullSyncSteps.length === 0) {
+            fullSyncSteps.push(...supportedFullSyncSteps);
+        }
         const totalFullSyncSteps = fullSyncSteps.length;
         const variationBatchSize = parseInt(ecwid_sync_params.variation_batch_size) || 50; // Ensure it's an integer
 
@@ -98,8 +101,6 @@
             server_tier: 'low',
             products_batch: 100,
             categories_batch: 100,
-            customers_batch: 25,
-            orders_batch: 25,
             batch_delay_ms: 5000,
             memory_limit_mb: 128,
             max_execution_time: 30
@@ -173,20 +174,10 @@
                 min: 1,
                 default: Math.min(100, (manualBatchOverride && manualBatchSizes.products) ? manualBatchSizes.products : serverCapabilities.products_batch)
             },
-            customers: {
-                current: serverCapabilities.customers_batch,
-                min: 5,
-                default: serverCapabilities.customers_batch
-            },
-            orders: {
-                current: serverCapabilities.orders_batch,
-                min: 5,
-                default: serverCapabilities.orders_batch
-            },
             // Track consecutive timeouts per sync type
-            timeoutCounts: { categories: 0, products: 0, customers: 0, orders: 0 },
+            timeoutCounts: { categories: 0, products: 0 },
             // Track consecutive successful batches per sync type (for recovery/increase)
-            successCounts: { categories: 0, products: 0, customers: 0, orders: 0 },
+            successCounts: { categories: 0, products: 0 },
             // Maximum retries before giving up
             maxTimeoutRetries: 8,
             // Number of consecutive successful batches before attempting to increase batch size
@@ -400,10 +391,6 @@
                     completedStepsWeight += totalCategoriesToSync;
                 } else if (fullSyncSteps[i] === 'products' && totalProductsToSync > 0) {
                     completedStepsWeight += totalProductsToSync;
-                } else if (fullSyncSteps[i] === 'customers' && totalCustomersToSync > 0) {
-                    completedStepsWeight += totalCustomersToSync;
-                } else if (fullSyncSteps[i] === 'orders' && totalOrdersToSync > 0) {
-                    completedStepsWeight += totalOrdersToSync;
                 }
             }
 
@@ -412,17 +399,11 @@
                 currentStepWeight = (currentStepProgressPercent / 100) * totalCategoriesToSync;
             } else if (fullSyncSteps[currentFullSyncStepIndex] === 'products' && totalProductsToSync > 0) {
                 currentStepWeight = (currentStepProgressPercent / 100) * totalProductsToSync;
-            } else if (fullSyncSteps[currentFullSyncStepIndex] === 'customers' && totalCustomersToSync > 0) {
-                currentStepWeight = (currentStepProgressPercent / 100) * totalCustomersToSync;
-            } else if (fullSyncSteps[currentFullSyncStepIndex] === 'orders' && totalOrdersToSync > 0) {
-                currentStepWeight = (currentStepProgressPercent / 100) * totalOrdersToSync;
             }
             
             // If current step has no items, but it's completed, consider its "weight" fully contributed if it's not the only step
             if ( (fullSyncSteps[currentFullSyncStepIndex] === 'categories' && totalCategoriesToSync === 0 && currentStepProgressPercent >=100) ||
-                 (fullSyncSteps[currentFullSyncStepIndex] === 'products' && totalProductsToSync === 0 && currentStepProgressPercent >=100) ||
-                 (fullSyncSteps[currentFullSyncStepIndex] === 'customers' && totalCustomersToSync === 0 && currentStepProgressPercent >=100) ||
-                 (fullSyncSteps[currentFullSyncStepIndex] === 'orders' && totalOrdersToSync === 0 && currentStepProgressPercent >=100) ) {
+                 (fullSyncSteps[currentFullSyncStepIndex] === 'products' && totalProductsToSync === 0 && currentStepProgressPercent >=100) ) {
                 // This logic might need refinement if a step with 0 items shouldn't contribute to progress unless it's the *only* step.
                 // For now, if a step with 0 items is "100% complete", it doesn't add to currentStepWeight unless explicitly handled.
                 // The overall progress will mostly be driven by steps that *do* have items.
@@ -452,12 +433,15 @@
         const fullSyncPreviewContainer = $('#full-sync-preview-container');
         const fullSyncCategoryPreviewList = $('#full-sync-category-preview-list');
         const fullSyncProductPreviewList = $('#full-sync-product-preview-list');
-        const fullSyncCustomerPreviewList = $('#full-sync-customer-preview-list');
-        const fullSyncOrderPreviewList = $('#full-sync-order-preview-list');
         const fullSyncProgressContainer = $('#full-sync-progress-container');
         const stopFullSyncButton = $('#stop-full-sync-button');
         const pauseFullSyncButton = $('#pause-full-sync-button');
         const fullSyncInitialInfoDiv = $('#full-sync-initial-info');
+        const fullSyncStatePill = $('#e2w-sync-state');
+        const fullSyncStateLabel = $('#e2w-sync-state-label');
+        const fullSyncLogSearch = $('#e2w-log-search');
+        const fullSyncAutoScrollToggle = $('#e2w-auto-scroll');
+        const fullSyncDownloadLogButton = $('#e2w-download-log');
 
         // Category Sync Page UI Elements
         const categoryPageSyncButton = $('#category-page-sync-button');
@@ -518,8 +502,6 @@
 
         let totalCategoriesToSync = 0; // Ensure these are declared in a scope accessible by updateOverallFullSyncProgress
         let totalProductsToSync = 0;   // and are updated by fetchAndDisplayFullSyncCounts
-        let totalCustomersToSync = 0;
-        let totalOrdersToSync = 0;
         let grandTotalAllItemsForSync = 0;
         let fullSyncVariationQueue = [];
         let currentFullSyncVariationProductData = null;
@@ -530,6 +512,46 @@
         let isCategorySyncCancelled = false;
         let categorySyncRequest = null;
         let fullSyncRetryCount = 0;
+        let activeSyncJobId = '';
+        let fullSyncLogFilter = 'all';
+
+        /**
+         * Create one owner token for an entire browser-driven sync job. The
+         * server refreshes the same lease on every mutation request.
+         */
+        function startSyncJob(scope) {
+            if (activeSyncJobId) {
+                releaseSyncJob();
+            }
+
+            const normalizedScope = String(scope || 'sync').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+            const randomPart = window.crypto && typeof window.crypto.randomUUID === 'function'
+                ? window.crypto.randomUUID()
+                : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+            activeSyncJobId = `${normalizedScope}-${randomPart}`.slice(0, 100);
+            return activeSyncJobId;
+        }
+
+        function getSyncJobId(scope) {
+            return activeSyncJobId || startSyncJob(scope);
+        }
+
+        function releaseSyncJob() {
+            const completedSyncJobId = activeSyncJobId;
+            activeSyncJobId = '';
+            if (!completedSyncJobId) return;
+
+            $.ajax({
+                url: ajax_url,
+                method: 'POST',
+                timeout: 10000,
+                data: {
+                    action: 'ecwid_wc_release_sync_lock',
+                    nonce: nonce,
+                    sync_id: completedSyncJobId
+                }
+            });
+        }
         // Store continuation data for parent batch processing
         let fullSyncParentContinuation = {
             hasMore: false,
@@ -566,12 +588,239 @@
         // --- Helper Functions ---
         const MAX_LOG_LINES = 500;
 
+        function setFullSyncState(state, label) {
+            if (!fullSyncStatePill.length) return;
+
+            const allowedStates = ['loading', 'ready', 'running', 'paused', 'success', 'error', 'stopped'];
+            const normalizedState = allowedStates.includes(state) ? state : 'ready';
+            fullSyncStatePill
+                .removeClass('is-loading is-ready is-running is-paused is-success is-error is-stopped')
+                .addClass(`is-${normalizedState}`);
+            fullSyncStateLabel.text(label || normalizedState.charAt(0).toUpperCase() + normalizedState.slice(1));
+            $('.ecwid-full-sync-dashboard').attr('aria-busy', normalizedState === 'loading' || normalizedState === 'running' ? 'true' : 'false');
+        }
+
+        function setSelectivePageState(state, label) {
+            const statePill = $('#e2w-page-state');
+            if (!statePill.length) return;
+
+            const allowedStates = ['loading', 'ready', 'running', 'paused', 'success', 'error', 'stopped'];
+            const normalizedState = allowedStates.includes(state) ? state : 'ready';
+            statePill
+                .removeClass('is-loading is-ready is-running is-paused is-success is-error is-stopped')
+                .addClass(`is-${normalizedState}`);
+            $('#e2w-page-state-label').text(label || normalizedState.charAt(0).toUpperCase() + normalizedState.slice(1));
+            $('.e2w-selective-dashboard').attr('aria-busy', normalizedState === 'loading' || normalizedState === 'running' ? 'true' : 'false');
+        }
+
+        function updateSelectivePageStateFromStatus(statusText) {
+            const normalizedText = String(statusText || '').toLowerCase();
+            if (!normalizedText) return;
+
+            if (normalizedText.includes('stopping') || normalizedText.includes('stopped') || normalizedText.includes('cancel')) {
+                setSelectivePageState('stopped', 'Stopped');
+            } else if (normalizedText.includes('error') || normalizedText.includes('failed') || normalizedText.includes('fatal')) {
+                setSelectivePageState('error', 'Needs attention');
+            } else if (normalizedText.includes('complete') || normalizedText.includes('success')) {
+                setSelectivePageState('success', 'Complete');
+            } else if (normalizedText.includes('loading') || normalizedText.includes('fetching')) {
+                setSelectivePageState('loading', 'Loading');
+            } else if (normalizedText.includes('starting') || normalizedText.includes('syncing') || normalizedText.includes('processing') || normalizedText.includes('importing')) {
+                setSelectivePageState('running', 'Running');
+            } else {
+                setSelectivePageState('ready', 'Ready');
+            }
+        }
+
+        function renderSelectiveNotice(state, title, detail, extraHtml = '') {
+            const notice = $('#selective-sync-initial-info');
+            if (!notice.length) return;
+
+            const noticeState = ['loading', 'ready', 'warning', 'error'].includes(state) ? state : 'ready';
+            notice.removeClass('is-loading is-ready is-warning is-error').addClass(`is-${noticeState}`).empty();
+
+            if (noticeState === 'loading') {
+                notice.append('<span class="loading-spinner" aria-hidden="true"></span>');
+                setSelectivePageState('loading', 'Loading');
+            } else {
+                const iconClass = noticeState === 'error' ? 'dashicons-warning' : (noticeState === 'warning' ? 'dashicons-info-outline' : 'dashicons-yes-alt');
+                notice.append(`<span class="dashicons ${iconClass}" aria-hidden="true"></span>`);
+                setSelectivePageState(noticeState === 'error' ? 'error' : 'ready', noticeState === 'error' ? 'Needs attention' : 'Ready');
+            }
+
+            const body = $('<span class="e2w-notice-body"></span>');
+            if (title) body.append($('<strong></strong>').text(title));
+            if (detail) body.append($('<span></span>').text(detail));
+            if (extraHtml) body.append(extraHtml);
+            notice.append(body);
+        }
+
+        function setSettingsState(state, label) {
+            const statePill = $('#e2w-settings-state');
+            if (!statePill.length) return;
+
+            statePill
+                .removeClass('is-loading is-ready is-running is-paused is-success is-error is-stopped')
+                .addClass(`is-${state}`);
+            $('#e2w-settings-state-label').text(label);
+            $('#e2w-context-connection-state').text(label);
+        }
+
+        function updateFullSyncStateFromStatus(statusText) {
+            const normalizedText = String(statusText || '').toLowerCase();
+            if (!normalizedText) return;
+
+            if (normalizedText.includes('paused')) {
+                setFullSyncState('paused', 'Paused');
+            } else if (normalizedText.includes('stopped') || normalizedText.includes('cancelled')) {
+                setFullSyncState('stopped', 'Stopped');
+            } else if (normalizedText.includes('error') || normalizedText.includes('failed')) {
+                setFullSyncState('error', 'Needs attention');
+            } else if (normalizedText.includes('complete')) {
+                setFullSyncState('success', 'Complete');
+            } else if (normalizedText.includes('ready') || normalizedText.includes('preview loaded')) {
+                setFullSyncState('ready', 'Ready');
+            } else if (normalizedText.includes('loading') || normalizedText.includes('reloading') || normalizedText.includes('fetching')) {
+                setFullSyncState('loading', 'Loading');
+            } else if (normalizedText.includes('sync') || normalizedText.includes('resum') || normalizedText.includes('processing')) {
+                setFullSyncState('running', 'Running');
+            }
+        }
+
+        function renderFullSyncNotice(state, title, detail) {
+            if (!fullSyncInitialInfoDiv.length) return;
+
+            const noticeState = ['loading', 'ready', 'warning', 'error'].includes(state) ? state : 'ready';
+            fullSyncInitialInfoDiv
+                .removeClass('is-loading is-ready is-warning is-error')
+                .addClass(`is-${noticeState}`)
+                .empty();
+
+            if (noticeState === 'ready') return;
+
+            if (noticeState === 'loading') {
+                fullSyncInitialInfoDiv.append('<span class="loading-spinner" aria-hidden="true"></span>');
+            } else {
+                const iconClass = noticeState === 'error' ? 'dashicons-warning' : 'dashicons-info-outline';
+                fullSyncInitialInfoDiv.append(`<span class="dashicons ${iconClass}" aria-hidden="true"></span>`);
+            }
+
+            const content = $('<span></span>');
+            if (title) content.append($('<strong></strong>').text(title));
+            if (title && detail) content.append(document.createTextNode(' — '));
+            if (detail) content.append(document.createTextNode(detail));
+            fullSyncInitialInfoDiv.append(content);
+        }
+
+        function updateFullSyncCountDashboard() {
+            const categoryCount = Number.isFinite(totalCategoriesToSync) ? totalCategoriesToSync : 0;
+            const productCount = Number.isFinite(totalProductsToSync) ? totalProductsToSync : 0;
+            const totalCount = categoryCount + productCount;
+            const numberFormatter = new Intl.NumberFormat();
+            const loadedAt = new Intl.DateTimeFormat(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit'
+            }).format(new Date());
+
+            $('#e2w-category-count, #e2w-context-category-count').text(numberFormatter.format(categoryCount));
+            $('#e2w-product-count, #e2w-context-product-count').text(numberFormatter.format(productCount));
+            $('#e2w-progress-total').text(`Total items: ${numberFormatter.format(totalCount)}`);
+            $('#e2w-last-loaded').text(loadedAt);
+        }
+
+        function updateCurrentFullSyncItem(itemResult, syncType) {
+            if (!itemResult || typeof itemResult !== 'object') return;
+
+            const resultLabels = {
+                imported: 'Imported',
+                updated: 'Updated',
+                skipped: 'Skipped',
+                failed: 'Failed',
+                imported_parent_pending_variations: 'Parent imported'
+            };
+            const rawStatus = String(itemResult.status || 'Processing');
+
+            $('#e2w-current-item-name').text(itemResult.item_name || 'Unnamed item');
+            $('#e2w-current-item-type').text(capitalizeFirstLetter(syncType || 'item'));
+            $('#e2w-current-item-ecwid-id').text(itemResult.ecwid_id || '—');
+            $('#e2w-current-item-wc-id').text(itemResult.wc_product_id || itemResult.wc_term_id || '—');
+            $('#e2w-current-item-result').text(resultLabels[rawStatus] || capitalizeFirstLetter(rawStatus.replace(/_/g, ' ')));
+        }
+
+        function refreshFullSyncLogView() {
+            if (!fullSyncLogDiv.length || !fullSyncLogDiv.hasClass('e2w-activity-log')) return;
+
+            const searchText = String(fullSyncLogSearch.val() || '').trim().toLowerCase();
+            const entries = fullSyncLogDiv.children('.e2w-log-entry');
+            const counts = { all: entries.length, error: 0, warning: 0, skip: 0, success: 0 };
+            let visibleCount = 0;
+
+            entries.each(function() {
+                const entry = $(this);
+                const entryType = entry.data('log-type') || 'info';
+                if (Object.prototype.hasOwnProperty.call(counts, entryType)) counts[entryType]++;
+
+                const matchesType = fullSyncLogFilter === 'all' || entryType === fullSyncLogFilter;
+                const matchesSearch = !searchText || entry.text().toLowerCase().includes(searchText);
+                const isVisible = matchesType && matchesSearch;
+                entry.toggleClass('is-hidden', !isVisible);
+                if (isVisible) visibleCount++;
+            });
+
+            Object.keys(counts).forEach(type => {
+                $(`[data-e2w-log-count="${type}"]`).text(counts[type]);
+            });
+            $('#e2w-log-filter-empty').prop('hidden', entries.length === 0 || visibleCount > 0);
+        }
+
         function logMessage(logDiv, message, type) {
             if (!logDiv || !logDiv.length) return; // Guard against missing logDiv
 
+            let normalizedType = ['success', 'error', 'warning', 'skip', 'info'].includes(type) ? type : 'info';
+            const cleanMessage = sanitizeHTML(message);
+
+            if (logDiv.hasClass('e2w-activity-log')) {
+                const typeLabels = { success: 'Success', error: 'Error', warning: 'Warning', skip: 'Skip', info: 'Activity' };
+                const iconClasses = {
+                    success: 'dashicons-yes-alt',
+                    error: 'dashicons-warning',
+                    warning: 'dashicons-flag',
+                    skip: 'dashicons-controls-skipforward',
+                    info: 'dashicons-update'
+                };
+                const timeText = new Intl.DateTimeFormat(undefined, {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                }).format(new Date());
+
+                logDiv.find('#e2w-log-empty').remove();
+                logDiv.append(`
+                    <p class="e2w-log-entry is-type-${normalizedType}" data-log-type="${normalizedType}">
+                        <time class="e2w-log-time">${sanitizeHTML(timeText)}</time>
+                        <span class="e2w-log-marker" aria-hidden="true"><span class="dashicons ${iconClasses[normalizedType]}"></span></span>
+                        <span class="e2w-log-message"><span class="screen-reader-text">${typeLabels[normalizedType]}: </span>${cleanMessage}</span>
+                        <span class="e2w-log-badge">${typeLabels[normalizedType]}</span>
+                    </p>
+                `);
+
+                const enhancedLines = logDiv.children('.e2w-log-entry');
+                if (enhancedLines.length > MAX_LOG_LINES) {
+                    enhancedLines.slice(0, enhancedLines.length - MAX_LOG_LINES).remove();
+                }
+                refreshFullSyncLogView();
+                if (!fullSyncAutoScrollToggle.length || fullSyncAutoScrollToggle.is(':checked')) {
+                    logDiv.scrollTop(logDiv[0].scrollHeight);
+                }
+                return;
+            }
+
             let color = 'black';
             let prefix = '';
-            switch (type) {
+            switch (normalizedType) {
                 case 'success':
                     color = 'green';
                     prefix = 'SUCCESS: ';
@@ -591,7 +840,6 @@
             }
         
             // Sanitize the message content, not the HTML structure of the paragraph
-            const cleanMessage = sanitizeHTML(message); 
             logDiv.append(`<p style="color:${color}; margin: 2px 0; padding: 0; white-space: pre-wrap; word-wrap: break-word;"><strong>${prefix}</strong>${cleanMessage}</p>`);
         
             // Limit log lines
@@ -608,6 +856,8 @@
                 const upperLogEntry = logEntry.toUpperCase();
                 if (upperLogEntry.includes('[CRITICAL]') || upperLogEntry.includes('[ERROR]') || upperLogEntry.includes('FAILED TO') || upperLogEntry.includes('FAILURE')) {
                     logType = 'error';
+                } else if (upperLogEntry.includes('SKIPPED') || upperLogEntry.includes('SKIPPING')) {
+                    logType = 'skip';
                 } else if (upperLogEntry.includes('SUCCESSFULLY') || upperLogEntry.includes('IMPORTED') || upperLogEntry.includes('SKIPPED') || upperLogEntry.includes('COMPLETED')) {
                     logType = 'success';
                 } else if (upperLogEntry.includes('[WARNING]')) {
@@ -623,6 +873,11 @@
 
         function updateStatus(statusDiv, statusText) {
             statusDiv.text(statusText);
+            if (statusDiv && statusDiv.attr('id') === 'full-sync-status') {
+                updateFullSyncStateFromStatus(statusText);
+            } else if (statusDiv && statusDiv.attr('id') === 'selective-sync-status') {
+                updateSelectivePageStateFromStatus(statusText);
+            }
         }
 
         function updateProgressBar(progressBarElem, percentage, duration = 200) {
@@ -640,6 +895,10 @@
             
             // Update the text immediately to the rounded and clamped value
             progressBarElem.text(displayPercentage + '%');
+            progressBarElem.parent().attr('aria-valuenow', displayPercentage);
+            if (progressBarElem.attr('id') === 'full-sync-bar') {
+                $('#e2w-progress-percent').text(displayPercentage + '%');
+            }
         }
 
         function handleAjaxError(statusDiv, logDiv, buttonElem, buttonText, syncType, responseData, isNetworkError = false) {
@@ -722,6 +981,47 @@
             // but usually, the calling function will set a new status text.
         }
 
+        if (fullSyncLogDiv.length && fullSyncLogDiv.hasClass('e2w-activity-log')) {
+            $('#e2w-category-batch-size').text(getAdaptiveBatchSize('categories'));
+            $('#e2w-product-batch-size').text(getAdaptiveBatchSize('products'));
+
+            $('.e2w-activity-tab').on('click', function() {
+                fullSyncLogFilter = $(this).data('e2w-log-filter') || 'all';
+                $('.e2w-activity-tab').removeClass('is-active').attr('aria-selected', 'false');
+                $(this).addClass('is-active').attr('aria-selected', 'true');
+                refreshFullSyncLogView();
+            });
+
+            fullSyncLogSearch.on('input', refreshFullSyncLogView);
+
+            fullSyncDownloadLogButton.on('click', function() {
+                const entries = fullSyncLogDiv.children('.e2w-log-entry');
+                const lines = entries.map(function() {
+                    const entry = $(this);
+                    const time = entry.find('.e2w-log-time').text().trim();
+                    const type = String(entry.data('log-type') || 'info').toUpperCase();
+                    const message = entry.find('.e2w-log-message').text().trim();
+                    return `[${time}] [${type}] ${message}`;
+                }).get();
+
+                if (!lines.length) {
+                    renderFullSyncNotice('warning', 'Nothing to download', 'The activity log is currently empty.');
+                    return;
+                }
+
+                const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain;charset=utf-8' });
+                const objectUrl = URL.createObjectURL(blob);
+                const downloadLink = document.createElement('a');
+                const dateStamp = new Date().toISOString().replace(/[:.]/g, '-');
+                downloadLink.href = objectUrl;
+                downloadLink.download = `ecwid2woo-full-sync-${dateStamp}.log`;
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                downloadLink.remove();
+                URL.revokeObjectURL(objectUrl);
+            });
+        }
+
         // --- Full Sync Page Logic ---
 
         // Define fetchAndDisplayFullSyncCounts first
@@ -744,15 +1044,7 @@
             loadFullSyncPreviewButton.prop('disabled', true).text(i18n.loading_sync_preview || 'Reloading sync data...');
             updateStatus(fullSyncStatusDiv, i18n.loading_sync_preview || 'Reloading sync data...');
             
-            // Show loading state in initial info container
-            if (fullSyncInitialInfoDiv.length) {
-                fullSyncInitialInfoDiv.html(`
-                    <div style="padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; margin: 10px 0;">
-                        <strong>⏳ Loading Full Sync Data...</strong><br>
-                        <span style="font-size: 12px; color: #856404;">Fetching Categories and Products from Ecwid API</span>
-                    </div>
-                `);
-            }
+            renderFullSyncNotice('loading', 'Loading full sync data', 'Fetching categories and products from the Ecwid API.');
             
             // Only update these if they exist
             if (fullSyncCategoryPreviewList.length) {
@@ -760,12 +1052,6 @@
             }
             if (fullSyncProductPreviewList.length) {
                 fullSyncProductPreviewList.html('<em>' + (i18n.loading_products || 'Loading Products...') + '</em>');
-            }
-            if (fullSyncCustomerPreviewList.length) {
-                fullSyncCustomerPreviewList.html('<em>' + (i18n.loading_customers || 'Loading Customers...') + '</em>');
-            }
-            if (fullSyncOrderPreviewList.length) {
-                fullSyncOrderPreviewList.html('<em>' + (i18n.loading_orders || 'Loading Orders...') + '</em>');
             }
 
             $.ajax({
@@ -785,21 +1071,14 @@
                 if (response.success && response.data) {
                     totalCategoriesToSync = parseInt(response.data.categories_count) || 0;
                     totalProductsToSync = parseInt(response.data.products_count) || 0;
-                    totalCustomersToSync = parseInt(response.data.customers_count) || 0;
-                    totalOrdersToSync = parseInt(response.data.orders_count) || 0;
-                    // Only count categories and products for now (customers/orders disabled)
                     grandTotalAllItemsForSync = totalCategoriesToSync + totalProductsToSync;
 
                     const categories = response.data.categories_preview || [];
                     const products = response.data.products_preview || [];
-                    const customers = response.data.customers_preview || [];
-                    const orders = response.data.orders_preview || [];
                     
                     if (window.ecwidDebugMode) {
                         console.log('Categories preview data available:', categories ? categories.length : 0);
                         console.log('Products preview data available:', products ? products.length : 0);
-                        console.log('Customers preview data available:', customers ? customers.length : 0);
-                        console.log('Orders preview data available:', orders ? orders.length : 0);
                     }
 
                     // Only update preview lists if the elements exist
@@ -820,7 +1099,8 @@
                         if (products && products.length > 0) {
                             products.forEach(prod => {
                                 const productName = sanitizeHTML(prod.name || 'Unnamed Product');
-                                const productId = prod.id || 'N/A';
+                                const parsedProductId = Number.parseInt(prod.id, 10);
+                                const productId = Number.isSafeInteger(parsedProductId) && parsedProductId > 0 ? parsedProductId : 'N/A';
                                 const productSku = prod.sku ? ` | SKU: ${sanitizeHTML(prod.sku)}` : '';
                                 const variationCount = prod.combinations ? ` | ${prod.combinations.length} variations` : '';
                                 fullSyncProductPreviewList.append(`<div>${productName} (ID: ${productId}${productSku}${variationCount})</div>`);
@@ -831,73 +1111,13 @@
                         }
                     }
 
-                    if (fullSyncCustomerPreviewList.length) {
-                        fullSyncCustomerPreviewList.empty();
-                        if (customers && customers.length > 0) {
-                            customers.forEach(customer => {
-                                const customerName = sanitizeHTML(customer.name || 'Unnamed Customer');
-                                const customerEmail = sanitizeHTML(customer.email || 'No email');
-                                const customerId = customer.id || 'N/A';
-                                fullSyncCustomerPreviewList.append(`<div>${customerName} (${customerEmail}) - ID: ${customerId}</div>`);
-                            });
-                            fullSyncCustomerPreviewList.append(`<hr><p><strong>Total customers to sync: ${totalCustomersToSync}</strong></p>`);
-                        } else {
-                            fullSyncCustomerPreviewList.html('<em>' + (i18n.no_customers_found || 'No customers found or access denied.') + '</em>');
-                        }
-                    }
-
-                    if (fullSyncOrderPreviewList.length) {
-                        fullSyncOrderPreviewList.empty();
-                        if (orders && orders.length > 0) {
-                            orders.forEach(order => {
-                                const orderNumber = sanitizeHTML(order.orderNumber || 'N/A');
-                                const customerEmail = sanitizeHTML(order.email || 'No email');
-                                const orderId = order.id || 'N/A';
-                                const total = order.total ? `$${order.total}` : 'N/A';
-                                fullSyncOrderPreviewList.append(`<div>Order #${orderNumber} (${customerEmail}) - ${total} - ID: ${orderId}</div>`);
-                            });
-                            fullSyncOrderPreviewList.append(`<hr><p><strong>Total orders to sync: ${totalOrdersToSync}</strong></p>`);
-                        } else {
-                            fullSyncOrderPreviewList.html('<em>' + (i18n.no_orders_found || 'No orders found or access denied.') + '</em>');
-                        }
-                    }
-                    
-                    // Only show categories and products in count text (customers/orders disabled)
                     let countText = (i18n.categories_to_sync_info || 'Categories to sync: {count}').replace('{count}', totalCategoriesToSync) + ', ' +
                                     (i18n.products_to_sync_info || 'Products to sync: {count}').replace('{count}', totalProductsToSync);
                     fullSyncCountsInfoDiv.text(countText);
+                    updateFullSyncCountDashboard();
 
                     updateStatus(fullSyncStatusDiv, i18n.preview_loaded_ready_to_sync || 'Preview loaded. Ready to start full sync.');
-                    
-                    // Update initial info container with success state
-                    if (fullSyncInitialInfoDiv.length) {
-                        const styledStatusHtml = `
-                            <div style="padding: 15px; background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 4px; margin: 10px 0;">
-                                <p style="margin: 0 0 5px 0; font-weight: bold;">🎯 Full Sync Data Loaded Successfully!</p>
-                                <p style="margin: 0 0 10px 0; font-size: 12px; color: #0c5460; font-style: normal;">Ready to sync all store data: Categories and Products</p>
-                                <div style="margin: 10px 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; font-size: 11px;">
-                                    <div style="background: #f8f9fa; padding: 8px; border-radius: 3px; text-align: center;">
-                                        <strong>📂 Categories</strong><br>
-                                        <span style="color: #28a745; font-weight: bold;">${totalCategoriesToSync}</span>
-                                    </div>
-                                    <div style="background: #f8f9fa; padding: 8px; border-radius: 3px; text-align: center;">
-                                        <strong>📦 Products</strong><br>
-                                        <span style="color: #28a745; font-weight: bold;">${totalProductsToSync}</span>
-                                    </div>
-                                </div>
-                                <details style="margin-top: 10px; font-size: 11px; color: #6c757d;">
-                                    <summary style="cursor: pointer;">🔍 Full Sync Details (click to expand)</summary>
-                                    <div style="margin-top: 5px; padding: 5px; background: #f9f9f9; border-radius: 3px;">
-                                        <strong>Total Items:</strong> ${grandTotalAllItemsForSync}<br>
-                                        <strong>Sync Steps:</strong> Categories → Products<br>
-                                        <strong>Progress Tracking:</strong> Real-time with weighted calculations<br>
-                                        <strong>Data Source:</strong> Ecwid Store API
-                                    </div>
-                                </details>
-                            </div>
-                        `;
-                        fullSyncInitialInfoDiv.html(styledStatusHtml);
-                    }
+                    renderFullSyncNotice('ready');
                     
                     // Only show preview container if it exists
                     if (fullSyncPreviewContainer.length) {
@@ -909,15 +1129,7 @@
                     updateStatus(fullSyncStatusDiv, errorMsg);
                     logMessage(fullSyncLogDiv, 'Preview Error: ' + errorMsg, 'error');
                     
-                    // Update initial info container with error state
-                    if (fullSyncInitialInfoDiv.length) {
-                        fullSyncInitialInfoDiv.html(`
-                            <div style="padding: 15px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; margin: 10px 0;">
-                                <strong>❌ Failed to Load Full Sync Data</strong><br>
-                                <span style="font-size: 12px; color: #721c24;">${sanitizeHTML(errorMsg)}</span>
-                            </div>
-                        `);
-                    }
+                    renderFullSyncNotice('error', 'Failed to load full sync data', errorMsg);
                     
                     // Handle error case but still try to show preview data if available
                     if (response.data) {
@@ -936,7 +1148,9 @@
                         if (fullSyncProductPreviewList.length && products && products.length > 0) {
                             fullSyncProductPreviewList.empty();
                             products.forEach(prod => {
-                                fullSyncProductPreviewList.append(`<div>${sanitizeHTML(prod.name || 'Unnamed Product')} (ID: ${prod.id || 'N/A'})</div>`);
+                                const parsedProductId = Number.parseInt(prod.id, 10);
+                                const productId = Number.isSafeInteger(parsedProductId) && parsedProductId > 0 ? parsedProductId : 'N/A';
+                                fullSyncProductPreviewList.append(`<div>${sanitizeHTML(prod.name || 'Unnamed Product')} (ID: ${productId})</div>`);
                             });
                         } else if (fullSyncProductPreviewList.length) {
                             fullSyncProductPreviewList.html('<em>' + (i18n.no_products_found || 'No enabled products found or failed to fetch.') + '</em>');
@@ -955,15 +1169,7 @@
                     console.error('AJAX error details:', jqXHR.responseText);
                 }
                 
-                // Update initial info container with AJAX error state
-                if (fullSyncInitialInfoDiv.length) {
-                    fullSyncInitialInfoDiv.html(`
-                        <div style="padding: 15px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; margin: 10px 0;">
-                            <strong>❌ Connection Error</strong><br>
-                            <span style="font-size: 12px; color: #721c24;">Failed to connect to Ecwid API. Please check your connection and try again.</span>
-                        </div>
-                    `);
-                }
+                renderFullSyncNotice('error', 'Connection error', 'Failed to connect to the Ecwid API. Check the connection and try again.');
                 
                 if (fullSyncCategoryPreviewList.length) {
                     fullSyncCategoryPreviewList.html('<em>AJAX error loading categories.</em>');
@@ -992,9 +1198,10 @@
 
         if (fullSyncButton.length) {
             fullSyncButton.on('click', function() {
+                startSyncJob('full-sync');
                 isSyncCancelledByUser = false; // Reset cancellation flag
                 logMessage(fullSyncLogDiv, i18n.sync_starting || 'Sync starting...', 'info');
-                fullSyncButton.prop('disabled', true).text(i18n.syncing_button || 'Syncing...');
+                fullSyncButton.prop('disabled', true).text(i18n.syncing_button || 'Syncing...').hide();
                 stopFullSyncButton.show(); // Show STOP button
                 pauseFullSyncButton.show().removeClass('is-paused').text(i18n.pause_sync || 'PAUSE'); // Show PAUSE button
                 isSyncPaused = false; // Reset pause state
@@ -1010,6 +1217,12 @@
                 fullSyncProgressBar.css('width', '0%').text('0%');
                 fullSyncProgressContainer.show();
                 fullSyncLogDiv.html(''); // Clear previous logs
+                refreshFullSyncLogView();
+                setFullSyncState('running', 'Running');
+                $('#e2w-current-item-name').text('Preparing full sync');
+                $('#e2w-current-item-type').text('Categories');
+                $('#e2w-current-item-ecwid-id, #e2w-current-item-wc-id').text('—');
+                $('#e2w-current-item-result').text('Starting');
 
                 // Log server capabilities at sync start
                 const tierEmoji = serverCapabilities.server_tier === 'high' ? '🚀' : 
@@ -1099,11 +1312,12 @@
                 
                 stopFullSyncButton.hide();
                 pauseFullSyncButton.hide().removeClass('is-paused').text(i18n.pause_sync || 'PAUSE'); // Hide and reset pause button
-                fullSyncButton.text(i18n.start_sync || 'Start Full Sync').prop('disabled', false);
+                fullSyncButton.text(i18n.start_sync || 'Start Full Sync').prop('disabled', false).show();
                 loadFullSyncPreviewButton.prop('disabled', false); // Re-enable reload preview
 
                 // Reset progress and state
-                fullSyncProgressBar.css('width', '0%').text('0%');
+                updateProgressBar(fullSyncProgressBar, 0, 0);
+                $('#e2w-current-item-result').text('Stopped');
                 // fullSyncProgressContainer.hide(); // Optionally hide progress bar
                 stopBatchStatusAnimation();
                 
@@ -1113,6 +1327,7 @@
                 currentFullSyncStepIndex = 0; 
                 currentFullSyncStepOffset = 0;
                 fullSyncOverallProgress = 0;
+                releaseSyncJob();
                 // Add any other specific full sync state resets here if needed
             });
         }
@@ -1134,10 +1349,6 @@
                     currentTotalForStep = totalCategoriesToSync;
                 } else if (syncType === 'products') {
                     currentTotalForStep = totalProductsToSync;
-                } else if (syncType === 'customers') {
-                    currentTotalForStep = totalCustomersToSync;
-                } else if (syncType === 'orders') {
-                    currentTotalForStep = totalOrdersToSync;
                 }
                 // Update status to "Syncing {type}: 0 of {total}..."
                 const initialStepStatus = i18n.syncing_item_of_total
@@ -1150,13 +1361,15 @@
                 stopBatchStatusAnimation();
                 updateStatus(fullSyncStatusDiv, i18n.sync_complete || 'Sync Complete!');
                 logMessage(fullSyncLogDiv, '✅ Full synchronization completed successfully! All categories and products have been processed.', 'success');
-                fullSyncButton.text(i18n.start_sync || 'Start Full Sync').prop('disabled', false);
+                fullSyncButton.text(i18n.start_sync || 'Start Full Sync').prop('disabled', false).show();
                 stopFullSyncButton.hide(); // Hide STOP button on completion
                 pauseFullSyncButton.hide().removeClass('is-paused').text(i18n.pause_sync || 'PAUSE'); // Hide pause button on completion
                 loadFullSyncPreviewButton.prop('disabled', false); // Re-enable reload preview
                 updateOverallFullSyncProgress(100); // Ensure it hits 100%
+                $('#e2w-current-item-result').text('Complete');
                 isSyncPaused = false; // Reset pause state
                 pausedSyncState = null; // Clear saved state
+                releaseSyncJob();
                 return;
             }
         }
@@ -1186,6 +1399,11 @@
 
             // Get adaptive batch size for this sync type (moved up so we can show it in status)
             const currentBatchSize = getAdaptiveBatchSize(syncType);
+            $(`#e2w-${syncType === 'categories' ? 'category' : 'product'}-batch-size`).text(currentBatchSize);
+            $('#e2w-current-item-name').text(`Processing ${syncType} batch`);
+            $('#e2w-current-item-type').text(capitalizeFirstLetter(syncType));
+            $('#e2w-current-item-ecwid-id, #e2w-current-item-wc-id').text('—');
+            $('#e2w-current-item-result').text(`Offset ${offset}`);
 
             const statusMsg = i18n.syncing_item_of_total
                 .replace('{syncType}', capitalizeFirstLetter(syncType))
@@ -1198,7 +1416,7 @@
                 url: ajax_url,
                 method: 'POST',
                 timeout: 180000, // 180 seconds - image throttling makes batches slower; Cloudflare Enterprise allows 200s
-                data: { action: 'ecwid_wc_batch_sync', nonce: nonce, sync_type: syncType, offset: offset, batch_size: currentBatchSize },
+                data: { action: 'ecwid_wc_batch_sync', nonce: nonce, sync_id: getSyncJobId('full-sync'), sync_type: syncType, offset: offset, batch_size: currentBatchSize },
                 success: function(response) {
                     stopBatchStatusAnimation();
                     // Reset timeout count on success (batch completed without timeout)
@@ -1246,6 +1464,7 @@
                         // Populate variation queue from structured results
                         if (response.data.batch_item_results && response.data.batch_item_results.length > 0) {
                             response.data.batch_item_results.forEach(itemResult => {
+                                updateCurrentFullSyncItem(itemResult, syncType);
                                 if (itemResult.status === 'imported_parent_pending_variations' && itemResult.total_combinations > 0) {
                                     fullSyncVariationQueue.push({
                                         wc_product_id: itemResult.wc_product_id,
@@ -1294,6 +1513,7 @@
                         handleAjaxError(fullSyncStatusDiv, fullSyncLogDiv, fullSyncButton, i18n.start_sync, syncType, response.data);
                         fullSyncButton.show(); 
                         loadFullSyncPreviewButton.removeClass('disabled').prop('disabled', false);
+                        releaseSyncJob();
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
@@ -1457,6 +1677,8 @@
                     fullSyncRetryCount = 0;
                     
                     handleAjaxError(fullSyncStatusDiv, fullSyncLogDiv, fullSyncButton, i18n.start_sync, syncType, errorData, true);
+                    fullSyncButton.show();
+                    releaseSyncJob();
                 }
             });
         }
@@ -1565,6 +1787,12 @@
 
             const { wc_product_id, ecwid_product_id, item_name, sku, all_combinations, total_combinations, original_options, current_variation_offset } = currentFullSyncVariationProductData;
 
+            $('#e2w-current-item-name').text(item_name || 'Product variations');
+            $('#e2w-current-item-type').text('Product variations');
+            $('#e2w-current-item-ecwid-id').text(ecwid_product_id || '—');
+            $('#e2w-current-item-wc-id').text(wc_product_id || '—');
+            $('#e2w-current-item-result').text(`${Math.min(current_variation_offset, total_combinations)} of ${total_combinations}`);
+
             if (current_variation_offset >= total_combinations) {
                 logMessage(fullSyncLogDiv, i18n.variations_imported_successfully.replace('{productName}', sanitizeHTML(item_name)), 'success');
                 currentFullSyncVariationProductData = null; // Done with this product
@@ -1590,6 +1818,7 @@
                 data: {
                     action: 'ecwid_wc_process_variation_batch', // Reuse existing PHP action
                     nonce: nonce,
+                    sync_id: getSyncJobId('full-sync'),
                     wc_product_id: wc_product_id,
                     ecwid_product_id: ecwid_product_id,
                     item_name: item_name, // item_name is used by PHP for logging
@@ -1706,14 +1935,7 @@
             `;
             
             categoryListContainer.html(loadingHtml).show();
-            if (categorySyncInitialInfoDiv.length) {
-                categorySyncInitialInfoDiv.html(`
-                    <div style="padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; margin: 10px 0;">
-                        <strong>⏳ Loading Categories...</strong><br>
-                        <span style="font-size: 12px; color: #856404;">Fetching complete category catalog from Ecwid API</span>
-                    </div>
-                `);
-            }
+            renderSelectiveNotice('loading', 'Loading categories', 'Fetching the complete category catalog from the Ecwid API.');
             importSelectedCategoriesButton.hide();
             ecwidCategoriesForSelection = [];
             totalCategoriesForCategoryPageSync = 0;
@@ -1725,6 +1947,7 @@
             }
             currentCategoryPage = 1;
             selectedCategoryIds.clear(); // Reset category selection across all pages
+            $('#e2w-selected-item-count').text('0');
 
             // Batch loading variables
             let allCategories = [];
@@ -1797,6 +2020,7 @@
             function finalizeCategoryLoading(categories, apiCalls, total) {
                 ecwidCategoriesForSelection = categories;
                 totalCategoriesForCategoryPageSync = categories.length;
+                $('#e2w-loaded-item-count').text(new Intl.NumberFormat().format(categories.length));
 
                 // Enhanced status message with debugging info
                 let statusMessage = `All ${categories.length} categories loaded`;
@@ -1805,16 +2029,7 @@
                 }
                 statusMessage += '. Select individual categories or multiple categories to import.';
 
-                if (categorySyncInitialInfoDiv.length) {
-                    // Create styled info box matching the Product Sync page
-                    const styledStatusHtml = `
-                        <div style="background: #d4edda; padding: 10px; margin-bottom: 10px; border: 1px solid #c3e6cb; border-radius: 4px;">
-                            <p style="margin: 0 0 5px 0; font-weight: bold; color: #155724;">✅ Category Loading Complete:</p>
-                            <p style="margin: 0; font-size: 12px; color: #155724; font-style: normal;">${statusMessage}</p>
-                        </div>
-                    `;
-                    categorySyncInitialInfoDiv.html(styledStatusHtml);
-                }
+                renderSelectiveNotice('ready', 'Categories loaded', statusMessage);
 
                 // Category loading complete
                 if (window.ecwidDebugMode) {
@@ -1840,9 +2055,8 @@
 
             function handleCategoryLoadError(errorMsg) {
                 categoryListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
-                if (categorySyncInitialInfoDiv.length) {
-                    categorySyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
-                }
+                $('#e2w-loaded-item-count').text('0');
+                renderSelectiveNotice('error', 'Unable to load categories', String(errorMsg || 'Unknown error'));
                 // Clear pagination on error
                 const categoryPaginationContainer = $('#category-pagination-container');
                 if (categoryPaginationContainer.length) {
@@ -1901,6 +2115,7 @@
             const selectedCount = $('.ecwid-category-select:checked').length;
             const totalCount = $('.ecwid-category-select').length;
             const importButton = $('#import-selected-categories-button');
+            $('#e2w-selected-item-count').text(new Intl.NumberFormat().format(selectedCount));
             
             if (selectedCount > 0) {
                 importButton.text(`${i18n.import_selected_categories || 'Import Selected Categories'} (${selectedCount})`);
@@ -1931,17 +2146,15 @@
                 e.preventDefault();
                 if ($(this).hasClass('disabled')) return;
 
-                const selectedCategoryIds = [];
-                $('.ecwid-category-select:checked').each(function() {
-                    selectedCategoryIds.push(parseInt($(this).val()));
-                });
+                const categoryIdsToImport = Array.from(selectedCategoryIds, id => Number.parseInt(id, 10))
+                    .filter(id => Number.isSafeInteger(id) && id > 0);
 
                 if (window.ecwidDebugMode) {
-                    console.log('DEBUG: Selected category IDs:', selectedCategoryIds);
-                    console.log('DEBUG: Number of selected categories:', selectedCategoryIds.length);
+                    console.log('DEBUG: Selected category IDs:', categoryIdsToImport);
+                    console.log('DEBUG: Number of selected categories:', categoryIdsToImport.length);
                 }
 
-                if (selectedCategoryIds.length === 0) {
+                if (categoryIdsToImport.length === 0) {
                     // amazonq-ignore-next-line
                     alert(i18n.no_categories_selected || 'No categories selected for import.');
                     return;
@@ -1961,17 +2174,17 @@
                 categoryPageSyncProgressBarContainer.show();
                 
                 // Update activity indicators
-                categoryCurrentBatchInfo.html(`Preparing to import ${selectedCategoryIds.length} selected categories...`);
+                categoryCurrentBatchInfo.html(`Preparing to import ${categoryIdsToImport.length} selected categories...`);
                 categoryProcessingText.text('Starting selective import...');
                 
                 // Initialize stats for selective import
                 resetCategorySyncStats();
-                updateCategorySyncStats(0, 0, 0, selectedCategoryIds.length);
+                updateCategorySyncStats(0, 0, 0, categoryIdsToImport.length);
                 
-                updateStatus(categoryPageSyncStatusDiv, `Importing ${selectedCategoryIds.length} selected categories...`);
+                updateStatus(categoryPageSyncStatusDiv, `Importing ${categoryIdsToImport.length} selected categories...`);
 
                 // Start import
-                importSelectedCategories(selectedCategoryIds, importButton, originalText);
+                importSelectedCategories(categoryIdsToImport, importButton, originalText);
             });
         }
 
@@ -2062,6 +2275,7 @@
                         importButton.removeClass('disabled').html(originalButtonText);
                         loadCategoriesButton.removeClass('disabled').prop('disabled', false);
                         updateSelectedCategoriesCount();
+                        releaseSyncJob();
                     }
                 });
             }
@@ -2092,6 +2306,7 @@
                 data: {
                     action: 'ecwid_wc_import_selected_categories',
                     nonce: nonce,
+                    sync_id: getSyncJobId('selected-categories'),
                     category_ids: categoryIds
                 },
                 beforeSend: function() {
@@ -2174,6 +2389,7 @@
                         importButton.removeClass('disabled').html(originalButtonText);
                         loadCategoriesButton.removeClass('disabled').prop('disabled', false);
                         updateSelectedCategoriesCount();
+                        releaseSyncJob();
                     }
                 }
             });
@@ -2183,6 +2399,7 @@
             categoryPageSyncButton.on('click', function(e) {
                 e.preventDefault();
                 if ($(this).hasClass('disabled')) return;
+                startSyncJob('category-sync');
 
                 if (totalCategoriesForCategoryPageSync === 0 && categoryListContainer.find('ul li').length === 0) {
                     logMessage(categoryPageSyncLogDiv, "Warning: Category list not loaded or appears empty. Totals in status might show as N/A. Consider loading categories first.", 'warning');
@@ -2281,6 +2498,7 @@
                 data: {
                     action: 'ecwid_wc_batch_sync', 
                     nonce: nonce,
+                    sync_id: getSyncJobId('category-sync'),
                     sync_type: syncType, 
                     offset: offset
                 },
@@ -2356,6 +2574,7 @@
                             loadCategoriesButton.removeClass('disabled').prop('disabled', false);
                             fixHierarchyButton.removeClass('disabled').prop('disabled', false);
                             updateProgressBar(categoryPageSyncProgressBar, 100);
+                            releaseSyncJob();
                             
                             // Hide sync activity display after completion
                             setTimeout(function() {
@@ -2371,6 +2590,7 @@
                         handleAjaxError(categoryPageSyncStatusDiv, categoryPageSyncLogDiv, categoryPageSyncButton, i18n.start_category_sync_page, syncType, response.data);
                         loadCategoriesButton.removeClass('disabled').prop('disabled', false);
                         fixHierarchyButton.removeClass('disabled').prop('disabled', false);
+                        releaseSyncJob();
                     }
                 },
                 error: function(jqXHR, textStatus, errorThrown) {
@@ -2383,6 +2603,7 @@
                     handleAjaxError(categoryPageSyncStatusDiv, categoryPageSyncLogDiv, categoryPageSyncButton, i18n.start_category_sync_page, syncType, { message: `${textStatus} ${errorThrown || ''}` }, true);
                     loadCategoriesButton.removeClass('disabled').prop('disabled', false);
                     fixHierarchyButton.removeClass('disabled').prop('disabled', false);
+                    releaseSyncJob();
                 }
             });
         }
@@ -2441,16 +2662,11 @@
             `;
             
             productListContainer.html(loadingHtml).show();
-            if (selectiveSyncInitialInfoDiv.length) {
-                selectiveSyncInitialInfoDiv.html(`
-                    <div style="padding: 15px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; margin: 10px 0;">
-                        <strong>⏳ Loading Products...</strong><br>
-                        <span style="font-size: 12px; color: #856404;">Fetching complete product catalog from Ecwid API</span>
-                    </div>
-                `);
-            }
+            renderSelectiveNotice('loading', 'Loading products', 'Fetching the complete product catalog from the Ecwid API.');
             importSelectedButton.hide();
             ecwidProductsForSelection = [];
+            selectedProductIds.clear();
+            $('#e2w-selected-item-count').text('0');
 
             // Batch loading variables
             let allProducts = [];
@@ -2541,6 +2757,7 @@
                 const totalFound = products.length;
                 const enabledCount = enabledProducts.length;
                 const disabledCount = disabledProducts.length;
+                $('#e2w-loaded-item-count').text(new Intl.NumberFormat().format(totalFound));
 
                 // Console logging for debugging
                 if (window.ecwidDebugMode) {
@@ -2563,31 +2780,14 @@
                 }
                 statusMessage += '. Select individual products to import.';
 
-                if (selectiveSyncInitialInfoDiv.length) {
-                    // Create clean status message with enabled/disabled button
-                    const disabledButtonStyle = disabledCount > 0 ? '' : 'display: none;';
-                    const styledStatusHtml = `
-                        <div style="background: #d4edda; padding: 10px; margin-bottom: 10px; border: 1px solid #c3e6cb; border-radius: 4px;">
-                            <p style="margin: 0 0 5px 0; font-weight: bold; color: #155724;">✅ Product Loading Complete:</p>
-                            <p style="margin: 0 0 10px 0; font-size: 12px; color: #155724; font-style: normal;">${statusMessage}</p>
-                            <div style="margin: 10px 0;">
-                                <button id="show-enabled-products" class="button button-primary" style="margin-right: 10px;">📦 Enabled Products (${enabledCount})</button>
-                                <button id="show-disabled-products" class="button button-secondary" style="${disabledButtonStyle}">❌ Disabled Products (${disabledCount})</button>
-                            </div>
-                            <details style="margin-top: 10px; font-size: 11px; color: #666;">
-                                <summary style="cursor: pointer;">🔍 Debug Info (click to expand)</summary>
-                                <div style="margin-top: 5px; padding: 5px; background: #f9f9f9; border-radius: 3px;">
-                                    <strong>Total Found:</strong> ${totalFound}<br>
-                                    <strong>Enabled:</strong> ${enabledCount}<br>
-                                    <strong>Disabled:</strong> ${disabledCount}<br>
-                                    <strong>API Calls:</strong> ${apiCalls}<br>
-                                    <strong>Available in Store:</strong> ${total}
-                                </div>
-                            </details>
-                        </div>
-                    `;
-                    selectiveSyncInitialInfoDiv.html(styledStatusHtml);
-                }
+                const disabledButtonStyle = disabledCount > 0 ? '' : 'display:none;';
+                const catalogSwitcher = `
+                    <span class="e2w-catalog-switcher">
+                        <button id="show-enabled-products" class="button button-primary" type="button">Enabled (${enabledCount})</button>
+                        <button id="show-disabled-products" class="button button-secondary" type="button" style="${disabledButtonStyle}">Disabled (${disabledCount})</button>
+                    </span>
+                `;
+                renderSelectiveNotice('ready', 'Products loaded', statusMessage, catalogSwitcher);
 
                 // Store the product arrays for later use
                 window.ecwidEnabledProducts = enabledProducts;
@@ -2596,6 +2796,7 @@
                 // Reset pagination and selection state
                 currentProductPage = 1;
                 selectedProductIds.clear();
+                $('#e2w-selected-item-count').text('0');
 
                 // Show enabled products by default
                 renderProductSelectionList(enabledProducts);
@@ -2613,6 +2814,7 @@
                     $('#show-disabled-products').removeClass('button-primary').addClass('button-secondary');
                     currentProductPage = 1; // Reset to first page
                     selectedProductIds.clear(); // Clear selections when switching
+                    updateImportButtonText();
                     renderProductSelectionList(enabledProducts);
                     if (enabledProducts.length > 0) {
                         importSelectedButton.show();
@@ -2624,6 +2826,7 @@
                     $('#show-enabled-products').removeClass('button-primary').addClass('button-secondary');
                     currentProductPage = 1; // Reset to first page
                     selectedProductIds.clear(); // Clear selections when switching
+                    updateImportButtonText();
                     renderProductSelectionList(disabledProducts);
                     if (disabledProducts.length > 0) {
                         importSelectedButton.show();
@@ -2663,9 +2866,8 @@
                 }
                 
                 productListContainer.html('<p style="color:red;">' + sanitizeHTML(errorMsg) + '</p>');
-                if (selectiveSyncInitialInfoDiv.length) {
-                    selectiveSyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorMsg) + '</span>');
-                }
+                $('#e2w-loaded-item-count').text('0');
+                renderSelectiveNotice('error', 'Unable to load products', String(errorMsg || 'Unknown error'));
                 
                 // Auto-hide error after 5 seconds
                 setTimeout(function() {
@@ -2741,6 +2943,17 @@
                      </li>`;
             
             productsForPage.forEach(function(product, index) {
+                const productId = Number.parseInt(product.id, 10);
+                if (!Number.isSafeInteger(productId) || productId <= 0) {
+                    return;
+                }
+                product = {
+                    ...product,
+                    id: productId,
+                    name: sanitizeHTML(String(product.name || 'N/A')),
+                    sku: sanitizeHTML(String(product.sku || 'N/A'))
+                };
+
                 const bgColor = index % 2 === 0 ? '#fff' : '#f9f9f9';
                 const isSelected = selectedProductIds.has(product.id.toString());
                 html += `<li style="padding: 8px; border-bottom: 1px solid #eee; background: ${bgColor};">
@@ -2865,6 +3078,17 @@
                      </li>`;
             
             categoriesForPage.forEach(function(category, index) {
+                const categoryId = Number.parseInt(category.id, 10);
+                if (!Number.isSafeInteger(categoryId) || categoryId <= 0) {
+                    return;
+                }
+                category = {
+                    ...category,
+                    id: categoryId,
+                    name: sanitizeHTML(String(category.name || 'N/A')),
+                    parentId: Number.parseInt(category.parentId, 10) || 0
+                };
+
                 const bgColor = index % 2 === 0 ? '#fff' : '#f9f9f9';
                 const isSelected = selectedCategoryIds.has(category.id.toString());
                 html += `<li style="padding: 8px; border-bottom: 1px solid #eee; background: ${bgColor};">
@@ -2953,6 +3177,7 @@
             if (!importSelectedCategoriesButton.length) return;
             
             const selectedCount = selectedCategoryIds.size; // Use our maintained Set
+            $('#e2w-selected-item-count').text(new Intl.NumberFormat().format(selectedCount));
             if (selectedCount === 0) {
                 importSelectedCategoriesButton.text(i18n.import_selected_categories || 'Import Selected Categories');
             } else if (selectedCount === 1) {
@@ -2967,6 +3192,7 @@
             if (!importSelectedButton.length) return;
             
             const selectedCount = selectedProductIds.size; // Use our maintained Set
+            $('#e2w-selected-item-count').text(new Intl.NumberFormat().format(selectedCount));
             if (selectedCount === 0) {
                 importSelectedButton.text(i18n.import_selected || 'Import Selected Products');
             } else if (selectedCount === 1) {
@@ -3037,6 +3263,7 @@
                     data: {
                         action: 'ecwid_wc_import_selected_products',
                         nonce: nonce,
+                        sync_id: getSyncJobId('selected-products'),
                         ecwid_product_id: ecwidProductId
                     },
                     success: function(response) {
@@ -3097,6 +3324,7 @@
                 logMessage(selectiveSyncLogDiv, i18n.sync_complete, 'success');
                 importSelectedButton.removeClass('disabled').text(i18n.import_selected);
                 loadProductsButton.removeClass('disabled');
+                releaseSyncJob();
                 updateProgressBar(selectiveSyncProgressBar, 100);
             }
         }
@@ -3138,6 +3366,7 @@
                 data: {
                     action: 'ecwid_wc_process_variation_batch',
                     nonce: nonce,
+                    sync_id: getSyncJobId('selected-products'),
                     wc_product_id: wc_product_id,
                     ecwid_product_id: ecwid_product_id, 
                     item_name: item_name, // item_name is used by PHP for logging
@@ -3215,79 +3444,6 @@
             overallProgress = Math.min(overallProgress, 100); 
             updateProgressBar(selectiveSyncProgressBar, overallProgress); 
         }
-
-        // Category Import Button Handler
-        importSelectedCategoriesButton.on('click', function(e) {
-            e.preventDefault();
-            if (importSelectedCategoriesButton.hasClass('disabled')) return;
-
-            const categoriesToImportIds = Array.from(selectedCategoryIds); // Use global selection across all pages
-
-            if (categoriesToImportIds.length === 0) {
-                // amazonq-ignore-next-line
-                alert(i18n.no_categories_selected);
-                return;
-            }
-
-            importSelectedCategoriesButton.addClass('disabled').text('Importing Categories...');
-            loadCategoriesButton.addClass('disabled');
-            categorySyncInitialInfoDiv.text('Importing selected categories...');
-            categoryListContainer.hide();
-
-            // Create a simple status message
-            const statusMessage = `Importing ${categoriesToImportIds.length} selected categories...`;
-            if (selectiveSyncStatusDiv.length) {
-                selectiveSyncStatusDiv.text(statusMessage);
-            }
-
-            $.ajax({
-                url: ajax_url,
-                method: 'POST',
-                data: {
-                    action: 'ecwid_wc_import_selected_categories',
-                    nonce: nonce,
-                    category_ids: categoriesToImportIds
-                },
-                success: function(response) {
-                    if (response.success) {
-                        const resultMessage = `Successfully imported ${categoriesToImportIds.length} categories!`;
-                        if (selectiveSyncStatusDiv.length) {
-                            selectiveSyncStatusDiv.text(resultMessage);
-                        }
-                        if (categorySyncInitialInfoDiv.length) {
-                            categorySyncInitialInfoDiv.text(resultMessage + ' You can select more categories or reload the list.');
-                        }
-                        
-                        // Log details if available
-                        if (selectiveSyncLogDiv.length) {
-                            (response.data.logs || []).forEach(log => categorizeAndLog(selectiveSyncLogDiv, log));
-                        }
-                    } else {
-                        const errorMsg = response.data && response.data.message ? response.data.message : 'Unknown error occurred.';
-                        if (selectiveSyncStatusDiv.length) {
-                            selectiveSyncStatusDiv.text('Error: ' + errorMsg);
-                        }
-                        if (categorySyncInitialInfoDiv.length) {
-                            categorySyncInitialInfoDiv.html('<span style="color:red;">Error: ' + sanitizeHTML(errorMsg) + '</span>');
-                        }
-                    }
-                },
-                error: function(jqXHR, textStatus, errorThrown) {
-                    const errorText = 'AJAX Error: ' + textStatus + (errorThrown ? ' - ' + errorThrown : '');
-                    if (selectiveSyncStatusDiv.length) {
-                        selectiveSyncStatusDiv.text(errorText);
-                    }
-                    if (categorySyncInitialInfoDiv.length) {
-                        categorySyncInitialInfoDiv.html('<span style="color:red;">' + sanitizeHTML(errorText) + '</span>');
-                    }
-                },
-                complete: function() {
-                    importSelectedCategoriesButton.removeClass('disabled').text(i18n.import_selected_categories || 'Import Selected Categories');
-                    loadCategoriesButton.removeClass('disabled');
-                    categoryListContainer.show();
-                }
-            });
-        });
 
         // Sync All Categories Button Handler - Uses batch processing like full sync
         if (syncAllCategoriesButton.length) {
@@ -3394,6 +3550,7 @@
                         data: {
                             action: 'ecwid_wc_batch_category_sync',
                             nonce: nonce,
+                            sync_id: getSyncJobId('all-categories'),
                             offset: state.offset,
                             batch_size: state.batchSize
                         },
@@ -3487,6 +3644,7 @@
                 // Function to clean up after sync completes or fails
                 function finishCategorySync() {
                     categorySyncRequest = null;
+                    releaseSyncJob();
                     
                     // Re-enable buttons
                     syncAllCategoriesButton.removeClass('disabled').text('Import All Categories');
@@ -3595,6 +3753,7 @@
                         data: {
                             action: 'ecwid_wc_sync_all_products',
                             nonce: nonce,
+                            sync_id: getSyncJobId('all-products'),
                             offset: state.offset,
                             batch_size: state.batchSize // Send batch size for adaptive sizing
                         },
@@ -3743,6 +3902,7 @@
 
                 // Function to clean up after sync completes or fails
                 function finishProductSync(state) {
+                    releaseSyncJob();
                     // Re-enable buttons and show UI elements
                     syncAllProductsButton.removeClass('disabled').text('Import All Products');
                     loadProductsButton.removeClass('disabled');
@@ -3779,6 +3939,7 @@
                 
                 // Set cancellation flag
                 isProductSyncCancelled = true;
+                releaseSyncJob();
                 
                 // Update UI immediately
                 updateStatus(selectiveSyncStatusDiv, 'Stopping product import...');
@@ -3812,6 +3973,7 @@
                 
                 // Set cancellation flag and abort request
                 isCategorySyncCancelled = true;
+                releaseSyncJob();
                 if (categorySyncRequest) {
                     categorySyncRequest.abort();
                     categorySyncRequest = null;
@@ -3856,7 +4018,7 @@
                 $.ajax({
                     url: ajax_url,
                     method: 'POST',
-                    data: { action: 'fix_category_hierarchy', nonce: nonce },
+                    data: { action: 'fix_category_hierarchy', nonce: nonce, sync_id: getSyncJobId('category-hierarchy') },
                     success: function(response) {
                         if (response.success) {
                             categoryPageSyncStatusDiv.text('Category hierarchies fixed! ' + (response.data.fixed_count || 0) + ' categories updated.');
@@ -3866,10 +4028,12 @@
                             handleAjaxError(categoryPageSyncStatusDiv, categoryPageSyncLogDiv, null, null, 'Fix Hierarchy', response.data);
                         }
                         $button.removeClass('disabled').text('Fix Category Hierarchy');
+                        releaseSyncJob();
                     },
                     error: function(jqXHR, textStatus, errorThrown) {
-                         handleAjaxError(categoryPageSyncStatusDiv, categoryPageSyncLogDiv, null, null, 'Fix Hierarchy', { message: `${textStatus} ${errorThrown || ''}` }, true);
+                        handleAjaxError(categoryPageSyncStatusDiv, categoryPageSyncLogDiv, null, null, 'Fix Hierarchy', { message: `${textStatus} ${errorThrown || ''}` }, true);
                         $button.removeClass('disabled').text('Fix Category Hierarchy');
+                        releaseSyncJob();
                     }
                 });
             });
@@ -3895,6 +4059,7 @@
                 // Clear connection status when inputs change
                 storeIdInput.add(tokenInput).on('input', function() {
                     $('#test-connection-result').hide().removeClass('success error');
+                    setSettingsState('paused', 'Unsaved changes');
                 });
             }
             
@@ -3927,6 +4092,7 @@
             const button = $('#test-api-connection');
             const originalText = button.text();
             const resultDiv = $('#test-connection-result');
+            setSettingsState('loading', 'Checking');
             
             if (!isAutoTest) {
                 button.html('<span class="loading-spinner"></span>' + (i18n.testing_connection || 'Testing...')).prop('disabled', true);
@@ -3943,8 +4109,9 @@
                 },
                 success: function(response) {
                     if (response.success) {
+                        setSettingsState('success', 'Connected');
                         resultDiv.addClass('success')
-                                .html('<strong>✅ ' + (i18n.connection_successful || 'CONNECTION SUCCESSFUL!') + '</strong><br>' + response.data.message)
+                                .html('<strong>✅ ' + (i18n.connection_successful || 'CONNECTION SUCCESSFUL!') + '</strong><br>' + sanitizeHTML((response.data && response.data.message) || ''))
                                 .show();
                         
                         // Add subtle success animation for nav buttons
@@ -3953,12 +4120,14 @@
                             $('.nav-buttons-grid .nav-button').removeClass('connection-success');
                         }, 2000);
                     } else {
+                        setSettingsState('error', 'Needs attention');
                         resultDiv.addClass('error')
-                                .html('<strong>❌ ' + (i18n.connection_failed || 'CONNECTION FAILED') + '</strong><br>' + response.data.message)
+                                .html('<strong>❌ ' + (i18n.connection_failed || 'CONNECTION FAILED') + '</strong><br>' + sanitizeHTML((response.data && response.data.message) || ''))
                                 .show();
                     }
                 },
                 error: function() {
+                    setSettingsState('error', 'Connection error');
                     resultDiv.addClass('error')
                             .html('<strong>❌ CONNECTION ERROR</strong><br>' + (i18n.connection_test_failed || 'Connection test failed. Please try again.'))
                             .show();
@@ -3991,7 +4160,7 @@
                 },
                 success: function(response) {
                     if (response.success) {
-                        const diag = response.data.diagnostics;
+                        const diag = adminUtils.escapeObjectStrings(response.data.diagnostics || {});
                         
                         // Helper function for status indicator
                         function getStatusIcon(isGood) {
@@ -4134,7 +4303,7 @@
                         resultDiv.addClass('success').html(html).show();
                     } else {
                         resultDiv.addClass('error')
-                                .html('<strong>❌ Diagnostics Failed</strong><br>' + response.data.message)
+                                .html('<strong>❌ Diagnostics Failed</strong><br>' + sanitizeHTML((response.data && response.data.message) || ''))
                                 .show();
                     }
                 },
@@ -4342,7 +4511,7 @@
             } else {
                 $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
                 $('.ecwid-loading-title').html('❌ Loading Failed');
-                $('.ecwid-loading-status').html('Error: ' + (response.data && response.data.message ? response.data.message : 'Unknown error occurred'));
+                $('.ecwid-loading-status').html('Error: ' + sanitizeHTML(response.data && response.data.message ? response.data.message : 'Unknown error occurred'));
                 
                 if (window.ecwidDebugMode) {
                     console.log('=== ORDER LOADING ERROR ===');
@@ -4371,7 +4540,7 @@
             
             $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
             $('.ecwid-loading-title').html('❌ Connection Failed');
-            $('.ecwid-loading-status').html(errorMessage);
+            $('.ecwid-loading-status').html(sanitizeHTML(errorMessage));
             
             orderListContainer.html('<p style="color:red;">Failed to load orders. Please check your connection and try again.</p>');
             if (orderSyncInitialInfoDiv.length) {
@@ -4437,14 +4606,16 @@
         
         ordersForPage.forEach(function(order, index) {
             const bgColor = index % 2 === 0 ? '#fff' : '#f9f9f9';
-            const isSelected = selectedOrderIds.has(order.orderNumber.toString());
             const orderNumber = order.orderNumber || order.vendorOrderNumber || 'N/A';
+            const safeOrderNumber = sanitizeHTML(String(orderNumber));
+            const isSelected = selectedOrderIds.has(String(orderNumber));
             const orderEmail = order.email || 'N/A';
-            const orderTotal = order.total ? `$${parseFloat(order.total).toFixed(2)}` : 'N/A';
-            const paymentStatus = order.paymentStatus || 'Unknown';
-            const fulfillmentStatus = order.fulfillmentStatus || 'Unknown';
+            const parsedOrderTotal = Number.parseFloat(order.total);
+            const orderTotal = Number.isFinite(parsedOrderTotal) ? `$${parsedOrderTotal.toFixed(2)}` : 'N/A';
+            const paymentStatus = sanitizeHTML(String(order.paymentStatus || 'Unknown'));
+            const fulfillmentStatus = sanitizeHTML(String(order.fulfillmentStatus || 'Unknown'));
             const createDate = order.createDate ? new Date(order.createDate).toLocaleDateString() : 'N/A';
-            const customerAssociation = order.customer_association || {};
+            const customerAssociation = adminUtils.escapeObjectStrings(order.customer_association || {});
             
             // Customer association display
             let customerInfo = '';
@@ -4456,9 +4627,9 @@
             
             html += `<li style="padding: 8px; border-bottom: 1px solid #eee; background: ${bgColor};">
                         <label style="display: flex; align-items: flex-start; cursor: pointer;">
-                            <input type="checkbox" class="ecwid-order-select" value="${orderNumber}" ${isSelected ? 'checked' : ''} style="margin-right: 8px; margin-top: 2px;" />
+                            <input type="checkbox" class="ecwid-order-select" value="${safeOrderNumber}" ${isSelected ? 'checked' : ''} style="margin-right: 8px; margin-top: 2px;" />
                             <div style="flex: 1;">
-                                <strong>Order #${sanitizeHTML(orderNumber.toString())}</strong> - ${orderTotal}<br>
+                                <strong>Order #${safeOrderNumber}</strong> - ${orderTotal}<br>
                                 <small style="color: #666; line-height: 1.4;">
                                     Email: ${sanitizeHTML(orderEmail)} | Date: ${createDate}<br>
                                     Payment: <span style="color: ${paymentStatus === 'PAID' ? 'green' : 'orange'};">${paymentStatus}</span> | 
@@ -4675,7 +4846,7 @@
             } else {
                 $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
                 $('.ecwid-loading-title').html('❌ Loading Failed');
-                $('.ecwid-loading-status').html('Error: ' + (response.data && response.data.message ? response.data.message : 'Unknown error occurred'));
+                $('.ecwid-loading-status').html('Error: ' + sanitizeHTML(response.data && response.data.message ? response.data.message : 'Unknown error occurred'));
                 
                 if (window.ecwidDebugMode) {
                     console.log('=== CUSTOMER LOADING ERROR ===');
@@ -4704,7 +4875,7 @@
             
             $('.ecwid-loading-spinner .dashicons').removeClass('dashicons-update').addClass('dashicons-no-alt');
             $('.ecwid-loading-title').html('❌ Connection Failed');
-            $('.ecwid-loading-status').html(errorMessage);
+            $('.ecwid-loading-status').html(sanitizeHTML(errorMessage));
             
             customerListContainer.html('<p style="color:red;">Failed to load customers. Please check your connection and try again.</p>');
             if (customerSyncInitialInfoDiv.length) {
@@ -4769,21 +4940,26 @@
                  </li>`;
         
         customersForPage.forEach(function(customer, index) {
+            const customerId = Number.parseInt(customer.id, 10);
+            if (!Number.isSafeInteger(customerId) || customerId <= 0) {
+                return;
+            }
             const bgColor = index % 2 === 0 ? '#fff' : '#f9f9f9';
-            const isSelected = selectedCustomerIds.has(customer.id.toString());
+            const isSelected = selectedCustomerIds.has(customerId.toString());
             const customerName = customer.name || 'N/A';
             const customerEmail = customer.email || 'N/A';
-            const ordersCount = customer.stats && customer.stats.ordersCount ? customer.stats.ordersCount : 0;
-            const totalOrderValue = customer.stats && customer.stats.totalOrderValue ? customer.stats.totalOrderValue : 0;
+            const ordersCount = Number.parseInt(customer.stats && customer.stats.ordersCount, 10) || 0;
+            const parsedOrderValue = Number.parseFloat(customer.stats && customer.stats.totalOrderValue);
+            const totalOrderValue = Number.isFinite(parsedOrderValue) ? parsedOrderValue : 0;
             const registeredDate = customer.registered ? new Date(customer.registered).toLocaleDateString() : 'N/A';
             
             html += `<li style="padding: 8px; border-bottom: 1px solid #eee; background: ${bgColor};">
                         <label style="display: flex; align-items: center; cursor: pointer;">
-                            <input type="checkbox" class="ecwid-customer-select" value="${customer.id}" ${isSelected ? 'checked' : ''} style="margin-right: 8px;" />
+                            <input type="checkbox" class="ecwid-customer-select" value="${customerId}" ${isSelected ? 'checked' : ''} style="margin-right: 8px;" />
                             <div>
                                 <strong>${sanitizeHTML(customerName)}</strong><br>
                                 <small style="color: #666;">
-                                    Email: ${sanitizeHTML(customerEmail)} | ID: ${customer.id} | 
+                                    Email: ${sanitizeHTML(customerEmail)} | ID: ${customerId} |
                                     Orders: ${ordersCount} | Total Value: $${totalOrderValue.toFixed(2)} | 
                                     Registered: ${registeredDate}
                                 </small>

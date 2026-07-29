@@ -4,7 +4,7 @@ Plugin Name: Metrotechs E2W Sync
 Description: Professional Ecwid to WooCommerce synchronization plugin by Metrotechs.
 Plugin URI: https://metrotechs.io/plugins/ecwid2woo/
 Author URI: https://metrotechs.io
-Version: 1.6.0
+Version: 1.6.1
 Author: Metrotechs
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -12,7 +12,7 @@ Text Domain: metrotechs-e2w-sync
 Requires at least: 5.0
 Requires PHP: 7.2
 WC requires at least: 3.0
-WC tested up to: 9.2
+WC tested up to: 10.9
 */
 
 // Exit if accessed directly
@@ -49,6 +49,10 @@ function ecwid2woo_activation_check() {
 }
 
 function ecwid2woo_check_woocommerce_dependency() {
+    if (!ecwid2woo_is_admin_sync_context()) {
+        return;
+    }
+
     if (!class_exists('WooCommerce')) {
         add_action('admin_notices', 'ecwid2woo_woocommerce_missing_notice');
         return;
@@ -56,6 +60,19 @@ function ecwid2woo_check_woocommerce_dependency() {
     
     // WooCommerce is available, initialize the plugin
     new Ecwid_WC_Sync();
+}
+
+/**
+ * Determine whether the sync administration runtime is needed for this request.
+ *
+ * The plugin has no storefront hooks. Keeping its sync handlers out of public
+ * requests avoids loading the category, product, and full-sync implementations
+ * when a shopper views the site.
+ *
+ * @return bool
+ */
+function ecwid2woo_is_admin_sync_context() {
+    return is_admin() || (function_exists('wp_doing_ajax') && wp_doing_ajax());
 }
 
 function ecwid2woo_woocommerce_missing_notice() {
@@ -87,7 +104,8 @@ function ecwid2woo_detect_server_capabilities() {
     // Get PHP memory limit
     $memory_limit = ini_get('memory_limit');
     $memory_bytes = wp_convert_hr_to_bytes($memory_limit);
-    $memory_mb = $memory_bytes / (1024 * 1024);
+    $memory_is_unlimited = ($memory_bytes === -1);
+    $memory_mb = $memory_is_unlimited ? 0 : ($memory_bytes / (1024 * 1024));
 
     // Detect ACTUAL system RAM (not just PHP's memory_limit).
     // PHP memory_limit can be 512M on a 1GB VPS — the server can't actually use that
@@ -100,6 +118,12 @@ function ecwid2woo_detect_server_capabilities() {
         if ($meminfo && preg_match('/MemTotal:\s+(\d+)\s+kB/', $meminfo, $matches)) {
             $system_ram_mb = (int) ($matches[1] / 1024);
         }
+    }
+
+    // PHP uses -1 to represent no per-process memory cap. In that case,
+    // use detected system RAM for sizing instead of treating -1 as zero.
+    if ($memory_is_unlimited) {
+        $memory_mb = $system_ram_mb > 0 ? $system_ram_mb : 4096;
     }
 
     // Use the LOWER of PHP memory_limit and actual system RAM for tier detection.
@@ -155,24 +179,18 @@ function ecwid2woo_detect_server_capabilities() {
         'low' => [
             'products' => max(2, intval($product_max * 0.15)),  // 3 products — safe for 1GB servers
             'categories' => max(10, intval($category_max * 0.2)), // 10 categories
-            'customers' => 10,
-            'orders' => 10,
             'batch_delay' => 10000, // 10 seconds — give tiny servers time to recover
             'description' => 'Low-resource server (< 2GB system RAM)'
         ],
         'medium' => [
             'products' => max(5, intval($product_max * 0.4)),   // 8 products
             'categories' => max(15, intval($category_max * 0.5)), // 25 categories
-            'customers' => 15,
-            'orders' => 15,
             'batch_delay' => 5000, // 5 seconds
             'description' => 'Medium-resource server (2-4GB system RAM)'
         ],
         'high' => [
             'products' => $product_max,                          // 20 products
             'categories' => $category_max,                       // 50 categories
-            'customers' => 25,
-            'orders' => 25,
             'batch_delay' => 3000, // 3 seconds
             'description' => 'High-resource server (4GB+ RAM / VPS)'
         ]
@@ -218,21 +236,20 @@ function ecwid2woo_detect_server_capabilities() {
         'max_execution_time' => $max_execution_time,
         'products_batch' => $config['products'],
         'categories_batch' => $config['categories'],
-        'customers_batch' => $config['customers'],
-        'orders_batch' => $config['orders'],
         'batch_delay_ms' => $config['batch_delay'],
         'image_throttle' => $image_config,
         'description' => $config['description']
     ];
 }
 
-define('ECWID2WOO_VERSION', '1.6.0');
+define('ECWID2WOO_VERSION', '1.6.1');
 
 class Ecwid_WC_Sync {
     private $options;
-    private $sync_steps = ['categories', 'products', 'customers', 'orders']; // Define order of sync for full sync
+    private $sync_steps = ['categories', 'products']; // Only shipped sync handlers belong in full sync.
     private $ecwid_currency = null; // Cache for Ecwid store currency
     private $wc_currency = null; // Cache for WooCommerce base currency
+    private $sync_request_deadline = null;
 
     // Define slugs for the admin pages
     public $settings_slug = 'ecwid-sync-settings';
@@ -240,12 +257,8 @@ class Ecwid_WC_Sync {
     public $partial_sync_slug = 'ecwid-sync-partial';
     public $category_sync_slug = 'ecwid-sync-categories';
     public $product_sync_slug = 'ecwid-sync-products';
-    public $customer_sync_slug = 'ecwid-sync-customers';
-    public $order_sync_slug = 'ecwid-sync-orders';
     public $category_sync_handler; // Category sync handler instance
     public $product_sync_handler; // Product sync handler instance
-    public $customer_sync_handler; // Customer sync handler instance
-    public $order_sync_handler; // Order sync handler instance
     private $full_sync_handler; // Full sync handler instance
 
     public function __construct() {
@@ -272,22 +285,6 @@ class Ecwid_WC_Sync {
         require_once plugin_dir_path(__FILE__) . 'full-sync-page.php';
         $this->full_sync_handler = new Ecwid2Woo_Full_Sync($this);
         
-        // Include and initialize the customer sync handler (if available)
-        $customer_sync_file = plugin_dir_path(__FILE__) . 'customer-sync-page.php';
-        if (file_exists($customer_sync_file)) {
-            // amazonq-ignore-next-line
-            require_once $customer_sync_file;
-            $this->customer_sync_handler = new Ecwid2Woo_Customer_Sync($this);
-        }
-
-        // Include and initialize the order sync handler (if available)
-        $order_sync_file = plugin_dir_path(__FILE__) . 'order-sync-page.php';
-        if (file_exists($order_sync_file)) {
-            // amazonq-ignore-next-line
-            require_once $order_sync_file;
-            $this->order_sync_handler = new Ecwid2Woo_Order_Sync($this);
-        }
-        
         add_action('init', [$this, 'register_placeholder_cpt']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_init', [$this, 'settings_init']);
@@ -299,6 +296,213 @@ class Ecwid_WC_Sync {
         add_action('wp_ajax_ecwid_wc_debug_info', [$this, 'ajax_debug_info']); // Add debug endpoint
         // amazonq-ignore-next-line
         add_action('wp_ajax_ecwid_wc_process_variation_batch', [$this, 'ajax_process_variation_batch']); // Add missing variation batch handler
+
+        // Enforce one catalog mutation job at a time across tabs, users, and
+        // PHP workers. Priority 1 ensures the lock is checked before handlers.
+        $locked_ajax_actions = [
+            'ecwid_wc_batch_sync',
+            'ecwid_wc_process_variation_batch',
+            'ecwid_wc_import_selected_products',
+            'ecwid_wc_sync_all_products',
+            'ecwid_wc_import_selected_categories',
+            'ecwid_wc_sync_all_categories',
+            'ecwid_wc_batch_category_sync',
+            'fix_category_hierarchy',
+        ];
+        foreach ($locked_ajax_actions as $locked_ajax_action) {
+            // amazonq-ignore-next-line
+            add_action('wp_ajax_' . $locked_ajax_action, [$this, 'ajax_enforce_sync_lock'], 1);
+        }
+        // amazonq-ignore-next-line
+        add_action('wp_ajax_ecwid_wc_release_sync_lock', [$this, 'ajax_release_sync_lock']);
+    }
+
+    /**
+     * Return the duration of an inactive sync lease.
+     *
+     * Each mutation request refreshes the lease. The upper bound prevents a
+     * bad filter from leaving a site permanently locked.
+     *
+     * @return int Lease duration in seconds.
+     */
+    private function get_sync_lock_ttl() {
+        $ttl = (int) apply_filters('ecwid2woo_sync_lock_ttl', 15 * MINUTE_IN_SECONDS);
+        return max(MINUTE_IN_SECONDS, min(HOUR_IN_SECONDS, $ttl));
+    }
+
+    /**
+     * Start a request-wide sync deadline that includes API time and imports.
+     *
+     * @param int $default_seconds Default request budget.
+     * @return float Absolute microtime deadline.
+     */
+    public function start_sync_request_deadline($default_seconds = 55) {
+        $seconds = (int) apply_filters('ecwid2woo_max_ajax_sync_seconds', $default_seconds);
+        $seconds = max(20, min(75, $seconds));
+        $this->sync_request_deadline = microtime(true) + $seconds;
+        return $this->sync_request_deadline;
+    }
+
+    /**
+     * Return whether the current request is too close to its response deadline.
+     *
+     * @param int $reserve_seconds Time reserved for cleanup and JSON output.
+     * @return bool
+     */
+    public function is_sync_request_deadline_near($reserve_seconds = 5) {
+        return is_float($this->sync_request_deadline)
+            && microtime(true) >= ($this->sync_request_deadline - max(1, (int) $reserve_seconds));
+    }
+
+    /**
+     * Validate a browser-generated sync job identifier.
+     *
+     * @param string $sync_id Candidate job identifier.
+     * @return bool
+     */
+    private function is_valid_sync_id($sync_id) {
+        return is_string($sync_id) && preg_match('/^[a-z0-9_-]{16,100}$/', $sync_id) === 1;
+    }
+
+    /**
+     * Atomically acquire or refresh the global catalog mutation lock.
+     *
+     * add_option() provides the initial atomic insert. Existing or expired
+     * leases are refreshed with a database compare-and-swap so two workers
+     * cannot both reclaim the same stale lock.
+     *
+     * @param string $sync_id Browser job identifier.
+     * @param string $scope Current AJAX action.
+     * @return true|WP_Error
+     */
+    public function acquire_sync_lock($sync_id, $scope) {
+        if (!$this->is_valid_sync_id($sync_id)) {
+            return new WP_Error('invalid_sync_id', __('Invalid or missing sync job identifier. Refresh the page and try again.', 'metrotechs-e2w-sync'));
+        }
+
+        $option_name = 'ecwid2woo_active_sync_lock';
+        $now = time();
+        $expires_at = $now + $this->get_sync_lock_ttl();
+        $new_lock = [
+            'owner' => $sync_id,
+            'scope' => sanitize_key($scope),
+            'started_at' => $now,
+            'expires_at' => $expires_at,
+        ];
+        $new_value = wp_json_encode($new_lock);
+
+        if (add_option($option_name, $new_value, '', false)) {
+            return true;
+        }
+
+        $current_value = get_option($option_name, '');
+        $current_lock = is_string($current_value) ? json_decode($current_value, true) : null;
+        $current_owner = is_array($current_lock) ? (string) ($current_lock['owner'] ?? '') : '';
+        $current_expiry = is_array($current_lock) ? (int) ($current_lock['expires_at'] ?? 0) : 0;
+
+        $same_owner = hash_equals($current_owner, $sync_id);
+        $is_expired = $current_expiry <= $now;
+        if (!$same_owner && !$is_expired) {
+            return new WP_Error(
+                'sync_locked',
+                __('Another Ecwid2Woo catalog sync is already running. Stop it or wait for its lock to expire before starting another.', 'metrotechs-e2w-sync'),
+                [
+                    'scope' => sanitize_key((string) ($current_lock['scope'] ?? 'sync')),
+                    'expires_at' => $current_expiry,
+                ]
+            );
+        }
+
+        if ($same_owner && isset($current_lock['started_at'])) {
+            $new_lock['started_at'] = (int) $current_lock['started_at'];
+            $new_value = wp_json_encode($new_lock);
+        }
+
+        global $wpdb;
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Atomic compare-and-swap is required for cross-worker lock safety.
+        $updated = $wpdb->query($wpdb->prepare(
+            "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s",
+            $new_value,
+            $option_name,
+            $current_value
+        ));
+
+        if ($updated === 1) {
+            wp_cache_delete($option_name, 'options');
+            return true;
+        }
+
+        return new WP_Error('sync_lock_race', __('Another sync started at the same time. Please wait and try again.', 'metrotechs-e2w-sync'));
+    }
+
+    /**
+     * Release the global lock only when the caller still owns it.
+     *
+     * @param string $sync_id Browser job identifier.
+     * @return bool Whether the owned lock was released.
+     */
+    public function release_sync_lock($sync_id) {
+        if (!$this->is_valid_sync_id($sync_id)) {
+            return false;
+        }
+
+        $option_name = 'ecwid2woo_active_sync_lock';
+        $current_value = get_option($option_name, '');
+        $current_lock = is_string($current_value) ? json_decode($current_value, true) : null;
+        $current_owner = is_array($current_lock) ? (string) ($current_lock['owner'] ?? '') : '';
+        if ($current_owner === '' || !hash_equals($current_owner, $sync_id)) {
+            return false;
+        }
+
+        global $wpdb;
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Atomic owner-checked deletion prevents releasing another worker's lock.
+        $deleted = $wpdb->query($wpdb->prepare(
+            "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s",
+            $option_name,
+            $current_value
+        ));
+        if ($deleted === 1) {
+            wp_cache_delete($option_name, 'options');
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * AJAX priority hook that enforces the catalog mutation lock.
+     */
+    public function ajax_enforce_sync_lock() {
+        if (!check_ajax_referer('ecwid_wc_sync_nonce', 'nonce', false)) {
+            wp_send_json_error(['message' => __('Security check failed. Please refresh the page and try again.', 'metrotechs-e2w-sync')], 403);
+        }
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
+        }
+
+        $sync_id = isset($_POST['sync_id']) ? sanitize_key(wp_unslash($_POST['sync_id'])) : '';
+        $result = $this->acquire_sync_lock($sync_id, current_action());
+        if (is_wp_error($result)) {
+            $error_data = $result->get_error_data();
+            wp_send_json_error([
+                'message' => $result->get_error_message(),
+                'code' => $result->get_error_code(),
+                'lock' => is_array($error_data) ? $error_data : null,
+            ], $result->get_error_code() === 'invalid_sync_id' ? 400 : 409);
+        }
+    }
+
+    /**
+     * AJAX endpoint used by the browser when a sync completes or is stopped.
+     */
+    public function ajax_release_sync_lock() {
+        check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
+        }
+
+        $sync_id = isset($_POST['sync_id']) ? sanitize_key(wp_unslash($_POST['sync_id'])) : '';
+        wp_send_json_success(['released' => $this->release_sync_lock($sync_id)]);
     }
 
     /**
@@ -453,27 +657,6 @@ class Ecwid_WC_Sync {
             [$this, 'options_page_router']
         );
 
-        // Customer and Order sync menus hidden until fully tested
-        /*
-        add_submenu_page(
-            $this->settings_slug,
-            __('Customer Sync', 'metrotechs-e2w-sync'),
-            __('Customer Sync', 'metrotechs-e2w-sync'),
-            'manage_options',
-            $this->customer_sync_slug,
-            [$this, 'options_page_router']
-        );
-
-        add_submenu_page(
-            $this->settings_slug,
-            __('Order Sync', 'metrotechs-e2w-sync'),
-            __('Order Sync', 'metrotechs-e2w-sync'),
-            'manage_options',
-            $this->order_sync_slug,
-            [$this, 'options_page_router']
-        );
-        */
-
         // Add the Placeholders CPT as the last submenu item
         add_submenu_page(
             $this->settings_slug,                         // Parent slug
@@ -606,6 +789,9 @@ class Ecwid_WC_Sync {
 
     public function sanitize_options($input) {
         $sanitized = array();
+
+        // Settings changes can alter credentials or sync behavior; never reuse an old preview.
+        delete_transient('ecwid2woo_full_sync_preview');
         
         // Sanitize store_id - should be numeric
         if (isset($input['store_id'])) {
@@ -651,18 +837,31 @@ class Ecwid_WC_Sync {
 
     public function options_page_router() {
         // Enqueue CSS and JS from assets folders
-        wp_enqueue_style('ecwid-wc-sync-admin-css', plugin_dir_url(__FILE__) . 'assets/css/admin-styles.css', [], ECWID2WOO_VERSION);
+        $css_version = ECWID2WOO_VERSION . '.' . filemtime(plugin_dir_path(__FILE__) . 'assets/css/admin-styles.css');
+        wp_enqueue_style('ecwid-wc-sync-admin-css', plugin_dir_url(__FILE__) . 'assets/css/admin-styles.css', [], $css_version);
+        $utils_version = ECWID2WOO_VERSION . '.' . filemtime(plugin_dir_path(__FILE__) . 'assets/js/admin-utils.js');
         $js_version = ECWID2WOO_VERSION . '.' . filemtime(plugin_dir_path(__FILE__) . 'assets/js/admin-sync.js');
-        wp_enqueue_script('ecwid-wc-sync-admin', plugin_dir_url(__FILE__) . 'assets/js/admin-sync.js', ['jquery', 'wp-i18n'], $js_version, true);
+        wp_enqueue_script('ecwid-wc-sync-admin-utils', plugin_dir_url(__FILE__) . 'assets/js/admin-utils.js', [], $utils_version, true);
+        wp_enqueue_script('ecwid-wc-sync-admin', plugin_dir_url(__FILE__) . 'assets/js/admin-sync.js', ['jquery', 'wp-i18n', 'ecwid-wc-sync-admin-utils'], $js_version, true);
         
         // Detect server capabilities for automatic batch size adjustment
         $server_capabilities = ecwid2woo_detect_server_capabilities();
+        $configured_variation_batch = defined('ECWID2WOO_VARIATION_BATCH_SIZE') ? ECWID2WOO_VARIATION_BATCH_SIZE : 50;
+        if (!empty($this->options['manual_batch_override']) && !empty($this->options['manual_variations_batch'])) {
+            $variation_batch_size = max(1, min(100, (int) $this->options['manual_variations_batch']));
+        } elseif ($server_capabilities['server_tier'] === 'low') {
+            $variation_batch_size = min(10, $configured_variation_batch);
+        } elseif ($server_capabilities['server_tier'] === 'medium') {
+            $variation_batch_size = min(25, $configured_variation_batch);
+        } else {
+            $variation_batch_size = $configured_variation_batch;
+        }
         
         wp_localize_script('ecwid-wc-sync-admin', 'ecwid_sync_params', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce'    => wp_create_nonce('ecwid_wc_sync_nonce'),
             'sync_steps' => $this->sync_steps,
-            'variation_batch_size' => defined('ECWID2WOO_VARIATION_BATCH_SIZE') ? ECWID2WOO_VARIATION_BATCH_SIZE : 50,
+            'variation_batch_size' => $variation_batch_size,
             'server_capabilities' => $server_capabilities,
             'manual_batch_override' => !empty($this->options['manual_batch_override']) ? true : false,
             'manual_batch_sizes' => [
@@ -695,12 +894,6 @@ class Ecwid_WC_Sync {
                 'no_products_selected' => __('No products selected for import.', 'metrotechs-e2w-sync'),
                 'select_all_none' => __('Select All/None', 'metrotechs-e2w-sync'),
                 'no_products_found' => __('No enabled products found in Ecwid store or failed to fetch.', 'metrotechs-e2w-sync'),
-                'no_customers_found' => __('No customers found or access denied.', 'metrotechs-e2w-sync'),
-                'no_orders_found' => __('No orders found or access denied.', 'metrotechs-e2w-sync'),
-                'loading_customers' => __('Loading Customers...', 'metrotechs-e2w-sync'),
-                'loading_orders' => __('Loading Orders...', 'metrotechs-e2w-sync'),
-                'customers_to_sync_info' => __('Customers to sync: {count}', 'metrotechs-e2w-sync'),
-                'orders_to_sync_info' => __('Orders to sync: {count}', 'metrotechs-e2w-sync'),
                 'start_category_sync_page' => __('Start Category Sync', 'metrotechs-e2w-sync'),
                 'syncing_categories_page_button' => __('Syncing Categories...', 'metrotechs-e2w-sync'),
                 'category_sync_page_complete' => __('Category Sync Complete!', 'metrotechs-e2w-sync'),
@@ -736,29 +929,7 @@ class Ecwid_WC_Sync {
                 'no_categories_selected' => __('No categories selected for import.', 'metrotechs-e2w-sync'),
                 'categories_import_complete' => __('Selected categories import complete!', 'metrotechs-e2w-sync'),
                 'load_categories' => __('Load Ecwid Categories', 'metrotechs-e2w-sync'),
-                'loading_categories' => __('Loading Categories...', 'metrotechs-e2w-sync'),
-                
-                // Customer Sync i18n
-                'loading_customers' => __('Loading Customers...', 'metrotechs-e2w-sync'),
-                'select_all_customers' => __('Select All/None', 'metrotechs-e2w-sync'),
-                'import_selected_customers' => __('Import Selected Customers', 'metrotechs-e2w-sync'),
-                'importing_selected_customers' => __('Importing Selected Customers...', 'metrotechs-e2w-sync'),
-                'no_customers_selected' => __('No customers selected for import.', 'metrotechs-e2w-sync'),
-                'customers_import_complete' => __('Selected customers import complete!', 'metrotechs-e2w-sync'),
-                'load_customers' => __('Load Ecwid Customers', 'metrotechs-e2w-sync'),
-                'no_customers_found' => __('No customers found in your Ecwid store or failed to fetch.', 'metrotechs-e2w-sync'),
-                'customers_loaded_for_display' => __('{count} customers loaded for display.', 'metrotechs-e2w-sync'),
-                
-                // Order Sync i18n
-                'loading_orders' => __('Loading Orders...', 'metrotechs-e2w-sync'),
-                'select_all_orders' => __('Select All/None', 'metrotechs-e2w-sync'),
-                'import_selected_orders' => __('Import Selected Orders', 'metrotechs-e2w-sync'),
-                'importing_selected_orders' => __('Importing Selected Orders...', 'metrotechs-e2w-sync'),
-                'no_orders_selected' => __('No orders selected for import.', 'metrotechs-e2w-sync'),
-                'orders_import_complete' => __('Selected orders import complete!', 'metrotechs-e2w-sync'),
-                'load_orders' => __('Load Ecwid Orders', 'metrotechs-e2w-sync'),
-                'no_orders_found' => __('No orders found in your Ecwid store or failed to fetch.', 'metrotechs-e2w-sync'),
-                'orders_loaded_for_display' => __('{count} orders loaded for display.', 'metrotechs-e2w-sync')
+                'loading_categories' => __('Loading Categories...', 'metrotechs-e2w-sync')
             ]
         ]);
 
@@ -790,16 +961,6 @@ class Ecwid_WC_Sync {
             case $this->partial_sync_slug:
                 $this->product_sync_handler->render_product_sync_page();
                 break;
-            case $this->customer_sync_slug:
-                if (isset($this->customer_sync_handler)) {
-                    $this->customer_sync_handler->render_customer_sync_page();
-                }
-                break;
-            case $this->order_sync_slug:
-                if (isset($this->order_sync_handler)) {
-                    $this->order_sync_handler->render_order_sync_page();
-                }
-                break;
             default:
                 $this->render_settings_page();
                 break;
@@ -808,197 +969,140 @@ class Ecwid_WC_Sync {
     }
 
     private function render_settings_page() {
+        $full_sync_url = admin_url('admin.php?page=' . $this->full_sync_slug);
+        $category_sync_url = admin_url('admin.php?page=' . $this->category_sync_slug);
+        $product_sync_url = admin_url('admin.php?page=' . $this->partial_sync_slug);
+        $placeholder_url = admin_url('edit.php?post_type=ecwid_placeholder');
+        $credentials_configured = !empty($this->options['store_id']) && !empty($this->options['token']);
+        $server_capabilities = ecwid2woo_detect_server_capabilities();
+        $state_class = $credentials_configured ? 'is-loading' : 'is-paused';
+        $state_label = $credentials_configured ? __('Checking', 'metrotechs-e2w-sync') : __('Needs setup', 'metrotechs-e2w-sync');
         ?>
-        <div class="ecwid-settings-header">
-            <h1><?php esc_html_e('Ecwid2Woo Sync Settings', 'metrotechs-e2w-sync'); ?></h1>
-            <p class="description"><?php esc_html_e('Configure your Ecwid API credentials to enable synchronization between your Ecwid store and WooCommerce.', 'metrotechs-e2w-sync'); ?></p>
-        </div>
-
-        <div class="ecwid-settings-container">
-            <div class="ecwid-settings-card">
-                <div class="card-header">
-                    <h2><?php esc_html_e('API Configuration', 'metrotechs-e2w-sync'); ?></h2>
-                    <p><?php esc_html_e('Enter your Ecwid store credentials below:', 'metrotechs-e2w-sync'); ?></p>
-                </div>
-                
-                <form action='options.php' method='post' id="ecwid-settings-form">
-                    <?php
-                    settings_fields('ecwidSyncSettingsGroup');
-                    do_settings_sections($this->settings_slug);
-                    ?>
-                    
-                    <div class="settings-actions">
-                        <button type="submit" class="button button-primary button-large"><?php esc_html_e('Save Settings', 'metrotechs-e2w-sync'); ?></button>
-                        <button type="button" id="test-api-connection" class="button button-secondary button-large"><?php esc_html_e('Test Connection', 'metrotechs-e2w-sync'); ?></button>
-                        <button type="button" id="upload-diagnostics-button" class="button button-secondary button-large" style="margin-left: 10px;"><?php esc_html_e('System Diagnostics', 'metrotechs-e2w-sync'); ?></button>
+        <div class="ecwid-full-sync-dashboard ecwid-admin-dashboard e2w-settings-dashboard">
+            <header class="e2w-command-bar">
+                <div class="e2w-command-title">
+                    <span class="e2w-brand-mark is-settings" aria-hidden="true"><span class="dashicons dashicons-admin-generic"></span></span>
+                    <div>
+                        <span class="e2w-eyebrow"><?php esc_html_e('Ecwid to WooCommerce', 'metrotechs-e2w-sync'); ?></span>
+                        <div class="e2w-title-row">
+                            <h1><?php esc_html_e('Settings', 'metrotechs-e2w-sync'); ?></h1>
+                            <span id="e2w-settings-state" class="e2w-state-pill <?php echo esc_attr($state_class); ?>" role="status" aria-live="polite">
+                                <span class="e2w-state-dot" aria-hidden="true"></span>
+                                <span id="e2w-settings-state-label"><?php echo esc_html($state_label); ?></span>
+                            </span>
+                        </div>
                     </div>
-                </form>
-                
-                <div id="test-connection-result" class="connection-status"></div>
-                <div id="save-status" class="save-status"></div>
-                <div id="upload-diagnostics-result" class="diagnostic-status" style="margin-top: 15px;"></div>
-            </div>
+                </div>
+                <div class="e2w-command-actions">
+                    <button type="submit" form="ecwid-settings-form" class="button e2w-button e2w-button-primary"><?php esc_html_e('Save Settings', 'metrotechs-e2w-sync'); ?></button>
+                    <button type="button" id="test-api-connection" class="button e2w-button e2w-button-secondary"><?php esc_html_e('Test Connection', 'metrotechs-e2w-sync'); ?></button>
+                    <button type="button" id="upload-diagnostics-button" class="button e2w-button e2w-button-secondary"><?php esc_html_e('System Diagnostics', 'metrotechs-e2w-sync'); ?></button>
+                </div>
+            </header>
 
-            <div class="ecwid-navigation-card">
-                <div class="card-header">
-                    <h2><?php esc_html_e('Quick Actions', 'metrotechs-e2w-sync'); ?></h2>
-                    <p><?php esc_html_e('Navigate to different sync options:', 'metrotechs-e2w-sync'); ?></p>
-                </div>
-                
-                <div class="nav-buttons-grid">
-                    <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->full_sync_slug)); ?>" class="nav-button nav-button-primary">
-                        <div class="nav-button-icon">🔄</div>
-                        <div class="nav-button-content">
-                            <h3><?php esc_html_e('Full Sync', 'metrotechs-e2w-sync'); ?></h3>
-                            <p><?php esc_html_e('Sync all data', 'metrotechs-e2w-sync'); ?></p>
+            <nav class="e2w-subnav" aria-label="<?php esc_attr_e('Sync sections', 'metrotechs-e2w-sync'); ?>">
+                <span class="is-current" aria-current="page"><span class="dashicons dashicons-admin-generic" aria-hidden="true"></span><?php esc_html_e('Settings', 'metrotechs-e2w-sync'); ?></span>
+                <a href="<?php echo esc_url($full_sync_url); ?>"><span class="dashicons dashicons-update" aria-hidden="true"></span><?php esc_html_e('Full Sync', 'metrotechs-e2w-sync'); ?></a>
+                <a href="<?php echo esc_url($category_sync_url); ?>"><span class="dashicons dashicons-category" aria-hidden="true"></span><?php esc_html_e('Category Sync', 'metrotechs-e2w-sync'); ?></a>
+                <a href="<?php echo esc_url($product_sync_url); ?>"><span class="dashicons dashicons-products" aria-hidden="true"></span><?php esc_html_e('Product Sync', 'metrotechs-e2w-sync'); ?></a>
+                <a href="<?php echo esc_url($placeholder_url); ?>"><span class="dashicons dashicons-media-document" aria-hidden="true"></span><?php esc_html_e('Placeholders', 'metrotechs-e2w-sync'); ?></a>
+            </nav>
+
+            <div class="e2w-dashboard-body">
+                <main class="e2w-dashboard-main">
+                    <section class="e2w-panel e2w-settings-panel" aria-labelledby="e2w-configuration-title">
+                        <header class="e2w-panel-header">
+                            <h2 id="e2w-configuration-title"><span class="dashicons dashicons-admin-network" aria-hidden="true"></span><?php esc_html_e('Connection and processing', 'metrotechs-e2w-sync'); ?></h2>
+                            <span class="e2w-panel-metric"><?php esc_html_e('Required fields are marked by WordPress', 'metrotechs-e2w-sync'); ?></span>
+                        </header>
+                        <form action="options.php" method="post" id="ecwid-settings-form" class="e2w-settings-form">
+                            <?php
+                            settings_fields('ecwidSyncSettingsGroup');
+                            settings_errors('ecwid_wc_sync_options');
+                            do_settings_sections($this->settings_slug);
+                            ?>
+                            <div class="e2w-settings-form-footer">
+                                <button type="submit" class="button e2w-button e2w-button-primary"><?php esc_html_e('Save Settings', 'metrotechs-e2w-sync'); ?></button>
+                                <span><?php esc_html_e('Saving connection details clears the cached sync preview so the next load uses current data.', 'metrotechs-e2w-sync'); ?></span>
+                            </div>
+                        </form>
+                        <div class="e2w-settings-results" aria-live="polite">
+                            <div id="test-connection-result" class="connection-status"></div>
+                            <div id="save-status" class="save-status"></div>
                         </div>
-                    </a>
-                    
-                    <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->category_sync_slug)); ?>" class="nav-button nav-button-secondary">
-                        <div class="nav-button-icon">📁</div>
-                        <div class="nav-button-content">
-                            <h3><?php esc_html_e('Category Sync', 'metrotechs-e2w-sync'); ?></h3>
-                            <p><?php esc_html_e('Sync categories only', 'metrotechs-e2w-sync'); ?></p>
+                    </section>
+
+                    <section class="e2w-panel e2w-diagnostics-panel" aria-labelledby="e2w-diagnostics-title">
+                        <header class="e2w-panel-header">
+                            <h2 id="e2w-diagnostics-title"><span class="dashicons dashicons-performance" aria-hidden="true"></span><?php esc_html_e('System diagnostics', 'metrotechs-e2w-sync'); ?></h2>
+                            <span class="e2w-panel-metric"><?php esc_html_e('Read-only environment check', 'metrotechs-e2w-sync'); ?></span>
+                        </header>
+                        <div id="upload-diagnostics-result" class="diagnostic-status e2w-diagnostics-output">
+                            <div class="e2w-list-empty"><span class="dashicons dashicons-performance" aria-hidden="true"></span><span><?php esc_html_e('Run diagnostics to review memory, storage, PHP, WordPress, and WooCommerce health.', 'metrotechs-e2w-sync'); ?></span></div>
                         </div>
-                    </a>
-                    
-                    <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->partial_sync_slug)); ?>" class="nav-button nav-button-tertiary">
-                        <div class="nav-button-icon">🎯</div>
-                        <div class="nav-button-content">
-                            <h3><?php esc_html_e('Product Sync', 'metrotechs-e2w-sync'); ?></h3>
-                            <p><?php esc_html_e('Sync selected products', 'metrotechs-e2w-sync'); ?></p>
+                    </section>
+                </main>
+
+                <aside class="e2w-context-rail" aria-label="<?php esc_attr_e('Settings context', 'metrotechs-e2w-sync'); ?>">
+                    <h2><?php esc_html_e('Context', 'metrotechs-e2w-sync'); ?></h2>
+                    <details class="e2w-context-card" open>
+                        <summary><span><span class="dashicons dashicons-admin-links" aria-hidden="true"></span><?php esc_html_e('Connection', 'metrotechs-e2w-sync'); ?></span></summary>
+                        <div class="e2w-context-card-body e2w-option-list">
+                            <div><span><?php esc_html_e('Store ID', 'metrotechs-e2w-sync'); ?></span><strong><?php echo !empty($this->options['store_id']) ? esc_html__('Configured', 'metrotechs-e2w-sync') : esc_html__('Missing', 'metrotechs-e2w-sync'); ?></strong></div>
+                            <div><span><?php esc_html_e('API token', 'metrotechs-e2w-sync'); ?></span><strong><?php echo !empty($this->options['token']) ? esc_html__('Configured', 'metrotechs-e2w-sync') : esc_html__('Missing', 'metrotechs-e2w-sync'); ?></strong></div>
+                            <div><span><?php esc_html_e('Catalog access', 'metrotechs-e2w-sync'); ?></span><strong id="e2w-context-connection-state"><?php echo $credentials_configured ? esc_html__('Checking', 'metrotechs-e2w-sync') : esc_html__('Unavailable', 'metrotechs-e2w-sync'); ?></strong></div>
                         </div>
-                    </a>
-                    
-                    <?php /* Customer and Order sync buttons hidden until fully tested
-                    <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->customer_sync_slug)); ?>" class="nav-button nav-button-quinary">
-                        <div class="nav-button-icon">👥</div>
-                        <div class="nav-button-content">
-                            <h3><?php esc_html_e('Customer Sync', 'metrotechs-e2w-sync'); ?></h3>
-                            <p><?php esc_html_e('Import customer data', 'metrotechs-e2w-sync'); ?></p>
+                    </details>
+                    <details class="e2w-context-card" open>
+                        <summary><span><span class="dashicons dashicons-performance" aria-hidden="true"></span><?php esc_html_e('Detected server', 'metrotechs-e2w-sync'); ?></span></summary>
+                        <div class="e2w-context-card-body e2w-option-list">
+                            <div><span><?php esc_html_e('Server tier', 'metrotechs-e2w-sync'); ?></span><strong><?php echo esc_html(ucfirst($server_capabilities['server_tier'])); ?></strong></div>
+                            <div><span><?php esc_html_e('Product batch', 'metrotechs-e2w-sync'); ?></span><strong><?php echo esc_html($server_capabilities['products_batch']); ?></strong></div>
+                            <div><span><?php esc_html_e('Category batch', 'metrotechs-e2w-sync'); ?></span><strong><?php echo esc_html($server_capabilities['categories_batch']); ?></strong></div>
+                            <div><span><?php esc_html_e('Manual override', 'metrotechs-e2w-sync'); ?></span><strong><?php echo !empty($this->options['manual_batch_override']) ? esc_html__('On', 'metrotechs-e2w-sync') : esc_html__('Off', 'metrotechs-e2w-sync'); ?></strong></div>
                         </div>
-                    </a>
-                    
-                    <a href="<?php echo esc_url(admin_url('admin.php?page=' . $this->order_sync_slug)); ?>" class="nav-button nav-button-senary">
-                        <div class="nav-button-icon">📦</div>
-                        <div class="nav-button-content">
-                            <h3><?php esc_html_e('Order Sync', 'metrotechs-e2w-sync'); ?></h3>
-                            <p><?php esc_html_e('Import order data', 'metrotechs-e2w-sync'); ?></p>
+                    </details>
+                    <details class="e2w-context-card" open>
+                        <summary><span><span class="dashicons dashicons-warning" aria-hidden="true"></span><?php esc_html_e('Safe batching', 'metrotechs-e2w-sync'); ?></span></summary>
+                        <div class="e2w-context-card-body e2w-help-copy"><p><?php esc_html_e('Automatic batch detection is recommended. Manual values can increase memory use and request time significantly.', 'metrotechs-e2w-sync'); ?></p></div>
+                    </details>
+                    <details class="e2w-context-card" open>
+                        <summary><span><span class="dashicons dashicons-external" aria-hidden="true"></span><?php esc_html_e('Quick actions', 'metrotechs-e2w-sync'); ?></span></summary>
+                        <div class="e2w-context-card-body e2w-quick-links">
+                            <a href="<?php echo esc_url($full_sync_url); ?>"><span class="dashicons dashicons-update" aria-hidden="true"></span><?php esc_html_e('Open Full Sync', 'metrotechs-e2w-sync'); ?></a>
+                            <a href="<?php echo esc_url($category_sync_url); ?>"><span class="dashicons dashicons-category" aria-hidden="true"></span><?php esc_html_e('Open Category Sync', 'metrotechs-e2w-sync'); ?></a>
+                            <a href="<?php echo esc_url($product_sync_url); ?>"><span class="dashicons dashicons-products" aria-hidden="true"></span><?php esc_html_e('Open Product Sync', 'metrotechs-e2w-sync'); ?></a>
+                            <a href="<?php echo esc_url($placeholder_url); ?>"><span class="dashicons dashicons-media-document" aria-hidden="true"></span><?php esc_html_e('Manage placeholders', 'metrotechs-e2w-sync'); ?></a>
                         </div>
-                    </a>
-                    */ ?>
-                    
-                    <a href="<?php echo esc_url(admin_url('edit.php?post_type=ecwid_placeholder')); ?>" class="nav-button nav-button-septenary">
-                        <div class="nav-button-icon">📋</div>
-                        <div class="nav-button-content">
-                            <h3><?php esc_html_e('Placeholders', 'metrotechs-e2w-sync'); ?></h3>
-                            <p><?php esc_html_e('Manage placeholders', 'metrotechs-e2w-sync'); ?></p>
-                        </div>
-                    </a>
-                </div>
+                    </details>
+                </aside>
             </div>
         </div>
-
-        <script type="text/javascript">
-        jQuery(document).ready(function($) {
-            // --- Manual Batch Override toggle ---
-            // Enable/disable the batch size number inputs based on the checkbox state
-            function toggleBatchFields() {
-                var enabled = $('#manual_batch_override').is(':checked');
-                $('.ecwid-batch-number-field').prop('disabled', !enabled);
-            }
-            // Set initial state
-            toggleBatchFields();
-            // Update on change
-            $('#manual_batch_override').on('change', toggleBatchFields);
-
-            // Auto-test connection on page load if credentials exist
-            var storeId = $('input[name="ecwid_wc_sync_options[store_id]"]').val();
-            var token = $('input[name="ecwid_wc_sync_options[token]"]').val();
-            
-            if (storeId && token && storeId.length > 0 && token.length > 0) {
-                setTimeout(function() {
-                    $('#test-api-connection').trigger('click');
-                }, 500);
-            }
-            
-            // Enhanced connection test with better UI feedback
-            $('#test-api-connection').click(function() {
-                var button = $(this);
-                var originalText = button.text();
-                var resultDiv = $('#test-connection-result');
-                
-                button.html('<span class="loading-spinner"></span>' + '<?php echo esc_js(__('Testing...', 'metrotechs-e2w-sync')); ?>').prop('disabled', true);
-                resultDiv.hide().removeClass('success error');
-                
-                $.ajax({
-                    url: ecwid_sync_params.ajax_url,
-                    type: 'POST',
-                    data: {
-                        action: 'ecwid_wc_test_connection',
-                        nonce: ecwid_sync_params.nonce
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            resultDiv.addClass('success')
-                                    .html('<strong>✅ <?php echo esc_js(__('CONNECTION SUCCESSFUL!', 'metrotechs-e2w-sync')); ?></strong><br>' + response.data.message)
-                                    .show();
-                        } else {
-                            resultDiv.addClass('error')
-                                    .html('<strong>❌ <?php echo esc_js(__('CONNECTION FAILED', 'metrotechs-e2w-sync')); ?></strong><br>' + response.data.message)
-                                    .show();
-                        }
-                    },
-                    error: function() {
-                        resultDiv.addClass('error')
-                                .html('<strong>❌ <?php echo esc_js(__('CONNECTION ERROR', 'metrotechs-e2w-sync')); ?></strong><br><?php echo esc_js(__('Connection test failed. Please try again.', 'metrotechs-e2w-sync')); ?>')
-                                .show();
-                    },
-                    complete: function() {
-                        button.text(originalText).prop('disabled', false);
-                    }
-                });
-            });
-            
-            // Enhanced form submission with feedback
-            $('#ecwid-settings-form').submit(function(e) {
-                var saveStatusDiv = $('#save-status');
-                saveStatusDiv.hide().removeClass('success error');
-                
-                // Show saving status
-                setTimeout(function() {
-                    saveStatusDiv.addClass('success')
-                            .html('<strong>✅ <?php echo esc_js(__('Settings saved successfully!', 'metrotechs-e2w-sync')); ?></strong>')
-                            .show();
-                    
-                    // Auto-test connection after successful save
-                    setTimeout(function() {
-                        $('#test-api-connection').trigger('click');
-                    }, 1000);
-                }, 100);
-            });
-            
-            // Add input change detection for real-time validation
-            $('input[name="ecwid_wc_sync_options[store_id]"], input[name="ecwid_wc_sync_options[token]"]').on('input', function() {
-                $('#test-connection-result').hide();
-            });
-        });
-        </script>
         <?php
     }
-
     /**
      * Make API request with retry logic and rate limiting
      */
-    public function make_api_request_with_retry($url, $token, $method = 'GET', $max_retries = 3, $data = null) {
+    public function make_api_request_with_retry($url, $token, $method = 'GET', $max_retries = 3, $data = null, $request_timeout = 30, $deadline = null) {
         $attempt = 0;
         $base_delay = 1; // Base delay in seconds
+        $request_timeout = max(5, min(60, (int) $request_timeout));
         
         while ($attempt < $max_retries) {
+            if (is_numeric($deadline)) {
+                $remaining_seconds = (float) $deadline - microtime(true);
+                if ($remaining_seconds <= 5) {
+                    return new WP_Error('sync_deadline_exceeded', __('The sync request reached its safe runtime limit before the API call completed. The browser will continue with the same offset.', 'metrotechs-e2w-sync'));
+                }
+                $attempt_timeout = max(5, min($request_timeout, (int) floor($remaining_seconds - 3)));
+            } else {
+                $attempt_timeout = $request_timeout;
+            }
+
             $attempt++;
             
             $args = [
-                'timeout' => 60,
+                'timeout' => $attempt_timeout,
                 'headers' => [
                     'Authorization' => 'Bearer ' . $token,
                     'Accept' => 'application/json',
@@ -1025,6 +1129,9 @@ class Ecwid_WC_Sync {
                 if ($http_code === 429 || $http_code === 503) {
                     if ($attempt < $max_retries) {
                         $delay = $base_delay * pow(2, $attempt - 1); // Exponential backoff
+                        if (is_numeric($deadline) && microtime(true) + $delay + 5 >= (float) $deadline) {
+                            return $response;
+                        }
                         if (defined('WP_DEBUG') && WP_DEBUG) {
                             error_log("Ecwid Sync: Rate limited (HTTP $http_code), retrying in {$delay}s. Attempt $attempt/$max_retries"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
                         }
@@ -1037,6 +1144,9 @@ class Ecwid_WC_Sync {
                 if ($http_code >= 500 && $http_code < 600) {
                     if ($attempt < $max_retries) {
                         $delay = $base_delay * pow(2, $attempt - 1);
+                        if (is_numeric($deadline) && microtime(true) + $delay + 5 >= (float) $deadline) {
+                            return $response;
+                        }
                         if (defined('WP_DEBUG') && WP_DEBUG) {
                             // amazonq-ignore-next-line
                             error_log("Ecwid Sync: Server error (HTTP $http_code), retrying in {$delay}s. Attempt $attempt/$max_retries"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -1052,6 +1162,9 @@ class Ecwid_WC_Sync {
                 // Network/connection errors - retry
                 if ($attempt < $max_retries) {
                     $delay = $base_delay * pow(2, $attempt - 1);
+                    if (is_numeric($deadline) && microtime(true) + $delay + 5 >= (float) $deadline) {
+                        return $response;
+                    }
                     if (defined('WP_DEBUG') && WP_DEBUG) {
                         // amazonq-ignore-next-line
                         error_log("Ecwid Sync: Connection error, retrying in {$delay}s. Attempt $attempt/$max_retries. Error: " . $response->get_error_message()); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -1290,7 +1403,7 @@ class Ecwid_WC_Sync {
         // Check if we meet minimum requirements
         $current_memory = ini_get('memory_limit');
         $memory_in_bytes = wp_convert_hr_to_bytes($current_memory);
-        if ($memory_in_bytes < $minimum_memory) {
+        if ($memory_in_bytes !== -1 && $memory_in_bytes < $minimum_memory) {
             wp_send_json_error([
                 'message' => __('Server memory limit too low for category sync. Current: ', 'metrotechs-e2w-sync') . $current_memory . __(' Minimum required: 128M', 'metrotechs-e2w-sync'),
                 'error_type' => 'memory_limit',
@@ -1341,7 +1454,7 @@ class Ecwid_WC_Sync {
         // Adaptive batch sizing based on memory
         $available_memory = wp_convert_hr_to_bytes(ini_get('memory_limit'));
         $used_memory = function_exists('memory_get_usage') ? memory_get_usage(true) : 0;
-        $free_memory = $available_memory - $used_memory;
+        $free_memory = $available_memory === -1 ? PHP_INT_MAX : ($available_memory - $used_memory);
         
         // If we have less than 64MB free, reduce batch size (lowered threshold from 128MB)
         if ($free_memory < (64 * 1024 * 1024)) {
@@ -2109,7 +2222,7 @@ class Ecwid_WC_Sync {
     public function ajax_process_variation_batch() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
         
@@ -2699,18 +2812,15 @@ class Ecwid_WC_Sync {
      * @return array|null Returns category data if successfully fetched and imported, null otherwise
      */
     private function fetch_and_import_missing_parent($parent_ecwid_id) {
-        // Get API credentials
-        $store_id = get_option('ecwid_wc_store_id');
-        $api_token = get_option('ecwid_wc_api_token');
-        
-        if (empty($store_id) || empty($api_token)) {
+        $api_essentials = $this->_get_api_essentials();
+        if (is_wp_error($api_essentials)) {
             return null;
         }
 
         // Fetch the specific category from Ecwid API
-        $api_url = "https://app.ecwid.com/api/v3/{$store_id}/categories/{$parent_ecwid_id}";
+        $api_url = $api_essentials['base_url'] . '/categories/' . absint($parent_ecwid_id);
         
-        $response = $this->make_api_request_with_retry($api_url, $api_token, 'GET', 3);
+        $response = $this->make_api_request_with_retry($api_url, $api_essentials['token'], 'GET', 3);
         
         if (is_wp_error($response)) {
             $this->log_message("Failed to fetch missing parent category {$parent_ecwid_id}: " . $response->get_error_message(), 'error');
@@ -3018,7 +3128,7 @@ class Ecwid_WC_Sync {
             'db_size_formatted' => size_format($db_size),
             'db_prefix' => $wpdb->prefix,
             // Plugin info
-            'plugin_version' => defined('METROTECHS_E2W_VERSION') ? METROTECHS_E2W_VERSION : '1.6.0',
+            'plugin_version' => ECWID2WOO_VERSION,
             // Timestamps
             'server_time' => current_time('Y-m-d H:i:s'),
             'timezone' => wp_timezone_string(),
@@ -3031,11 +3141,143 @@ class Ecwid_WC_Sync {
         return $debug_info;
     }
 
+    /**
+     * Validate an image URL before each HTTP request, including redirects.
+     *
+     * @param string   $image_url     Candidate image URL.
+     * @param string[] $allowed_hosts Optional explicit host allowlist.
+     * @return string|WP_Error Validated URL or an error.
+     */
+    private function validate_remote_image_url($image_url, array $allowed_hosts = []) {
+        $validated_url = wp_http_validate_url(esc_url_raw($image_url));
+        if (!$validated_url) {
+            return new WP_Error('unsafe_image_url', __('Image URL must be a valid public HTTPS URL.', 'metrotechs-e2w-sync'));
+        }
+
+        $scheme = strtolower((string) wp_parse_url($validated_url, PHP_URL_SCHEME));
+        $host = strtolower((string) wp_parse_url($validated_url, PHP_URL_HOST));
+        if ($scheme !== 'https' || empty($host)) {
+            return new WP_Error('unsafe_image_url', __('Image URL must be a valid public HTTPS URL.', 'metrotechs-e2w-sync'));
+        }
+
+        if (!empty($allowed_hosts) && !in_array($host, $allowed_hosts, true)) {
+            return new WP_Error('image_host_not_allowed', __('Image host is not allowed for Ecwid imports.', 'metrotechs-e2w-sync'));
+        }
+
+        return $validated_url;
+    }
+
+    /**
+     * Stream a remote image to a temporary file with a hard byte limit.
+     *
+     * Redirects are handled manually so each destination is revalidated.
+     *
+     * @param string   $image_url     Initial image URL.
+     * @param int      $timeout       Request timeout in seconds.
+     * @param int      $max_bytes     Maximum bytes to write.
+     * @param string[] $allowed_hosts Optional explicit host allowlist.
+     * @return string|WP_Error Temporary filename or an error.
+     */
+    private function download_remote_image($image_url, $timeout, $max_bytes, array $allowed_hosts = []) {
+        $current_url = $image_url;
+        $redirect_statuses = [301, 302, 303, 307, 308];
+        $max_redirects = 3;
+
+        for ($redirect_count = 0; $redirect_count <= $max_redirects; $redirect_count++) {
+            $current_url = $this->validate_remote_image_url($current_url, $allowed_hosts);
+            if (is_wp_error($current_url)) {
+                return $current_url;
+            }
+
+            $tmp = wp_tempnam($current_url);
+            if (!$tmp) {
+                return new WP_Error('temp_file_failed', __('Could not create a temporary file for the image download.', 'metrotechs-e2w-sync'));
+            }
+
+            $response = wp_safe_remote_get($current_url, [
+                'timeout'             => $timeout,
+                'redirection'         => 0,
+                'stream'              => true,
+                'filename'            => $tmp,
+                'limit_response_size' => $max_bytes + 1,
+                'headers'             => [
+                    'Accept' => 'image/*',
+                ],
+            ]);
+
+            if (is_wp_error($response)) {
+                wp_delete_file($tmp);
+                return new WP_Error('download_failed', sprintf(
+                    /* translators: %s is a WordPress HTTP API error message. */
+                    __('Image download failed: %s', 'metrotechs-e2w-sync'),
+                    $response->get_error_message()
+                ));
+            }
+
+            $status_code = (int) wp_remote_retrieve_response_code($response);
+            if (in_array($status_code, $redirect_statuses, true)) {
+                $location = wp_remote_retrieve_header($response, 'location');
+                if (is_array($location)) {
+                    $location = array_pop($location);
+                }
+                $location = (string) $location;
+                wp_delete_file($tmp);
+
+                if (empty($location)) {
+                    return new WP_Error('invalid_image_redirect', __('Image server returned a redirect without a destination.', 'metrotechs-e2w-sync'));
+                }
+
+                if ($redirect_count >= $max_redirects) {
+                    return new WP_Error('too_many_image_redirects', __('Image download exceeded the redirect limit.', 'metrotechs-e2w-sync'));
+                }
+
+                $current_url = WP_Http::make_absolute_url($location, $current_url);
+                continue;
+            }
+
+            if ($status_code < 200 || $status_code >= 300) {
+                wp_delete_file($tmp);
+                return new WP_Error('image_http_error', sprintf(
+                    /* translators: %d is an HTTP status code. */
+                    __('Image server returned HTTP status %d.', 'metrotechs-e2w-sync'),
+                    $status_code
+                ));
+            }
+
+            return $tmp;
+        }
+
+        return new WP_Error('image_download_failed', __('Image download could not be completed.', 'metrotechs-e2w-sync'));
+    }
+
     public function attach_image_to_product_from_url($image_url, $post_id = 0, $desc = null) {
         if (empty($image_url)) {
             return new WP_Error('missing_url', __('Image URL is empty.', 'metrotechs-e2w-sync'));
         }
-        if (!function_exists('download_url')) {
+
+        $image_url = esc_url_raw($image_url);
+
+        /**
+         * Filters the hosts that may provide imported Ecwid images.
+         *
+         * An empty array allows any public HTTPS host accepted by WordPress safe HTTP validation.
+         * Sites with a fixed Ecwid/CDN setup can return an explicit allowlist.
+         *
+         * @param string[] $allowed_hosts Allowed lowercase host names.
+         * @param string   $image_url     Validated image URL.
+         */
+        $allowed_hosts = apply_filters('ecwid_wc_sync_allowed_image_hosts', [], $image_url);
+        if (!is_array($allowed_hosts)) {
+            $allowed_hosts = [];
+        }
+        $allowed_hosts = array_filter(array_map(static function($allowed_host) {
+            if (!is_scalar($allowed_host)) {
+                return '';
+            }
+            return strtolower(sanitize_text_field((string) $allowed_host));
+        }, $allowed_hosts));
+
+        if (!function_exists('wp_tempnam')) {
             require_once(ABSPATH . 'wp-admin/includes/file.php');
         }
         if (!function_exists('media_handle_sideload')) {
@@ -3043,17 +3285,56 @@ class Ecwid_WC_Sync {
             require_once(ABSPATH . 'wp-admin/includes/image.php');
         }
 
-        $timeout_seconds = apply_filters('ecwid_wc_sync_image_download_timeout', 30);
-        $tmp = download_url($image_url, $timeout_seconds);
+        $timeout_seconds = absint(apply_filters('ecwid_wc_sync_image_download_timeout', 30));
+        $timeout_seconds = max(5, min($timeout_seconds, 60));
+        $max_image_bytes = absint(apply_filters('ecwid_wc_sync_max_image_bytes', 15 * MB_IN_BYTES));
+        $max_image_bytes = max(1, $max_image_bytes);
+        $tmp = $this->download_remote_image($image_url, $timeout_seconds, $max_image_bytes, $allowed_hosts);
         if (is_wp_error($tmp)) {
-            // amazonq-ignore-next-line
-            wp_delete_file($tmp);
-            // translators: %1$s is the image URL, %2$s is the error message
-            return new WP_Error('download_failed', sprintf(__('Image download failed from %1$s: %2$s', 'metrotechs-e2w-sync'), esc_url_raw($image_url), $tmp->get_error_message()));
+            return $tmp;
         }
 
+        $downloaded_size = filesize($tmp);
+
+        if ($downloaded_size === false || $downloaded_size < 1) {
+            wp_delete_file($tmp);
+            return new WP_Error('empty_image_download', __('Downloaded image file is empty or unreadable.', 'metrotechs-e2w-sync'));
+        }
+
+        if ($downloaded_size > $max_image_bytes) {
+            wp_delete_file($tmp);
+            return new WP_Error(
+                'image_too_large',
+                sprintf(
+                    /* translators: %s is the configured maximum image size. */
+                    __('Downloaded image exceeds the maximum allowed size of %s.', 'metrotechs-e2w-sync'),
+                    size_format($max_image_bytes)
+                )
+            );
+        }
+
+        $detected_mime = wp_get_image_mime($tmp);
+        $allowed_image_mimes = [
+            'image/jpeg' => 'jpg',
+            'image/png'  => 'png',
+            'image/gif'  => 'gif',
+            'image/webp' => 'webp',
+        ];
+
+        if (!$detected_mime || !isset($allowed_image_mimes[$detected_mime])) {
+            wp_delete_file($tmp);
+            return new WP_Error('invalid_image_type', __('Downloaded file is not an allowed image type.', 'metrotechs-e2w-sync'));
+        }
+
+        $image_path = (string) wp_parse_url($image_url, PHP_URL_PATH);
+        $filename_base = sanitize_file_name(pathinfo(wp_basename($image_path), PATHINFO_FILENAME));
+        if (empty($filename_base)) {
+            $filename_base = 'ecwid-image';
+        }
+        $filename = $filename_base . '.' . $allowed_image_mimes[$detected_mime];
+
         $file_array = [
-            'name' => basename(wp_parse_url($image_url, PHP_URL_PATH)),
+            'name' => $filename,
             'tmp_name' => $tmp
         ];
 
@@ -3067,14 +3348,7 @@ class Ecwid_WC_Sync {
             : 1500; // Default 1.5s if tier not yet detected
         usleep($delay_ms * 1000); // Convert ms to microseconds
 
-        // Initialize WP_Filesystem for file operations
-        global $wp_filesystem;
-        if (!function_exists('WP_Filesystem')) {
-            require_once(ABSPATH . 'wp-admin/includes/file.php');
-        }
-        WP_Filesystem();
-
-        if ($wp_filesystem->exists($tmp)) {
+        if (file_exists($tmp)) {
             wp_delete_file($tmp);
         }
 
@@ -3184,7 +3458,7 @@ class Ecwid_WC_Sync {
     public function fix_category_hierarchy() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
 
@@ -3252,21 +3526,20 @@ class Ecwid_WC_Sync {
             return $ecwid_currency;
         }
 
-        $store_id = get_option('ecwid_wc_store_id');
-        $api_token = get_option('ecwid_wc_api_token');
-
-        if (empty($store_id) || empty($api_token)) {
+        $api_essentials = $this->_get_api_essentials();
+        if (is_wp_error($api_essentials)) {
             $api_call_attempted = true;
             return null;
         }
 
         // Get store profile to extract currency
         // amazonq-ignore-next-line
-        $profile_url = "https://app.ecwid.com/api/v3/{$store_id}/profile?token={$api_token}";
+        $profile_url = $api_essentials['base_url'] . '/profile';
         
         $response = wp_remote_get($profile_url, [
             'timeout' => 30,
             'headers' => [
+                'Authorization' => 'Bearer ' . $api_essentials['token'],
                 'Accept' => 'application/json',
                 'User-Agent' => 'ecwid2woo/' . ECWID2WOO_VERSION
             ]
@@ -3292,10 +3565,16 @@ class Ecwid_WC_Sync {
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body, true);
 
+        $currency = '';
         if (isset($data['settings']['defaultDisplayedCurrency'])) {
-            $ecwid_currency = $data['settings']['defaultDisplayedCurrency'];
+            $currency = $data['settings']['defaultDisplayedCurrency'];
         } elseif (isset($data['currency'])) {
-            $ecwid_currency = $data['currency'];
+            $currency = $data['currency'];
+        }
+
+        $currency = strtoupper(sanitize_key($currency));
+        if (preg_match('/^[A-Z]{3}$/', $currency)) {
+            $ecwid_currency = $currency;
         }
 
         return $ecwid_currency;
@@ -3418,7 +3697,7 @@ class Ecwid_WC_Sync {
                 $current_bytes = wp_convert_hr_to_bytes($current_memory);
                 $minimum_bytes = 128 * 1024 * 1024; // 128MB minimum requirement
                 
-                if ($current_bytes < $minimum_bytes) {
+                if ($current_bytes !== -1 && $current_bytes < $minimum_bytes) {
                     wp_send_json_error([
                         'message' => __('Server memory limit too low for sync operation. Current: ', 'metrotechs-e2w-sync') . $current_memory . __(' Minimum required: 128M', 'metrotechs-e2w-sync'),
                         'error_type' => 'memory_limit',
@@ -3553,7 +3832,7 @@ class Ecwid_WC_Sync {
     public function ajax_fetch_categories_for_display_DISABLED() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
         set_time_limit(300); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Legitimate use for category fetch operations
@@ -3646,7 +3925,7 @@ class Ecwid_WC_Sync {
     public function ajax_import_selected_categories_DISABLED() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
         set_time_limit(300); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Legitimate use for selected category import operations
@@ -4149,7 +4428,7 @@ class Ecwid_WC_Sync {
     public function ajax_diagnose_uploads() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
 
@@ -4185,7 +4464,7 @@ class Ecwid_WC_Sync {
     public function ajax_test_api_connection() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
 
@@ -4222,7 +4501,7 @@ class Ecwid_WC_Sync {
     public function ajax_debug_info() {
         check_ajax_referer('ecwid_wc_sync_nonce', 'nonce');
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')]);
+            wp_send_json_error(['message' => __('Unauthorized', 'metrotechs-e2w-sync')], 403);
             return;
         }
         
