@@ -8,6 +8,7 @@
 * PERFORMANCE - Added request-wide deadlines that include API retries and preserve exact continuation offsets
 * PERFORMANCE - Reduced full-sync currency updates from every batch to the first category batch only
 * PERFORMANCE - Low-resource servers now use 10-variation batches; manual variation override is honored
+* FIXED - Full Sync now imports enabled Ecwid products only, matching its preview and selective-sync behavior
 * UI - Redesigned the Settings, Full Sync, Category Sync, and Product Sync admin pages with responsive dashboards, progress context, filtering, and activity controls
 * FIXED - Removed the duplicate category-import click handler and added file-based admin asset cache busting
 * RELEASE - Added explicit production package allowlist and SHA-256 checksum generation

@@ -479,6 +479,9 @@ class Ecwid2Woo_Full_Sync {
         $query_params_for_url = ['limit' => $limit_per_api_call, 'offset' => $offset];
 
         if ($sync_type === 'products') {
+            // Keep execution aligned with the preview and product-page behavior:
+            // disabled Ecwid products are reviewable, but Full Sync imports enabled products only.
+            $query_params_for_url['enabled'] = 'true';
             $query_params_for_url['responseFields'] = 'items(id,sku,name,price,description,shortDescription,enabled,weight,quantity,unlimited,categoryIds,hdThumbnailUrl,imageUrl,galleryImages,options,combinations(id,sku,price,compareToPrice,defaultDisplayedPrice,defaultDisplayedCompareToPrice,options,quantity),productClassId,attributes,compareToPrice,dimensions,shipping),total,count,offset,limit';
         } else {
             $query_params_for_url['responseFields'] = 'items(id,name,parentId,description,hdThumbnailUrl,originalImageUrl,updateTimestamp),total,count,offset,limit';

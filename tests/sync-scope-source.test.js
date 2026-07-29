@@ -48,6 +48,7 @@ assert.match(batchHandler, /\$sync_type === 'products' && !\$has_more[\s\S]*?del
 assert.match(previewHandler, /\$current_bytes !== -1 && \$current_bytes < \$minimum_bytes/, 'unlimited PHP memory must satisfy preview requirements');
 assert.match(batchHandler, /\$memory_in_bytes !== -1 && \$memory_in_bytes < \$minimum_memory/, 'unlimited PHP memory must satisfy batch requirements');
 assert.match(batchHandler, /\$available_memory === -1 \? PHP_INT_MAX/, 'unlimited PHP memory must not trigger adaptive low-memory reduction');
+assert.match(batchHandler, /\$sync_type === 'products'[\s\S]*?\$query_params_for_url\['enabled'\] = 'true'/, 'full product batches must import enabled Ecwid products only');
 assert.match(batchHandler, /shipping\),total,count,offset,limit/, 'product batches must request pagination metadata');
 assert.match(batchHandler, /updateTimestamp\),total,count,offset,limit/, 'category batches must request pagination metadata');
 
