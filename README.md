@@ -11,27 +11,20 @@ Transform your e-commerce presence with the most advanced, reliable, and feature
 
 ---
 
-## 🧠 **NEW: Smart Skip Technology + Self-Healing Batch Processing** 
+## 🆕 What's New in v1.6.1
 
-Revolutionary migration system featuring **intelligent skip technology** for products AND categories, plus **self-optimizing batch processing** that automatically adapts to your server's capabilities. No configuration required – it just works.
+Version 1.6.1 hardens long-running catalog migrations and refreshes every primary admin workflow:
 
-### 🎯 **Smart Skip Benefits:**
-- **Intelligent Resume** – Automatically continues from where migration left off
-- **Products & Categories** – Smart Skip works on both product and category syncs
-- **Image Preservation** – Existing product images are never deleted during updates
-- **Reliable Change Detection** – Uses deterministic product payload fingerprints and category update timestamps
-- **70-90% Time Savings** – Skip already-imported items when restarting migrations
-- **Legacy Support** – Handles items imported before Smart Skip implementation
+- **Safe Full Sync Scope** – Full Sync preview and processing now consistently include enabled Ecwid products only
+- **Concurrent Sync Protection** – An atomic, owner-checked catalog lock prevents overlapping mutations across tabs and administrators, with stale-lock recovery
+- **Deterministic Smart Skip** – Product payload fingerprints replace the previous 24-hour timestamp guess and are saved only after images and variations finish successfully
+- **Deadline-Safe Continuation** – Request-wide deadlines include Ecwid API retry time and return exact continuation offsets before the web request times out
+- **Safer Image Imports** – Remote images use WordPress's safe HTTP client with host, response, file-size, and image validation
+- **Resource-Aware Variations** – Low-resource servers use batches of up to 10 variations, while valid manual variation overrides are honored
+- **Redesigned Admin Experience** – Settings and all sync pages now use responsive dashboards, clearer progress context, searchable/filterable activity, and improved controls
+- **Reproducible Releases** – The release script packages an explicit production allowlist and writes a SHA-256 checksum next to the ZIP
 
-### ⚡ **Self-Healing Batch Processing:**
-- **Bidirectional Sizing** – Batch size decreases on timeouts AND recovers after stability
-- **Auto-Recovery** – After 5 successful batches, size increases by 50% (10→15→20)
-- **Zero Configuration** – Works optimally on shared hosting AND high-end VPS
-- **Timeout Protection** – Automatically halves batch size on 524/504/408 errors
-- **Progressive Cooldowns** – Server recovery waits increase with consecutive timeouts
-- **Memory-Aware** – Reduces batch size automatically if memory is low
-
-**Example:** `20 → [timeout] → 10 → [5 successes] → 15 → [5 successes] → 20 ✓`
+See [Version History](#version-history) for the complete release summary.
 
 ---
 
@@ -132,6 +125,9 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 ### 🛡️ Reliability & Safety
 
 - **Stop Sync Control** – Immediate cancellation capability for all operations
+- **Atomic Catalog Lock** – Prevents overlapping sync jobs and safely recovers abandoned locks
+- **Exact Continuation Offsets** – Deadline-limited batches resume at the first unprocessed item
+- **Validated Image Downloads** – Restricts remote image imports by host, response type, and size before sideloading
 - **Comprehensive Error Handling** – Detailed error reporting and recovery mechanisms
 - **Safe Re-syncing** – Idempotent operations prevent data corruption
 - **Debug Integration** – Works seamlessly with WordPress debug logging
@@ -213,6 +209,7 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - Configure your Ecwid API credentials
 - Test connection with visual feedback
 - **Advanced Batch Settings (v1.6.0)** – Manually override auto-detected batch sizes for Products, Categories, and Variations. Enable the override checkbox, set your sizes (1–100), and save. A warning banner will appear on all sync pages. Use at your own risk.
+- Review connection, server tier, memory, and recommended batch context in the responsive status dashboard
 - Access quick navigation to all sync options
 - Monitor connection status with real-time indicators
 
@@ -224,8 +221,12 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 
 #### Features:
 - **Automatic Preview** – See exactly what will be synced before starting
+- **Enabled Products Only** – Preview and processing use the same enabled Ecwid product scope
 - **Two-Phase Process** – Categories first, then products
 - **Real-time Progress** – Visual progress tracking with detailed logs
+- **Activity Controls** – Filter, search, clear, or download the activity log
+- **Safe Continuation** – Request deadlines preserve the exact category or product offset for the next batch
+- **Sync Ownership** – A catalog lock prevents a second tab or administrator from starting a conflicting job
 - **Stop Control** – Cancel operation at any time
 - **Smart Batching** – Processes data in optimized chunks
 
@@ -396,13 +397,15 @@ Revolutionary migration system featuring **intelligent skip technology** for pro
 - **Multisite Support** – Compatible with WordPress multisite networks
 - **Translation Ready** – Prepared for internationalization
 
-### Security Features (v1.6.0 Enhanced)
+### Security Features (v1.6.1 Enhanced)
 - **Sanitized Inputs** – All data sanitized and validated across all sync pages
 - **Output Escaping** – XSS prevention enforced throughout the admin interface
 - **Nonce Protection** – CSRF protection strengthened on all AJAX endpoints and admin forms
 - **Capability Checks** – Permission verification enforced consistently throughout the plugin
 - **Secure Uninstall** – Uninstall routine secured against unauthorized execution
-- **Secure API Handling** – Encrypted credential storage
+- **Server-Side API Handling** – The Ecwid token remains server-side and is not exposed in localized admin JavaScript
+- **Safe Remote Downloads** – Image requests use WordPress SSRF protections plus host, content, and size validation
+- **Owner-Checked Sync Lock** – Only the active job owner can mutate or release the catalog lock
 - **Idempotent Operations** – Safe re-syncing with duplicate attribute prevention
 - **Variation Price Fallback** – Intelligent price handling for variation imports
 
@@ -578,7 +581,27 @@ We welcome contributions! Please feel free to submit issues, feature requests, o
 2. Set up a local WordPress/WooCommerce environment
 3. Install the plugin in development mode
 4. Enable WordPress debug logging
-5. Follow WordPress coding standards
+5. Run the source-level regression suites:
+
+   ```powershell
+   Get-ChildItem tests\*.test.js | ForEach-Object { node $_.FullName }
+   ```
+
+6. Validate PHP and JavaScript syntax:
+
+   ```powershell
+   Get-ChildItem -File *.php | ForEach-Object { php -l $_.FullName }
+   Get-ChildItem assets\js\*.js, tests\*.test.js | ForEach-Object { node --check $_.FullName }
+   git diff --check
+   ```
+
+7. Build a production ZIP and matching SHA-256 checksum:
+
+   ```powershell
+   .\scripts\build-release.ps1
+   ```
+
+   Release artifacts are written to `dist/`. The package excludes tests, scripts, Git metadata, and internal implementation notes.
 
 ---
 
