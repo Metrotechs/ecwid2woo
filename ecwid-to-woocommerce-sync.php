@@ -4,7 +4,7 @@ Plugin Name: Metrotechs E2W Sync
 Description: Professional Ecwid to WooCommerce synchronization plugin by Metrotechs.
 Plugin URI: https://metrotechs.io/plugins/ecwid2woo/
 Author URI: https://metrotechs.io
-Version: 1.6.1
+Version: 1.6.2
 Author: Metrotechs
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -242,7 +242,7 @@ function ecwid2woo_detect_server_capabilities() {
     ];
 }
 
-define('ECWID2WOO_VERSION', '1.6.1');
+define('ECWID2WOO_VERSION', '1.6.2');
 
 class Ecwid_WC_Sync {
     private $options;

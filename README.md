@@ -11,9 +11,16 @@ Transform your e-commerce presence with the most advanced, reliable, and feature
 
 ---
 
-## 🆕 What's New in v1.6.1
+## What's New in v1.6.2
 
-Version 1.6.1 hardens long-running catalog migrations and refreshes every primary admin workflow:
+Version 1.6.2 adds true Fast Skip behavior for repeat Full Sync runs:
+
+- **100-Item Comparison Windows** - Bulk-compares unchanged categories and products without raising the safe mutation batch
+- **Bulk Fingerprint Lookup** - Existing mappings and source hashes are loaded once per comparison window
+- **Fast Read-Only Continuation** - Fully unchanged windows continue after 500ms; real imports retain the server cooldown
+- **Exact Positional Resume** - Partial scan windows preserve Ecwid source order and continuation offsets
+
+Version 1.6.1 also includes the following production hardening:
 
 - **Safe Full Sync Scope** – Full Sync preview and processing now consistently include enabled Ecwid products only
 - **Concurrent Sync Protection** – An atomic, owner-checked catalog lock prevents overlapping mutations across tabs and administrators, with stale-lock recovery
@@ -484,6 +491,11 @@ See [Version History](#version-history) for the complete release summary.
 - **Import/Export Settings** – Backup and restore plugin configurations
 
 ### Version History
+- **v1.6.2** (2026-07-30) - **TRUE FAST SKIP**
+  - Bulk comparison windows scan up to 100 unchanged items per request
+  - New and changed items retain conservative server-tier mutation limits
+  - Fully unchanged windows use a 500ms continuation delay
+  - Positional API order preserves exact partial-window resume offsets
 - **v1.6.1** (2026-07-28) – **PRODUCTION HARDENING**
   - Product payload fingerprints replace the unsafe 24-hour skip heuristic
   - Atomic job locks prevent concurrent catalog mutations across tabs and administrators

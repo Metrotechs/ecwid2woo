@@ -56,12 +56,38 @@ foreach ($artifact in @($zipPath, $checksumPath)) {
     }
 }
 
-Compress-Archive -LiteralPath $packageRoot -DestinationPath $zipPath -CompressionLevel Optimal
-$forbiddenEntries = @('.git', 'tests', 'scripts', 'SECURITY-PERFORMANCE-IMPLEMENTATION-PLAN.md')
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [System.IO.Compression.ZipFile]::Open(
+    $zipPath,
+    [System.IO.Compression.ZipArchiveMode]::Create
+)
+try {
+    Get-ChildItem -LiteralPath $packageRoot -Recurse -File | ForEach-Object {
+        $entryName = $_.FullName.Substring($stagingRoot.Length).TrimStart([char[]]'\/').Replace('\', '/')
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $archive,
+            $_.FullName,
+            $entryName,
+            [System.IO.Compression.CompressionLevel]::Optimal
+        ) | Out-Null
+    }
+} finally {
+    $archive.Dispose()
+}
+
+$forbiddenEntries = @('.git', 'tests', 'scripts', 'SECURITY-PERFORMANCE-IMPLEMENTATION-PLAN.md')
 $archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
 try {
     $entryNames = @($archive.Entries | ForEach-Object { $_.FullName })
+    foreach ($entryName in $entryNames) {
+        if ($entryName.Contains('\')) {
+            throw "Release archive entry uses a non-portable path separator: $entryName"
+        }
+        if (-not $entryName.StartsWith("$slug/", [System.StringComparison]::Ordinal)) {
+            throw "Release archive entry is outside the plugin directory: $entryName"
+        }
+    }
     foreach ($forbidden in $forbiddenEntries) {
         if ($entryNames | Where-Object { $_ -match "(^|/)$([regex]::Escape($forbidden))(/|$)" }) {
             throw "Forbidden development content found in release archive: $forbidden"

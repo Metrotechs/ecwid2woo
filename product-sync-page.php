@@ -623,6 +623,17 @@ class Ecwid2Woo_Product_Sync {
     }
 
     /**
+     * Expose the canonical source fingerprint to Full Sync's bulk Fast Skip
+     * classifier without duplicating normalization rules.
+     *
+     * @param array $item Data returned by Ecwid.
+     * @return string
+     */
+    public function get_source_hash_for_sync($item) {
+        return $this->build_source_hash($item);
+    }
+
+    /**
      * Import a single product from Ecwid data
      * 
      * @param array $item The product data from Ecwid API

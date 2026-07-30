@@ -5,7 +5,7 @@ Tags: ecwid, woocommerce, migration, sync, ecommerce
 Requires at least: 5.0
 Tested up to: 7.0
 Requires PHP: 7.2
-Stable tag: 1.6.1
+Stable tag: 1.6.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 WC requires at least: 3.0
@@ -72,6 +72,16 @@ Features revolutionary Smart Skip Technology for large-scale migrations with int
 - Organized asset management (CSS/JS separation)
 - WordPress coding standards compliant
 - Extensible architecture for customization
+
+== What's New in Version 1.6.2 ==
+
+**TRUE FAST SKIP**
+
+- **100-Item Comparison Windows** – Repeat Full Sync runs compare up to 100 source items per request
+- **Safe Mutation Limits** – New or changed categories and products still use the server's conservative import batch
+- **Bulk Fingerprint Lookup** – Unchanged items bypass normal WooCommerce object loading and import validation
+- **Fast Continuation** – Fully unchanged windows continue after 500ms instead of the low-tier 10-second cooldown
+- **Exact Resume Offsets** – Source order is preserved when a comparison window stops at the mutation limit
 
 == What's New in Version 1.6.1 ==
 
@@ -235,6 +245,13 @@ This error means your API token doesn't have the required permissions.
 7. **Navigation Interface** - Modern, intuitive admin navigation
 
 == Changelog ==
+
+= 1.6.2 =
+* Added true Fast Skip comparison windows for repeat Full Sync runs
+* Bulk-loads product/category fingerprints and mappings before normal import handling
+* Uses a 500ms continuation delay only when an entire comparison window is unchanged
+* Keeps conservative server-tier limits for every new or changed item
+* Preserves exact positional offsets when a scan stops at its safe mutation limit
 
 = 1.6.1 =
 **Production Hardening**

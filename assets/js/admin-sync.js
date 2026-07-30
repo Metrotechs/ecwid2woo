@@ -174,6 +174,10 @@
                 min: 1,
                 default: Math.min(100, (manualBatchOverride && manualBatchSizes.products) ? manualBatchSizes.products : serverCapabilities.products_batch)
             },
+            // Fast Skip starts with a wide read-only comparison window.
+            // It falls back to the mutation batch size as soon as a window
+            // contains new or changed items.
+            fastSkipScanSizes: { categories: 100, products: 100 },
             // Track consecutive timeouts per sync type
             timeoutCounts: { categories: 0, products: 0 },
             // Track consecutive successful batches per sync type (for recovery/increase)
@@ -212,8 +216,11 @@
             // Reset success count when we have a failure
             adaptiveBatchConfig.successCounts[syncType] = 0;
             
-            // Reduce by half, but not below minimum
+            // Reduce by half, but not below minimum. A timeout also
+            // disables the wide comparison window until a fully unchanged
+            // batch proves that Fast Skip can safely expand again.
             config.current = Math.max(config.min, Math.floor(config.current / 2));
+            adaptiveBatchConfig.fastSkipScanSizes[syncType] = config.current;
             
             if (config.current < oldSize) {
                 if (window.ecwidDebugMode) {
@@ -557,7 +564,8 @@
             hasMore: false,
             nextOffset: 0,
             syncType: '',
-            totalItems: 0
+            totalItems: 0,
+            fastSkipOnly: false
         };
 
         let totalCategoriesForCategoryPageSync = 0; // Add this line
@@ -1416,7 +1424,15 @@
                 url: ajax_url,
                 method: 'POST',
                 timeout: 180000, // 180 seconds - image throttling makes batches slower; Cloudflare Enterprise allows 200s
-                data: { action: 'ecwid_wc_batch_sync', nonce: nonce, sync_id: getSyncJobId('full-sync'), sync_type: syncType, offset: offset, batch_size: currentBatchSize },
+                data: {
+                    action: 'ecwid_wc_batch_sync',
+                    nonce: nonce,
+                    sync_id: getSyncJobId('full-sync'),
+                    sync_type: syncType,
+                    offset: offset,
+                    batch_size: currentBatchSize,
+                    scan_size: adaptiveBatchConfig.fastSkipScanSizes[syncType] || currentBatchSize
+                },
                 success: function(response) {
                     stopBatchStatusAnimation();
                     // Reset timeout count on success (batch completed without timeout)
@@ -1506,6 +1522,21 @@
                         fullSyncParentContinuation.nextOffset = response.data.next_offset;
                         fullSyncParentContinuation.syncType = syncType;
                         fullSyncParentContinuation.totalItems = totalKnownItems;
+                        const processedThisBatch = Math.max(0, response.data.next_offset - offset);
+                        fullSyncParentContinuation.fastSkipOnly = (
+                            processedThisBatch > 0
+                            && response.data.fast_skipped_count === processedThisBatch
+                            && response.data.imported_count === 0
+                            && response.data.updated_count === 0
+                            && response.data.failed_count === 0
+                        );
+                        const serverScanSize = Math.max(
+                            currentBatchSize,
+                            parseInt(response.data.scan_size_used, 10) || currentBatchSize
+                        );
+                        adaptiveBatchConfig.fastSkipScanSizes[syncType] = fullSyncParentContinuation.fastSkipOnly
+                            ? serverScanSize
+                            : currentBatchSize;
 
                         handleFullSyncContinuation();
 
@@ -1717,10 +1748,17 @@
                 if (fullSyncParentContinuation.hasMore) {
                     // Pass the correct total for the parent step type
                     const totalForNextParentBatch = fullSyncParentContinuation.syncType === 'categories' ? totalCategoriesToSync : totalProductsToSync;
-                    // Add delay before next batch (auto-detected from server capabilities)
+                    // All-Fast-Skip windows are read-only and can continue
+                    // quickly. Any real mutation keeps the server-tier cooldown.
+                    const continuationDelayMs = fullSyncParentContinuation.fastSkipOnly
+                        ? 500
+                        : adaptiveBatchConfig.batchDelayMs;
+                    if (fullSyncParentContinuation.fastSkipOnly) {
+                        logMessage(fullSyncLogDiv, '[FAST SKIP] Unchanged comparison window complete; continuing in 0.5 seconds.', 'skip');
+                    }
                     setTimeout(() => {
                         processFullSyncBatch(fullSyncParentContinuation.syncType, fullSyncParentContinuation.nextOffset, totalForNextParentBatch);
-                    }, adaptiveBatchConfig.batchDelayMs); // Dynamic delay based on server tier
+                    }, continuationDelayMs);
                 } else {
                     // Current step is fully complete (no more parent items and variation queue is empty)
                     const completedStepName = capitalizeFirstLetter(currentFullSyncStepType);

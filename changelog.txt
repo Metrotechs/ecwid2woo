@@ -1,5 +1,12 @@
 ** Metrotechs E2W Sync Changelog **
 
+2026-07-30 - version 1.6.2
+* PERFORMANCE - Added true Fast Skip comparison windows that scan up to 100 unchanged categories or products while retaining conservative mutation limits
+* PERFORMANCE - Bulk-loads source fingerprints and target mappings so unchanged items bypass WooCommerce object loading and normal import validation
+* PERFORMANCE - All-Fast-Skip windows continue after 500ms; batches with real imports or updates retain the detected server cooldown
+* RELIABILITY - Preserves Ecwid API order so partial comparison windows resume at exact source offsets
+* RELIABILITY - Fast category skips verify the local WooCommerce parent before bypassing hierarchy reconciliation
+
 2026-07-28 - version 1.6.1
 * SECURITY - Added atomic owner-checked catalog sync lock with stale-lock recovery
 * SECURITY - Hardened admin output escaping, capability checks, API credential handling, and remote image downloads

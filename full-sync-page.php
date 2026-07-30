@@ -464,19 +464,25 @@ class Ecwid2Woo_Full_Sync {
             }
         }
         
-        $limit_per_api_call = absint(apply_filters('ecwid_wc_sync_batch_api_limit', $default_batch_size, $sync_type));
-        $limit_per_api_call = max(1, min(100, $limit_per_api_call));
+        // The mutation limit remains conservative for image-heavy imports.
+        // Fast Skip uses a separate, larger read-only comparison window.
+        $mutation_limit_per_request = absint(apply_filters('ecwid_wc_sync_batch_api_limit', $default_batch_size, $sync_type));
+        $mutation_limit_per_request = max(1, min(100, $mutation_limit_per_request));
+        $fast_skip_scan_cap = absint(apply_filters('ecwid2woo_fast_skip_scan_limit', 100, $sync_type));
+        $fast_skip_scan_cap = max($mutation_limit_per_request, min(100, $fast_skip_scan_cap));
+        $requested_scan_size = isset($_POST['scan_size']) ? absint($_POST['scan_size']) : $fast_skip_scan_cap;
+        $fast_skip_scan_limit = max($mutation_limit_per_request, min($fast_skip_scan_cap, $requested_scan_size));
 
         if (defined('WP_DEBUG') && WP_DEBUG) {
             // amazonq-ignore-next-line
-            error_log("Ecwid Sync: FULL BATCH - Type: $sync_type, Offset: $offset, API Limit: $limit_per_api_call, Memory: " . size_format($free_memory) . " free"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
+            error_log("Ecwid Sync: FULL BATCH - Type: $sync_type, Offset: $offset, Mutation Limit: $mutation_limit_per_request, Fast Skip Scan: $fast_skip_scan_limit, Memory: " . size_format($free_memory) . " free"); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
         }
 
         $endpoints = ['products' => '/products', 'categories' => '/categories'];
 
         $endpoint = $endpoints[$sync_type];
         $api_url_base = $api_essentials['base_url'] . $endpoint;
-        $query_params_for_url = ['limit' => $limit_per_api_call, 'offset' => $offset];
+        $query_params_for_url = ['limit' => $fast_skip_scan_limit, 'offset' => $offset];
 
         if ($sync_type === 'products') {
             // Keep execution aligned with the preview and product-page behavior:
@@ -543,54 +549,105 @@ class Ecwid2Woo_Full_Sync {
             }
         }
 
-        // Sort categories so parents are imported before children
-        if ($sync_type === 'categories' && !empty($items_from_api)) {
-            $items_from_api = $this->sort_categories_parents_first($items_from_api);
-        }
+        // Full Sync must preserve Ecwid's positional API order. Fast Skip may
+        // stop after the safe mutation limit, so reordering a scan window would
+        // make next_offset skip or repeat source items. The category importer
+        // already tracks and repairs children whose parents arrive later.
 
         $total_items_reported_by_api = $body['total'] ?? count($items_from_api);
         $count_in_current_api_response = $body['count'] ?? count($items_from_api);
 
-        $imported_count = 0; $updated_count = 0; $skipped_count = 0; $failed_count = 0;
+        $imported_count = 0;
+        $updated_count = 0;
+        $skipped_count = 0;
+        $fast_skipped_count = 0;
+        $failed_count = 0;
         $batch_detailed_logs = [];
         $batch_item_results = [];
-        
-        // --- PRE-LOAD EXISTING ECWID IDS FOR FAST SKIP ---
-        // Instead of querying DB for each product, load all existing Ecwid IDs in one query
-        $existing_ecwid_ids_map = []; // Maps ecwid_id => wc_product_id
+
+        // --- BULK FAST SKIP LOOKUPS ---
+        // Load target IDs, stored source hashes, and category parents once for
+        // the entire comparison window. Unchanged items never enter the normal
+        // WooCommerce import path.
+        $existing_ecwid_ids_map = [];
+        $existing_product_hashes_map = [];
+        $existing_category_map = [];
+
         if ($sync_type === 'products' && !empty($items_from_api)) {
-            $ecwid_ids_to_check = array_column($items_from_api, 'id');
+            $ecwid_ids_to_check = array_values(array_filter(array_map('strval', array_column($items_from_api, 'id'))));
             if (!empty($ecwid_ids_to_check)) {
                 global $wpdb;
-                // Single query to find all existing products with these Ecwid IDs
-                $placeholders = implode( ', ', array_fill( 0, count( $ecwid_ids_to_check ), '%s' ) );
+                $placeholders = implode(', ', array_fill(0, count($ecwid_ids_to_check), '%s'));
                 // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
                 $query = $wpdb->prepare(
-                    "SELECT pm.meta_value as ecwid_id, pm.post_id 
-                     FROM {$wpdb->postmeta} pm 
-                     INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID 
-                     WHERE pm.meta_key = '_ecwid_product_id' 
-                     AND pm.meta_value IN ($placeholders)
-                     AND p.post_type = 'product'",
+                    "SELECT id_meta.meta_value AS ecwid_id, id_meta.post_id,
+                            COALESCE(hash_meta.meta_value, '') AS source_hash
+                     FROM {$wpdb->postmeta} id_meta
+                     INNER JOIN {$wpdb->posts} p ON id_meta.post_id = p.ID
+                     LEFT JOIN {$wpdb->postmeta} hash_meta
+                       ON hash_meta.post_id = id_meta.post_id
+                      AND hash_meta.meta_key = '_ecwid_source_hash'
+                     WHERE id_meta.meta_key = '_ecwid_product_id'
+                       AND id_meta.meta_value IN ($placeholders)
+                       AND p.post_type = 'product'",
                     ...$ecwid_ids_to_check
                 );
                 // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-                // amazonq-ignore-next-line
-                // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Query is prepared above with $wpdb->prepare(); direct query needed for batch lookup performance
-                $results = $wpdb->get_results( $query );
-                // amazonq-ignore-next-line
+                // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Prepared bulk lookup is required for Fast Skip.
+                $results = $wpdb->get_results($query);
                 foreach ($results as $row) {
-                    $existing_ecwid_ids_map[$row->ecwid_id] = (int) $row->post_id;
+                    $ecwid_id = (string) $row->ecwid_id;
+                    $existing_ecwid_ids_map[$ecwid_id] = (int) $row->post_id;
+                    $existing_product_hashes_map[$ecwid_id] = (string) $row->source_hash;
                 }
-                if (defined('WP_DEBUG') && WP_DEBUG) {
-                    // amazonq-ignore-next-line
-                    error_log("Ecwid Full Sync: Pre-loaded " . count($existing_ecwid_ids_map) . " existing products from batch of " . count($ecwid_ids_to_check)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+            }
+        } elseif ($sync_type === 'categories' && !empty($items_from_api)) {
+            $category_ids_to_check = [];
+            foreach ($items_from_api as $category_item) {
+                if (isset($category_item['id'])) {
+                    $category_ids_to_check[] = (string) $category_item['id'];
+                }
+                if (!empty($category_item['parentId'])) {
+                    $category_ids_to_check[] = (string) $category_item['parentId'];
+                }
+            }
+            $category_ids_to_check = array_values(array_unique(array_filter($category_ids_to_check)));
+            if (!empty($category_ids_to_check)) {
+                global $wpdb;
+                $placeholders = implode(', ', array_fill(0, count($category_ids_to_check), '%s'));
+                // phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+                $query = $wpdb->prepare(
+                    "SELECT id_meta.meta_value AS ecwid_id, id_meta.term_id,
+                            COALESCE(hash_meta.meta_value, '') AS source_hash,
+                            term_taxonomy.parent
+                     FROM {$wpdb->termmeta} id_meta
+                     INNER JOIN {$wpdb->term_taxonomy} term_taxonomy
+                       ON term_taxonomy.term_id = id_meta.term_id
+                      AND term_taxonomy.taxonomy = 'product_cat'
+                     LEFT JOIN {$wpdb->termmeta} hash_meta
+                       ON hash_meta.term_id = id_meta.term_id
+                      AND hash_meta.meta_key = '_ecwid_source_hash'
+                     WHERE id_meta.meta_key = '_ecwid_category_id'
+                       AND id_meta.meta_value IN ($placeholders)",
+                    ...$category_ids_to_check
+                );
+                // phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+                // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Prepared bulk lookup is required for Fast Skip.
+                $results = $wpdb->get_results($query);
+                foreach ($results as $row) {
+                    $existing_category_map[(string) $row->ecwid_id] = [
+                        'term_id' => (int) $row->term_id,
+                        'source_hash' => (string) $row->source_hash,
+                        'parent' => (int) $row->parent,
+                    ];
                 }
             }
         }
 
         $items_actually_processed = 0;
+        $mutation_attempts = 0;
         $time_limit_hit = false;
+        $mutation_limit_hit = false;
         if (!empty($items_from_api)) {
             // Time-based circuit breaker: stop processing before Cloudflare's 100s timeout.
             // This ensures we return a valid response even if a batch has image-heavy products.
@@ -623,7 +680,69 @@ class Ecwid2Woo_Full_Sync {
                     $item_identifier_for_log = "Item (Ecwid ID: " . ($item_data['id'] ?? 'N/A') . ")";
                 }
 
+                // Fast Skip compares the canonical source hash against the
+                // bulk-loaded target hash before SKU validation, WC object
+                // loading, image handling, or variation work.
+                $is_fast_skip = false;
+                $item_ecwid_id = (string) $item_data['id'];
+
+                if (
+                    $sync_type === 'products'
+                    && isset($existing_ecwid_ids_map[$item_ecwid_id], $existing_product_hashes_map[$item_ecwid_id])
+                ) {
+                    $source_hash = $this->parent_plugin->product_sync_handler->get_source_hash_for_sync($item_data);
+                    $stored_hash = $existing_product_hashes_map[$item_ecwid_id];
+                    if ($source_hash !== '' && $stored_hash !== '' && hash_equals($stored_hash, $source_hash)) {
+                        $is_fast_skip = true;
+                        $result_array = [
+                            'status' => 'skipped',
+                            'fast_skip' => true,
+                            'logs' => ['FAST SKIP: Bulk source fingerprint matched; normal product import was bypassed.'],
+                            'item_name' => sanitize_text_field($item_data['name'] ?? '[No Name]'),
+                            'ecwid_id' => $item_data['id'],
+                            'sku' => $item_data['sku'] ?? 'N/A',
+                            'wc_product_id' => $existing_ecwid_ids_map[$item_ecwid_id],
+                        ];
+                    }
+                } elseif ($sync_type === 'categories' && isset($existing_category_map[$item_ecwid_id])) {
+                    $source_hash = $this->parent_plugin->category_sync_handler->get_source_hash_for_sync($item_data);
+                    $stored_hash = $existing_category_map[$item_ecwid_id]['source_hash'];
+                    $parent_ecwid_id = !empty($item_data['parentId']) ? (string) $item_data['parentId'] : '';
+                    $expected_parent_term_id = (
+                        $parent_ecwid_id !== ''
+                        && isset($existing_category_map[$parent_ecwid_id])
+                    ) ? (int) $existing_category_map[$parent_ecwid_id]['term_id'] : 0;
+                    $actual_parent_term_id = (int) $existing_category_map[$item_ecwid_id]['parent'];
+
+                    if (
+                        $source_hash !== ''
+                        && $stored_hash !== ''
+                        && hash_equals($stored_hash, $source_hash)
+                        && $actual_parent_term_id === $expected_parent_term_id
+                    ) {
+                        $is_fast_skip = true;
+                        $result_array = [
+                            'status' => 'skipped',
+                            'fast_skip' => true,
+                            'logs' => ['FAST SKIP: Bulk source fingerprint and category hierarchy matched; normal category import was bypassed.'],
+                            'item_name' => sanitize_text_field($item_data['name'] ?? '[No Name]'),
+                            'ecwid_id' => $item_data['id'],
+                            'wc_term_id' => $existing_category_map[$item_ecwid_id]['term_id'],
+                        ];
+                    }
+                }
+
+                if (!$is_fast_skip && $mutation_attempts >= $mutation_limit_per_request) {
+                    $mutation_limit_hit = true;
+                    $batch_detailed_logs[] = "[FAST SKIP] Safe mutation limit reached after scanning $items_actually_processed items. The next request will resume at this exact source offset.";
+                    break;
+                }
+                if (!$is_fast_skip) {
+                    $mutation_attempts++;
+                }
+
                 try {
+                    if (!$is_fast_skip) {
                     switch ($sync_type) {
                         case 'products':
                             // Enhanced debugging for gallery image issue
@@ -641,9 +760,13 @@ class Ecwid2Woo_Full_Sync {
                             $result_array = $this->parent_plugin->category_sync_handler->import_category($item_data);
                             break;
                     }
+                    }
 
                     if ($result_array && isset($result_array['status'])) {
                         $batch_item_results[] = $result_array;
+                        if (!empty($result_array['fast_skip'])) {
+                            $fast_skipped_count++;
+                        }
                         if ($result_array['status'] === 'imported' || $result_array['status'] === 'imported_parent_pending_variations') $imported_count++;
                         elseif ($result_array['status'] === 'updated') $updated_count++;
                         elseif ($result_array['status'] === 'skipped' ) $skipped_count++;
@@ -681,26 +804,26 @@ class Ecwid2Woo_Full_Sync {
                 $items_actually_processed++;
             }
             wp_suspend_cache_addition(false);
-        } elseif ($offset === 0 && $limit_per_api_call > 0) {
-             $batch_detailed_logs[] = "No items received from Ecwid API for $sync_type with offset $offset and limit $limit_per_api_call. This might be normal if there are no items of this type or all have been processed.";
+        } elseif ($offset === 0 && $fast_skip_scan_limit > 0) {
+             $batch_detailed_logs[] = "No items received from Ecwid API for $sync_type with offset $offset and scan limit $fast_skip_scan_limit. This might be normal if there are no items of this type or all have been processed.";
              $batch_detailed_logs[] = "API Response Debug: HTTP Code: $http_code, Total reported: $total_items_reported_by_api, Count in response: $count_in_current_api_response";
              if (defined('WP_DEBUG') && WP_DEBUG) {
                  error_log("Ecwid Sync: Empty items for $sync_type. API URL: $api_url, HTTP Code: $http_code, Raw Response: " . substr($raw_response_body, 0, 500)); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug logging wrapped in WP_DEBUG check
              }
         }
 
-        // If time limit was hit, only advance offset by items actually processed
-        // so unprocessed items are re-fetched in the next batch request.
-        if ($time_limit_hit) {
+        // If the deadline or safe mutation limit was hit, advance only by
+        // inspected items so the next request resumes at the exact API position.
+        if ($time_limit_hit || $mutation_limit_hit) {
             $new_offset = $offset + $items_actually_processed;
-            $has_more = true; // Force continuation since we didn't finish the batch
+            $has_more = true; // Uninspected items remain in the current scan window
         } else {
             $new_offset = $offset + $count_in_current_api_response;
             $has_more = false;
             if ($count_in_current_api_response > 0) {
                 if (isset($body['total']) && isset($body['offset']) && isset($body['count'])) {
                      $has_more = ($body['total'] > ($body['offset'] + $body['count']));
-                } elseif ($count_in_current_api_response === $limit_per_api_call) {
+                } elseif ($count_in_current_api_response === $fast_skip_scan_limit) {
                     $has_more = true;
                 }
             }
@@ -728,10 +851,12 @@ class Ecwid2Woo_Full_Sync {
             'imported_count' => $imported_count,
             'updated_count' => $updated_count,
             'skipped_count' => $skipped_count,
+            'fast_skipped_count' => $fast_skipped_count,
             'failed_count' => $failed_count,
             'batch_logs' => $batch_detailed_logs,
             'batch_item_results' => $batch_item_results,
-            'batch_size_used' => $limit_per_api_call // Report actual batch size used for adaptive sizing feedback
+            'batch_size_used' => $mutation_limit_per_request,
+            'scan_size_used' => $fast_skip_scan_limit
         ]);
         
         } catch (Error $e) {

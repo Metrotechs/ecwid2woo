@@ -448,6 +448,17 @@ class Ecwid2Woo_Category_Sync {
     }
 
     /**
+     * Expose the canonical source fingerprint to Full Sync's bulk Fast Skip
+     * classifier without duplicating normalization rules.
+     *
+     * @param array $item Data returned by Ecwid.
+     * @return string
+     */
+    public function get_source_hash_for_sync($item) {
+        return $this->build_source_hash($item);
+    }
+
+    /**
      * Import a category from Ecwid data
      * 
      * @param array $item Category data from Ecwid API
