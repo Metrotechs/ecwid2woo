@@ -3463,6 +3463,7 @@ class Ecwid_WC_Sync {
         }
 
         $missing_parents = get_option('ecwid_wc_sync_missing_parents', []);
+        $remaining_missing_parents = [];
         $fixed_count = 0;
         $logs = [];
 
@@ -3472,6 +3473,7 @@ class Ecwid_WC_Sync {
             if (!$parent_wc_term_id) {
                 // translators: %s is the Ecwid category ID
                 $logs[] = sprintf(__('Parent Ecwid ID %s still missing, cannot fix its children.', 'metrotechs-e2w-sync'), $parent_ecwid_id);
+                $remaining_missing_parents[$parent_ecwid_id] = $child_ecwid_ids;
                 continue;
             }
 
@@ -3481,6 +3483,7 @@ class Ecwid_WC_Sync {
                 if (!$child_wc_term_id) {
                     // translators: %s is the Ecwid category ID
                     $logs[] = sprintf(__('Child term for Ecwid ID %s not found.', 'metrotechs-e2w-sync'), $child_ecwid_id);
+                    $remaining_missing_parents[$parent_ecwid_id][] = $child_ecwid_id;
                     continue;
                 }
 
@@ -3489,6 +3492,7 @@ class Ecwid_WC_Sync {
                 if (is_wp_error($update_result)) {
                     // translators: %1$s is the term ID, %2$s is the error message
                     $logs[] = sprintf(__('Failed to update parent for term %1$s: %2$s', 'metrotechs-e2w-sync'), $child_wc_term_id, $update_result->get_error_message());
+                    $remaining_missing_parents[$parent_ecwid_id][] = $child_ecwid_id;
                 } else {
                     $fixed_count++;
                     // translators: %1$s is the term ID, %2$s is the parent term ID
@@ -3497,10 +3501,11 @@ class Ecwid_WC_Sync {
             }
         }
 
-        update_option('ecwid_wc_sync_missing_parents', []);
+        update_option('ecwid_wc_sync_missing_parents', $remaining_missing_parents);
 
         wp_send_json_success([
             'fixed_count' => $fixed_count,
+            'remaining_count' => array_sum(array_map('count', $remaining_missing_parents)),
             'logs' => $logs,
             // translators: %d is the number of hierarchies fixed
             'message' => sprintf(_n('%d hierarchy fixed.', '%d hierarchies fixed.', $fixed_count, 'metrotechs-e2w-sync'), $fixed_count)

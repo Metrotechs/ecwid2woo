@@ -528,6 +528,19 @@ class Ecwid2Woo_Category_Sync {
                 $should_skip = $source_hash !== '' && $stored_source_hash !== '' && hash_equals($stored_source_hash, $source_hash);
                 $current_term_data = get_term($existing_wc_term_id_by_ecwid_meta, 'product_cat');
 
+                // A matching source fingerprint does not guarantee that the
+                // local hierarchy is still correct. A parent may have been
+                // imported after this child, or an administrator may have
+                // changed the WooCommerce parent independently.
+                if (
+                    $should_skip
+                    && $current_term_data
+                    && (int) $current_term_data->parent !== (int) $parent_wc_term_id
+                ) {
+                    $should_skip = false;
+                    $category_logs[] = 'UPDATE NEEDED: WooCommerce category parent does not match the Ecwid hierarchy.';
+                }
+
                 if ($should_skip) {
                     $category_logs[] = 'SKIPPING: Ecwid category payload is unchanged since the last successful import.';
                 } elseif ($stored_source_hash === '') {
@@ -916,6 +929,7 @@ class Ecwid2Woo_Category_Sync {
         }
 
         $missing_parents = get_option('ecwid_wc_sync_missing_parents', []);
+        $remaining_missing_parents = [];
         $fixed_count = 0;
         $logs = [];
 
@@ -925,6 +939,7 @@ class Ecwid2Woo_Category_Sync {
             if (!$parent_wc_term_id) {
                 // translators: %s is the Ecwid category ID
                 $logs[] = sprintf(__('Parent Ecwid ID %s still missing, cannot fix its children.', 'metrotechs-e2w-sync'), $parent_ecwid_id);
+                $remaining_missing_parents[$parent_ecwid_id] = $child_ecwid_ids;
                 continue;
             }
 
@@ -934,6 +949,7 @@ class Ecwid2Woo_Category_Sync {
                 if (!$child_wc_term_id) {
                     // translators: %s is the Ecwid category ID
                     $logs[] = sprintf(__('Child term for Ecwid ID %s not found.', 'metrotechs-e2w-sync'), $child_ecwid_id);
+                    $remaining_missing_parents[$parent_ecwid_id][] = $child_ecwid_id;
                     continue;
                 }
 
@@ -942,6 +958,7 @@ class Ecwid2Woo_Category_Sync {
                 if (is_wp_error($update_result)) {
                     // translators: %1$s is the term ID, %2$s is the error message
                     $logs[] = sprintf(__('Failed to update parent for term %1$s: %2$s', 'metrotechs-e2w-sync'), $child_wc_term_id, $update_result->get_error_message());
+                    $remaining_missing_parents[$parent_ecwid_id][] = $child_ecwid_id;
                 } else {
                     $fixed_count++;
                     // translators: %1$s is the term ID, %2$s is the parent term ID
@@ -950,10 +967,11 @@ class Ecwid2Woo_Category_Sync {
             }
         }
 
-        update_option('ecwid_wc_sync_missing_parents', []);
+        update_option('ecwid_wc_sync_missing_parents', $remaining_missing_parents);
 
         wp_send_json_success([
             'fixed_count' => $fixed_count,
+            'remaining_count' => array_sum(array_map('count', $remaining_missing_parents)),
             'logs' => $logs,
             // translators: %d is the number of hierarchies fixed
             'message' => sprintf(_n('%d hierarchy fixed.', '%d hierarchies fixed.', $fixed_count, 'metrotechs-e2w-sync'), $fixed_count)
