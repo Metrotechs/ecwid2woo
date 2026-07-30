@@ -45,6 +45,8 @@ for (const dashboardId of [
 assert.match(css, /\.ecwid-full-sync-dashboard\s*\{/);
 assert.match(css, /@media \(max-width: 782px\)/);
 assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+assert.match(css, /#e2w-download-log > \.dashicons-download/);
+assert.match(css, /#e2w-download-log > \.dashicons-download::before/);
 assert.match(js, /function refreshFullSyncLogView\(\)/);
 assert.match(js, /function updateCurrentFullSyncItem\(itemResult, syncType\)/);
 assert.match(js, /new Blob\(\[lines\.join\('\\n'\)/);

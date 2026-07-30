@@ -962,6 +962,28 @@
     transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
+.ecwid-full-sync-dashboard .e2w-command-actions .e2w-button.button > .dashicons-admin-generic,
+.ecwid-full-sync-dashboard #e2w-download-log > .dashicons-download {
+    align-items: center;
+    align-self: center;
+    display: inline-flex;
+    flex: 0 0 18px;
+    font-size: 18px;
+    height: 18px;
+    justify-content: center;
+    line-height: 1;
+    margin: 0;
+    padding: 0;
+    position: static;
+    vertical-align: middle;
+    width: 18px;
+}
+
+.ecwid-full-sync-dashboard .e2w-command-actions .e2w-button.button > .dashicons-admin-generic::before,
+.ecwid-full-sync-dashboard #e2w-download-log > .dashicons-download::before {
+    line-height: 1;
+}
+
 .ecwid-full-sync-dashboard .e2w-button.button:hover,
 .ecwid-full-sync-dashboard .e2w-button.button:focus {
     background: #f8fafc;

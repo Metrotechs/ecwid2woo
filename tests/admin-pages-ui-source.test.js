@@ -75,6 +75,8 @@ assert.doesNotMatch(plugin, /jQuery\(document\)\.ready\(function\(\$\)/, 'duplic
 assert.match(css, /Shared selective-sync and settings dashboards/);
 assert.match(css, /\.e2w-selection-panel/);
 assert.match(css, /\.e2w-settings-form/);
+assert.match(css, /\.e2w-command-actions \.e2w-button\.button > \.dashicons-admin-generic/);
+assert.match(css, /\.e2w-command-actions \.e2w-button\.button > \.dashicons-admin-generic::before/);
 assert.match(js, /function renderSelectiveNotice\(state, title, detail, extraHtml = ''\)/);
 assert.match(js, /function setSettingsState\(state, label\)/);
 const categoryImportBindings = js.match(/(?:\$\('#import-selected-categories-button'\)|importSelectedCategoriesButton)\.on\('click'/g) || [];
